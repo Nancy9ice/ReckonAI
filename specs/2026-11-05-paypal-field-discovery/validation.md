@@ -16,6 +16,7 @@ Every roadmap exit criterion, and how it is proven.
 | # | Roadmap exit criterion | Check | Type |
 |---|---|---|---|
 | E1 | APIMatic plugin installed and returning context | §3 M1 | Manual |
+| E1a | Declared column traceable to a pinned source | `check_fields_doc.py --declared-provenance` | Auto |
 | E2 | `specs/paypal-fields.md` committed with declared and observed as separate columns | `check_fields_doc.py --columns` | Auto |
 | E3 | Every canonical-intent field marked present / absent / unreliable | `check_fields_doc.py --coverage` | Auto |
 | E4 | Verdicts judged on observed, not declared | `check_fields_doc.py --verdict-source` | Auto |
@@ -110,6 +111,24 @@ uv run scripts/check_fields_doc.py --decisions
 Every `absent` and `present-but-unreliable` field has either a derivation (and
 is marked as derived) or a declared limitation. No field is left undecided.
 
+### C8a — Declared column carries its provenance
+
+Added 2026-11-05, alongside the Group 4 rewrite.
+
+```bash
+uv run scripts/check_fields_doc.py --declared-provenance
+```
+
+`declared.json` carries a provenance block naming the SDK repository, the tag
+and the commit SHA it was extracted from, and per record type which source grade
+was used — generated contract or prose reference (`requirements.md` §3.1). Field
+paths are keyed on **API property names**, not Python attribute names, so
+`declared.json` and `observed.json` are mechanically diffable.
+
+Without this, the declared column is an unverifiable claim — the same objection
+D3 raises against a hand-transcribed observed column, and this check is its
+counterpart.
+
 ### C9 — Repo conventions
 
 ```bash
@@ -128,9 +147,17 @@ uv run scripts/check_fields_doc.py --conventions
 
 Automatable in principle, but not worth the harness for a half-day phase.
 
-**M1 — APIMatic plugin returns real context.** Ask it for a PayPal response
-shape and confirm a substantive answer comes back, not an error or a generic
-reply. Record the question asked and a one-line summary in `notes.md`.
+**M1 — APIMatic plugin returns real context.** Reworded 2026-11-05: the original
+check was "ask it for a PayPal response shape and confirm a substantive answer
+comes back". That check cannot pass — the plugin holds no PayPal field names, so
+the correct answer to it is a refusal, and a check whose passing condition is
+unachievable would have been satisfied only by misreporting.
+
+Confirm instead that the plugin's skills load, and that it names the SDK
+distribution, version and source repository — the information the declared
+column is actually built from. Record the question asked and what came back in
+`notes.md`. **Already recorded** under "M1 — the plugin test, and what it
+returned", including the verbatim result.
 *Why manual:* asserting a plugin's answer quality requires judgement.
 
 **M2 — `notes.md` stands alone.** Someone who reads only `notes.md` knows what
@@ -144,7 +171,7 @@ distinguishing "could not" from "did not try" needs a human.
 
 All of these, together:
 
-- [ ] C1 through C9 exit 0
+- [ ] C1 through C9, including C8a, exit 0
 - [ ] M1, M2, M3 confirmed and recorded in `notes.md`
 - [ ] `specs/paypal-fields.md` committed
 - [ ] `artifacts/observed.json` and `artifacts/declared.json` committed

@@ -14,9 +14,11 @@ exit condition holds.
 Not implementation. A hard stop that prevents the rest of the phase being done
 on guesswork.
 
-1. Confirm the APIMatic Context Plugin is installed and returning PayPal
-   context — ask it for the Transactions endpoint response shape and check a
-   real answer comes back.
+1. Confirm the APIMatic Context Plugin is installed and loading its skills.
+   **Done 2026-11-05.** Do not ask it for an endpoint response shape — it holds
+   no PayPal field names and cannot answer that. Confirm instead that it names
+   the SDK distribution and version, and that its skills load. See `notes.md`,
+   "M1 — the plugin test, and what it returned".
 2. Confirm the `paypal-sandbox` MCP server connects (it returned `ECONNRESET`
    earlier).
 3. Confirm sandbox credentials are present as environment variables and are
@@ -38,8 +40,16 @@ degraded — that path was explicitly rejected.
 3. Implement `--out <path>` writing JSON, and a `--record-type` selector.
 4. Parse every monetary value with `Decimal`, never `float`
    ([[tech-stack]] §2) — relevant even in a throwaway, because a `float` here
-   would misreport what PayPal returned.
+   would misreport what PayPal returned. PayPal sends amounts as JSON strings
+   (confirmed against the declared contract, `requirements.md` §7), so pass the
+   string straight to `Decimal`; never let it touch `float` on the way.
 5. No client class, no retry layer, no pagination abstraction. A flat script.
+6. **Do not import the PayPal Server SDK** (added 2026-11-05). The probe reads
+   raw JSON off the wire and records what was actually there. Any deserializer
+   between the response and `observed.json` is an interpreter standing between
+   us and the evidence, and the observed column is the one artifact this phase
+   exists to produce. `requirements.md` §4 forbids the SDK as a dependency here
+   for the same reason.
 
 **Verify:** `uv run scripts/probe_paypal.py --help` exits 0 with no
 `pyproject.toml` present.
@@ -88,14 +98,43 @@ Group 2 could create.
 
 ## Group 4 — Capture the declared column · commit
 
-1. For each record type, use the APIMatic Context Plugin to establish the
-   declared response shape: field names, types, optionality.
-2. Write it to `artifacts/declared.json`, in the same field-path shape as
-   `observed.json` so the two can be diffed mechanically.
-3. Note any place the plugin's contract and the sandbox's actual API version
+**Rewritten 2026-11-05.** The original steps said to get the declared shape from
+the plugin. The plugin holds no field names; see `requirements.md` §1.
+
+1. Clone the SDK outside the working tree and pin it to the tag — not `main`,
+   which keeps moving after a release with nothing in the tree to signal it:
+
+   ```bash
+   git clone --filter=blob:none --branch main \
+     https://github.com/paypal/PayPal-Python-Server-SDK
+   git checkout tags/2.4.0   # commit b1460117a5618fb1a5b36b3ea0b1a49e124220c3
+   ```
+
+   `pip install paypal-server-sdk` is **not** a substitute: `doc/` never lands in
+   `site-packages`, so the installed package carries no field tables.
+2. For the three SDK-covered record types, extract the declared shape from
+   `doc/models/*.md` — 373 pages, each a `Name | Type | Tags | Description`
+   table whose Tags column carries `Required`, `Optional` and `Read-only`.
+   Cross-check against the model classes in `paypalserversdk/models/`, where
+   `_names`, `_optionals`, `_nullables` and `from_dictionary` live.
+3. For **disputes and payouts**, the SDK has no coverage at all. Take the
+   declared shape from PayPal's REST reference and mark every such row as
+   prose-sourced, per `requirements.md` §3.1.
+4. Write `artifacts/declared.json` keyed on the **API property name** — the
+   value side of each model's `_names` map, not the Python attribute name. The
+   generator renames fields (`mtype` for a property called `type`,
+   `person_type` for `personType`), and `observed.json` comes from raw JSON, so
+   keying on the Python name makes the two artifacts undiffable and defeats the
+   point of this step.
+5. Record provenance in `declared.json` itself: plugin, SDK repository, tag and
+   commit SHA, and per record type which of the two source grades was used.
+   Without it the declared column is an unverifiable claim, the same objection
+   D3 makes about the observed column.
+6. Note any place the SDK's contract and the sandbox's actual API version
    disagree (open question Q2).
 
-**Verify:** `declared.json` covers every record type in `observed.json`.
+**Verify:** `declared.json` covers every record type in `observed.json`, carries
+a provenance block, and is keyed on API property names.
 **Commit:** `docs(phase-0): capture declared PayPal API contract`
 
 ---

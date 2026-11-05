@@ -1,0 +1,32 @@
+# Credentials - never commit. See specs/2026-11-05-paypal-field-discovery
+# validation.md C9: no credential-shaped string may reach a tracked file.
+# Sandbox credentials belong outside this repo entirely, in a shell-sourced
+# file such as ~/.config/reckonai/paypal-sandbox.env (chmod 600). These
+# patterns are defence in depth, not the intended location.
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.pfx
+*.key
+secrets/
+credentials.json
+.claude/settings.local.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Probe output - raw sandbox responses are redacted before committing
+# (plan.md Group 3 step 3). Unredacted scratch output stays out.
+*.raw.json
+observed-recheck.json
+
+# OS
+.DS_Store

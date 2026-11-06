@@ -1328,6 +1328,11 @@ the table is what makes that true by construction instead of by inspection.
 | `absent` | 6 |
 | `unanswered` | 11 |
 
+**Superseded the same day.** `capture.platform_fee` was reclassified from
+`absent` to `unanswered` during Group 6, making the live counts 47 / 9 / 5 / 12.
+See "The migration guide, and what it actually settled". The table above is left
+as the Group 5 record; `specs/paypal-fields.md` is authoritative.
+
 ### The canonical field set had to be derived, and this is the basis
 
 `requirements.md` §7 says the canonical model's PayPal-sourced fields come from
@@ -1448,11 +1453,15 @@ will read a gated row as a mismatch.
 
 Two new sections in `specs/paypal-fields.md`, generated from the same script:
 
-- **Decisions** — all 15 `absent` and `present-but-unreliable` fields, each with
-  one of four kinds: 5 `limitation`, 2 `derive`, 6 `no_action`,
+- **Decisions** — all 14 `absent` and `present-but-unreliable` fields, each with
+  one of four kinds: 4 `limitation`, 2 `derive`, 6 `no_action`,
   2 `connector_metadata`.
-- **Pending answers** — the 11 `unanswered` fields, with an interim handling and
+- **Pending answers** — the 12 `unanswered` fields, with an interim handling and
   the fixture that would settle each.
+
+(Counts revised the same day; see "The migration guide, and what it actually
+settled" below. `capture.platform_fee` moved from a decision to a pending
+answer.)
 
 A field left undecided now **fails the build** of the document rather than its
 review: the generator exits with the offending field names. Verified by removing
@@ -1462,7 +1471,7 @@ made mechanical.
 ### Why `unanswered` rows get handling and not decisions
 
 `validation.md` C8 asks for a derivation or a declared limitation for every
-`absent` and `present-but-unreliable` field. The 11 `unanswered` rows are
+`absent` and `present-but-unreliable` field. The `unanswered` rows are
 neither. Recording a limitation for them would overstate what we know — a
 limitation says the product cannot do something, and for a dispute field we do
 not know that; we know we have not looked. So they get an interim handling and a
@@ -1478,15 +1487,19 @@ PayPal's contract gives **only boilerplate `Money` descriptions** for
 `net_amount`, `paypal_fee` and `platform_fees` — "The currency and amount for a
 financial transaction, such as a balance or payment due" — and **never states
 the formula** relating them. So `net = gross - paypal_fee` is our assumption,
-not PayPal's statement, and because `platform_fees` is also absent from the
-capture the equation has two unknowns and one observation.
+not PayPal's statement.
 
-Deriving a fee from it would be arithmetic reaching a financial conclusion on an
-unverified formula, which [[mission]] P1 gives to the deterministic engine and
-P3 forbids inventing. The decision is a limitation: capture fees are **unknown,
-never zero** ([[tech-stack]] §9.6 already forbids defaulting money to zero), a
-fee-inclusive entitlement check must exclude them and say so, and the row must
-be re-verified against production before Phase 10 treats it as settled.
+The decisive argument is simpler than the formula, and it survived the later
+investigation below: **an omitted field is not an implied zero.** PayPal emits
+`paypal_fee` as an explicit `0.00` on the refund of this same capture, so it
+states a zero fee when it means one. Inferring `0.00` from silence would be
+inventing a financial value, which is what [[mission]] P3 forbids and what P1
+keeps out of the agent's hands.
+
+The decision is a limitation: capture fees are **unknown, never zero**
+([[tech-stack]] §9.6 already forbids defaulting money to zero), a fee-inclusive
+entitlement check must exclude them and say so, and the row must be re-verified
+against production before Phase 10 treats it as settled.
 
 Only two derivations are authorised by this phase, and both carry `is_derived`:
 `fx_conversion.timestamp` from the capture's `create_time`, and the
@@ -1606,3 +1619,95 @@ cross-currency refund and a cross-currency payout to settle
 `refunds.net_amount_breakdown` and `payouts.items[].currency_conversion`. One
 fixture, thirteen open questions. It is recommended before Phase 11 and is not
 required for this phase to merge.
+
+### The migration guide, and what it actually settled
+
+Prompted 2026-11-06 by a pointer to PayPal's
+[v1-to-v2 payments migration guide](https://developer.paypal.com/api/rest/integration/payments-api/v1-v2-migration),
+on the question of why the fee fields were missing. It named two mechanisms.
+One turned out not to apply, one changed a verdict, and the exercise is worth
+recording in both directions.
+
+**Mechanism 1: `Prefer: return=representation`. Tested, and it does not
+explain anything.** The guide identifies that header as the gate on financial
+detail — v2 "returns minimal responses by default", and its Pitfall 3 warns
+against "reading financial fields from the response body of capture, authorize,
+void, or refund calls without the `Prefer` header". That is about **write**
+responses. Our observations come from a `GET`, and the breakdown was present
+there, only without `paypal_fee`, so the mechanism looked unlikely but not
+impossible.
+
+Tested directly rather than argued, both captures, with and without the header:
+
+| Capture | Header | `seller_receivable_breakdown` keys |
+|---|---|---|
+| same-currency | none | `gross_amount`, `net_amount` |
+| same-currency | `Prefer: return=representation` | `gross_amount`, `net_amount` |
+| cross-currency | none | `exchange_rate`, `gross_amount`, `net_amount`, `receivable_amount` |
+| cross-currency | `Prefer: return=representation` | `exchange_rate`, `gross_amount`, `net_amount`, `receivable_amount` |
+
+**Byte-identical.** The header has no effect on a read, so the minimal-response
+mechanism is ruled out as the cause of the missing `paypal_fee`. The verdict and
+the decision are unchanged, but the reasoning is now tested instead of assumed,
+and the `capture.paypal_fee` row says so.
+
+The guide did sharpen that row in one way: it claims v2 gives "full fee
+transparency on every capture" and maps v1's `transaction_fee` onto
+`seller_receivable_breakdown.paypal_fee`. That makes our omission **anomalous
+rather than expected**, which strengthens the instruction not to conclude that
+PayPal withholds capture fees and to re-verify against production.
+
+The guide does **not** document when `paypal_fee` is populated or omitted. That
+question remains open and is now explicitly a production question.
+
+**Mechanism 2: platform fees are opt-in. This changed a verdict.** The guide
+notes that marketplace fee collection "requires PayPal Complete Payments
+Platform approval". Confirmed in the pinned contract itself, on
+`PaymentInstruction.platform_fees`:
+
+> An array of various fees, commissions, tips, or donations. This field is only
+> applicable to merchants that been enabled for PayPal Complete Payments
+> Platform for Marketplaces and Platforms capability.
+
+And it is **caller-supplied at capture time**, through
+`CaptureRequest.payment_instruction`. So a platform fee exists on a capture only
+when the caller instructs one and the merchant holds that capability. This
+account has neither.
+
+**`capture.platform_fee` is therefore reclassified from `absent` to
+`unanswered`**, and moved from the decisions table to the pending answers. It
+was never a claim we were entitled to make: the condition under which the field
+could appear was simply never exercised, which is the precise definition this
+phase gave `unanswered` in Group 5. Counts move from 6 `absent` / 11
+`unanswered` to 5 / 12.
+
+This also weakens a claim made earlier in this file. Group 5 and the first cut
+of Group 6 treated the refund's `platform_fees: 0.00` as evidence that PayPal
+"has the data and the capture endpoint does not carry it". With the capability
+disabled there was no platform fee to report anywhere, so the refund's `0.00` is
+a vacuous zero. It shows the field is **emitted on that read path**, not that a
+real platform fee would be reported there. `refund.platform_fee` keeps its
+decision — Phase 7 must still ingest refunds through the order — but the row now
+records that the evidence is weak and needs a capability-enabled account.
+
+**An incidental find worth carrying to Phase 11.** The same model declares
+`payee_receivable_fx_rate_id`:
+
+> FX identifier generated returned by PayPal to be used for payment processing
+> in order to honor FX rate (for eligible integrations) to be used when amount
+> is settled/received into the payee account.
+
+So a caller **can** pin a previously quoted FX rate to a capture. That is the
+legitimate route by which a quoted rate enters a transaction, and it bears on
+the "exchange rate quotes are not evidence" trap recorded earlier: if a
+marketplace used this field, the settlement rate would honour an earlier quote
+rather than the rate at capture time. Phase 11 should not assume a reported rate
+reflects the moment of capture, and an unexplained rate difference may have this
+as its cause rather than an error. We did not use the field; no fixture
+exercises it.
+
+**What this says about method.** Two mechanisms from one document: one ruled out
+by a two-minute experiment, one confirmed from the pinned contract and changing
+a verdict. Neither was discoverable by reading the field tables alone, which is
+what this phase had been doing. The `paypal_fee` row stayed where it was for a
+better reason, and the `platform_fee` row should never have been `absent`.

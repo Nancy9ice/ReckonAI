@@ -74,6 +74,12 @@ NO_XC_PAYOUT = (
     "both payout batches were USD to USD. A cross-currency payout batch would "
     "answer it"
 )
+NO_PLATFORM_CAPABILITY = (
+    "a platform fee is caller-supplied at capture time via "
+    "`payment_instruction.platform_fees`, and the contract restricts it to "
+    "merchants enabled for PayPal Complete Payments Platform for Marketplaces. "
+    "This account has neither, so no platform fee could have been charged"
+)
 
 # Canonical field -> the PayPal path(s) that could carry it.
 #
@@ -239,8 +245,11 @@ CANONICAL: list[dict[str, Any]] = [
         "sources": [
             ("captures", "$.seller_receivable_breakdown.platform_fees[].amount.value")
         ],
-        "note": "Marketplace commission. Absent on captures; see the refund row, "
-        "where it appears only through the order view.",
+        "unobserved_reason": NO_PLATFORM_CAPABILITY,
+        "note": "Marketplace commission. **Reclassified from `absent` to "
+        "`unanswered` on 2026-11-06**: the contract shows a platform fee only "
+        "exists when the caller instructs one and the merchant holds the "
+        "Marketplaces capability, so its absence here says nothing about PayPal.",
     },
     # ----------------------------------------------------------------- refund
     {
@@ -619,27 +628,23 @@ DECISIONS: dict[tuple[str, str], dict[str, Any]] = {
         "kind": "limitation",
         "is_derived": False,
         "text": "The engine cannot attribute a PayPal fee to a capture, and "
-        "**must not derive one as gross minus net.** PayPal's contract gives "
-        "only boilerplate Money descriptions for `net_amount` and `paypal_fee` "
-        "and never states the formula; with `platform_fees` also absent that "
-        "equation has two unknowns. Treat a capture fee as **unknown, never as "
-        "zero** - `tech-stack.md` section 9.6 forbids defaulting money to zero. "
-        "A fee-inclusive entitlement check must exclude capture fees and say so "
-        "in its exception report rather than silently assuming none were "
-        "charged. **Re-verify against production or a fee-bearing sandbox "
-        "transaction before Phase 10 treats this as settled** - this is the one "
-        "row whose absence is plausibly a sandbox artefact.",
-    },
-    ("capture", "platform_fee"): {
-        "kind": "limitation",
-        "is_derived": False,
-        "text": "Marketplace commission is not readable from a capture. PayPal "
-        "reported `platform_fees` on the **refund of this same capture** as an "
-        "explicit `0.00` through the order view, and omitted it from the capture "
-        "itself, so the data exists and the capture record does not carry it. "
-        "Phase 7 must take the platform fee for a capture from the marketplace "
-        "side, which is the authoritative source for the marketplace's own "
-        "commission anyway, and must not read the PayPal absence as zero.",
+        "**must not derive one as gross minus net.** Two things were tested "
+        "before settling this. First, `Prefer: return=representation` - which "
+        "PayPal's v1-to-v2 migration guide identifies as the gate on financial "
+        "detail - **makes no difference on a GET**: the breakdown came back "
+        "byte-identical with and without it, so the minimal-response mechanism "
+        "is not the cause. Second, an omitted field is **not an implied zero**: "
+        "PayPal emits `paypal_fee` as an explicit `0.00` on the refund of this "
+        "same capture, so it clearly states a zero fee when it means one, and "
+        "inferring `0.00` from silence would be inventing a value. PayPal never "
+        "states the `net = gross - fee` identity either; the contract gives only "
+        "boilerplate Money descriptions. Treat a capture fee as **unknown, never "
+        "as zero** (`tech-stack.md` section 9.6). A fee-inclusive entitlement "
+        "check must exclude capture fees and say so in its exception report. "
+        "**Re-verify against production before Phase 10 treats this as "
+        "settled** - the migration guide claims v2 gives \"full fee transparency "
+        "on every capture\", which makes this omission anomalous rather than "
+        "expected.",
     },
     ("fx_conversion", "timestamp"): {
         "kind": "derive",
@@ -698,7 +703,11 @@ DECISIONS: dict[tuple[str, str], dict[str, Any]] = {
         "endpoint does not carry `platform_fees`; the same record read through "
         "`GET /v2/checkout/orders/{id}` does. **Phase 7 must ingest refunds via "
         "the order** to obtain it, and a refund ingested from the refund "
-        "endpoint alone must record the platform fee as unknown, not zero.",
+        "endpoint alone must record the platform fee as unknown, not zero. "
+        "**The observed value is a weak signal**: it was `0.00` on an account "
+        "with no Marketplaces capability, so it shows the field is emitted on "
+        "this read path but not that a real platform fee would be reported "
+        "there. That needs a capability-enabled account to confirm.",
     },
     ("payout_item", "transaction_id"): {
         "kind": "no_action",
@@ -753,6 +762,16 @@ DECISIONS[("fx_conversion", "target_amount")] = {
 # an interim handling and the fixture that would settle them, NOT a decision: a
 # decision implies the evidence is in, and for these it is not.
 PENDING: dict[tuple[str, str], dict[str, str]] = {
+    ("capture", "platform_fee"): {
+        "answered_by": "a capture on an account enabled for PayPal Complete "
+        "Payments Platform for Marketplaces, with "
+        "`payment_instruction.platform_fees` set at capture time",
+        "interim": "Take the marketplace's own commission from the marketplace "
+        "side, which is authoritative for it in any case. Do not read PayPal's "
+        "silence as zero, and do not treat this as evidence that PayPal cannot "
+        "report platform fees - the capability was never enabled, so no platform "
+        "fee could have existed to report.",
+    },
     ("payment", "payer_identity"): {
         "answered_by": "a wallet-funded order, which needs a sandbox personal "
         "account to approve the order in a browser",

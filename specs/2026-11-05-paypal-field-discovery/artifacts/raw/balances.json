@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "record_type": "balances",
+    "source": "scripts/probe_paypal.py",
+    "redacted_by": "scripts/derive_observed.py",
+    "redacted": true,
+    "api_base": "https://api-m.sandbox.paypal.com",
+    "sample_labels": [
+      "balances:list"
+    ],
+    "redaction_note": "Identifiers and buyer PII replaced with <redacted:id> and <redacted:pii>. Amounts, currencies, rates, fees, timestamps, statuses and error codes are kept: they are the evidence (plan.md group 3 step 3). Unredacted fixture ids are in fixtures.md."
+  },
+  "results": [
+    {
+      "record_type": "balances",
+      "note": "settlement currency and balances",
+      "request_path": "/v1/reporting/balances",
+      "http_status": 200,
+      "fetched_at": "2026-11-06T03:34:37.452302+00:00",
+      "status": "ok",
+      "body": {
+        "balances": [
+          {
+            "currency": "USD",
+            "total_balance": {
+              "currency_code": "USD",
+              "value": "5000.00"
+            },
+            "available_balance": {
+              "currency_code": "USD",
+              "value": "5000.00"
+            },
+            "withheld_balance": {
+              "currency_code": "USD",
+              "value": "0.00"
+            }
+          }
+        ],
+        "account_id": "<redacted:id>",
+        "as_of_time": "2026-11-06T01:29:59Z",
+        "last_refresh_time": "2026-11-06T01:29:59Z"
+      },
+      "money_values": [
+        {
+          "path": "$balances.balances[0].total_balance",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "5000.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$balances.balances[0].available_balance",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "5000.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$balances.balances[0].withheld_balance",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "0.00",
+          "raw_json_type": "str"
+        }
+      ]
+    }
+  ]
+}

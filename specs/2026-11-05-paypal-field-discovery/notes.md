@@ -866,3 +866,210 @@ unverified scaffolding.
 **The gate passed on 2026-11-05** with prerequisites 1, 3 and 4 met and
 prerequisite 2 reclassified as non-blocking on the reasoning above. Groups 1 and
 2 are both open and may run in either order.
+
+---
+
+## Group 3 — the observed column, captured 2026-11-06
+
+### What was produced, and how it is reproducible
+
+| Artifact | Contents |
+|---|---|
+| `artifacts/raw/<record_type>.json` | redacted raw responses, one file per record type |
+| `artifacts/observed.json` | per record type, every field path with populated counts and a sample value |
+
+Two scripts, run in sequence. `scripts/probe_paypal.py` hits the API and writes
+unredacted output **outside the working tree**; `scripts/derive_observed.py`
+(added by this group) reads that output, writes the redacted copies and derives
+`observed.json`. It touches no network and no credentials.
+
+`derive_observed.py` is not in `plan.md`, and the reason it exists is worth
+stating. Group 3 steps 3 and 4 require redaction and summarisation of seven
+payloads into a field table. Done by hand that is precisely the
+hand-transcription `validation.md` §6 item 4 makes a phase failure, and it would
+have defeated `requirements.md` §3.2, which wants the observed column
+machine-produced and re-runnable. It is a second disposable instrument under the
+same §4 rules as the probe: a flat script, no SDK, no abstraction.
+
+The commands are recorded in `fixtures.md` under "Re-running the probe".
+
+### Coverage — seven record types probed, every one HTTP 200
+
+| Record type | Samples | Terminal states sampled |
+|---|---|---|
+| `captures` | 2 | same-currency, cross-currency |
+| `orders` | 2 | same-currency, cross-currency |
+| `refunds` | 1 | partial refund |
+| `payouts` | 2 | `SUCCESS` and `DENIED` |
+| `disputes` | 1 (list envelope) | no dispute record exists |
+| `transactions` | 1 | reporting list |
+| `balances` | 1 | reporting list |
+
+Sampling two terminal states for payouts was a direct consequence of the
+"Payout fees" finding above, which showed a single state can look
+self-consistent and still be meaningless. It paid off immediately — see F1.
+
+`observed.json` carries a `required_record_types` block judging each of the five
+in-scope record types of `requirements.md` §3.1 on a **witness field**, not on
+whether a payload came back. The distinction matters: `GET
+/v1/customer/disputes` answers `200` with `items: []`, which populates the
+envelope's own `links` and would otherwise read as dispute coverage. Four of the
+five are `observed`; disputes is `not_observed` with the reason recorded inline.
+
+### Redaction, and what it deliberately does not touch
+
+Two mechanical rules, so the split is not a per-field judgement call: a value is
+an identifier if its key is `id`, ends in `_id`, or is `account_number`; a value
+is PII if its key is in an explicit list, or is `name` directly under a
+party-shaped container. The second clause is why redaction is path-aware rather
+than key-aware. Payouts carry `items[].errors.name`, whose value is
+`RECEIVER_COUNTRY_NOT_ALLOWED` — an error code and the only machine-readable
+account of why a disbursement failed. A key-name rule would have destroyed it.
+HATEOAS hrefs keep their route with id segments replaced by `{id}`, because the
+shape of `links[rel=up]` *is* the evidence for refund-to-capture linkage.
+
+An empty value is never redacted, so "present but empty" survives as a distinct
+fact from "absent". `observed.json` counts the two separately
+(`populated_on`, `present_empty_on`, `absent_on_labels`). Conflating them is how
+an `absent` verdict gets manufactured out of an explicit empty, which is the
+error D1 is most exposed to.
+
+Amounts, currencies, rates, fees, timestamps, statuses and error codes are kept
+in full, per `plan.md` Group 3 step 3.
+
+### F1 — correction: `time_processed` is populated on FAILED payout items too
+
+`fixtures.md` recorded that `transaction_id` and `time_processed` are "both
+populated on a successful item and `null` on a failed one". The observed data
+shows that is right about `transaction_id` and **wrong about
+`time_processed`**:
+
+| Field | Populated on | Verdict basis |
+|---|---|---|
+| `items[].transaction_id` | 2 of 4 items, success only | `present-but-unreliable`, condition "successfully processed item" |
+| `items[].activity_id` | 2 of 4 items, success only | same condition; not previously recorded at all |
+| `items[].time_processed` | **4 of 4 items, both states** | `present` |
+| `items[].errors` | 2 of 4 items, failure only | `present-but-unreliable`, condition "failed item" |
+
+`fixtures.md` has been corrected. PayPal stamps a processing time on an item it
+*attempted*, whether or not the attempt succeeded, which is a different and more
+useful fact: an item's timestamp cannot be used to infer that it paid out.
+Nothing but running the probe over both terminal states would have caught this —
+the original claim was made from the successful batch and a plausible inference.
+
+`errors.details` and `errors.links` are present-but-empty arrays even on the
+failed items, which is exactly the distinction the redaction rules preserve.
+
+### F2 — the same refund has different fields depending on how you read it
+
+`platform_fees` appears on the refund when read **through the order**, and not
+when read from the refund endpoint:
+
+| Read path | `seller_payable_breakdown` members |
+|---|---|
+| `GET /v2/payments/refunds/{id}` | `gross_amount`, `paypal_fee`, `net_amount`, `total_refunded_amount` |
+| `GET /v2/checkout/orders/{id}` → `purchase_units[].payments.refunds[]` | the same four **plus `platform_fees[]`** (`USD 0.00`) |
+
+One record, two endpoints, different field sets. This is a new class of finding
+and it bears on both remaining columns:
+
+1. **For Group 5**, field presence is a property of the *read path*, not only of
+   the record type. A verdict of `absent` must name the endpoint it was observed
+   against, or it is ambiguous. `platform_fees` is `present-but-unreliable` with
+   the condition "on a refund read through the order, not through the refund
+   endpoint".
+2. **For Phase 7**, an ingestion client that reads refunds from the refund
+   endpoint alone will never see `platform_fees`, and a marketplace operator's
+   platform fee is not a field to lose silently. The order view is the richer
+   source for refunds.
+
+The order view is also where `amount.breakdown` appears as an empty object, and
+where the embedded capture repeats `seller_receivable_breakdown` in full,
+including the `exchange_rate` on the cross-currency order. So the FX evidence is
+reachable by two paths, which is worth knowing if Phase 7 ingests orders rather
+than captures.
+
+### F3 — the two money envelopes, now confirmed across six record types
+
+The earlier finding was made from one payout batch. `observed.json` records the
+currency-key spelling per field path, and the split is clean:
+
+| Spelling | Record types | Money paths |
+|---|---|---|
+| `currency_code` | orders, captures, refunds, transactions, balances | 26 |
+| `currency` | **payouts only** | 4 |
+
+Payouts v1 is the sole outlier, and the inconsistency is internal to one
+provider. Also note `balances[].currency` is a *third* thing: a bare currency
+string beside money objects that use `currency_code`, within the same response.
+The Phase 6/7 adapter needs to match both spellings and must not assume a key
+named `currency` is a money envelope.
+
+### F4 — both reporting endpoints are one stale snapshot
+
+`/v1/reporting/transactions` and `/v1/reporting/balances` returned the **same**
+refresh timestamp, `2026-11-06T01:29:59Z` — earlier than every fixture
+(captures 03:04, payouts 03:27) and roughly three hours before the probe ran.
+So the reporting subsystem is a single periodic snapshot rather than two
+independently lagging endpoints, and neither had caught up.
+
+Consequences:
+
+- Transaction Search still reports `total_items: 1`, the opening balance credit
+  `T1900`. `balances` still shows USD 5000.00 untouched. **Reconciliation driven
+  off either reporting endpoint would have reported a sandbox with no activity
+  while five real transactions existed.** The v2 resource endpoints are the
+  authoritative source; this confirms the earlier Transaction Search finding and
+  extends it to balances.
+- The hope recorded earlier — that Transaction Search might carry the capture
+  fee the capture omits — is not resolved and now looks unlikely:
+  `transaction_info` has **no `fee_amount` key at all** on the one indexed
+  record, even with `fields=all`. Previously this was noted as
+  `fee_amount: null`. Either way Transaction Search supplied no fee evidence,
+  and the `paypal_fee` caveat above stands unchanged for Group 6.
+- `balances` does answer the settlement currency directly and unambiguously: one
+  balance, USD. That is better evidence of the settlement currency than
+  inferring it from `receivable_amount` per capture.
+
+### F5 — card-funded orders carry no payer, now machine-recorded
+
+`observed.json` has **no `$.payer` path on orders at all**, and
+`$.payment_source.card` populated on both. This confirms the inference made
+while establishing the dispute blocker, and it is now recorded as observation
+rather than a note.
+
+For Group 5: if the canonical model expects payer identity on a payment
+([[tech-stack]] §3), that field's verdict is conditional on funding instrument,
+not on record type. For Group 6 it is a limitation with a clear statement —
+PayPal supplies no buyer identity on a card-funded capture, so a marketplace
+cannot be reconciled to a PayPal buyer account for those transactions.
+
+A related oddity: the refund's `payer` block carries the **merchant's** email
+and `merchant_id`, not the buyer's. `payer` on a refund is not buyer identity,
+and a mapping that assumes it is will attribute the merchant as the payer.
+
+### F6 — what Group 5 cannot get from `observed.json` alone
+
+By construction an absent field has **no row** in `observed.json`: the probe
+records what the wire carried, and a field PayPal never sent has no path to
+record. `paypal_fee` and `platform_fees` on captures are absent in exactly this
+way — they are simply missing from the capture payloads, not present-and-null.
+
+So the `absent` verdicts of `specs/paypal-fields.md` cannot be produced from
+`observed.json`; they come from `declared.json` minus `observed.json`, which is
+Group 4's output and the C7 gap section. This is not a defect in either artifact
+— it is why `plan.md` keeps the two columns in separate files and why Group 5
+depends on both. Group 5 must not read "no row" as "not checked".
+
+### Group 3 status against its exit condition
+
+`plan.md` Group 3 verify: "`observed.json` has a non-empty entry for every
+record type that Group 2 could create." Group 2 created captures, a refund and
+payout batches; all three have populated entries, as do orders, transactions and
+balances. Disputes, the one fixture Group 2 could not create, is recorded
+`not_observed` with its reason rather than left blank or marked absent —
+`validation.md` §5 is explicit that those are different facts.
+
+Q1 and Q3 stay answered, now from committed evidence rather than a transcript:
+`exchange_rate` populated on 1 of 2 captures, condition `cross-currency`, rate
+`1.089477173902071` at full precision as a string.

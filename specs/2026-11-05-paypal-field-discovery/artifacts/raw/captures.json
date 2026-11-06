@@ -1,0 +1,208 @@
+{
+  "raw": {
+    "record_type": "captures",
+    "source": "scripts/probe_paypal.py",
+    "redacted_by": "scripts/derive_observed.py",
+    "redacted": true,
+    "api_base": "https://api-m.sandbox.paypal.com",
+    "sample_labels": [
+      "capture-same-currency",
+      "capture-cross-currency"
+    ],
+    "redaction_note": "Identifiers and buyer PII replaced with <redacted:id> and <redacted:pii>. Amounts, currencies, rates, fees, timestamps, statuses and error codes are kept: they are the evidence (plan.md group 3 step 3). Unredacted fixture ids are in fixtures.md."
+  },
+  "results": [
+    {
+      "record_type": "captures",
+      "note": "seller_receivable_breakdown - the FX and settlement evidence",
+      "request_path": "/v2/payments/captures/{id}",
+      "http_status": 200,
+      "fetched_at": "2026-11-06T03:34:15.919105+00:00",
+      "status": "ok",
+      "body": {
+        "id": "<redacted:id>",
+        "amount": {
+          "currency_code": "USD",
+          "value": "120.00"
+        },
+        "final_capture": true,
+        "seller_protection": {
+          "status": "NOT_ELIGIBLE"
+        },
+        "seller_receivable_breakdown": {
+          "gross_amount": {
+            "currency_code": "USD",
+            "value": "120.00"
+          },
+          "net_amount": {
+            "currency_code": "USD",
+            "value": "120.00"
+          }
+        },
+        "status": "PARTIALLY_REFUNDED",
+        "processor_response": {
+          "avs_code": "",
+          "cvv_code": "M",
+          "response_code": "0000"
+        },
+        "supplementary_data": {
+          "related_ids": {
+            "order_id": "<redacted:id>"
+          }
+        },
+        "payee": {
+          "email_address": "<redacted:pii>",
+          "merchant_id": "<redacted:id>"
+        },
+        "create_time": "2026-11-06T03:04:12Z",
+        "update_time": "2026-11-06T03:04:20Z",
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/captures/{id}",
+            "rel": "self",
+            "method": "GET"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/captures/{id}/refund",
+            "rel": "refund",
+            "method": "POST"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/checkout/orders/{id}",
+            "rel": "up",
+            "method": "GET"
+          }
+        ]
+      },
+      "money_values": [
+        {
+          "path": "$captures.amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "120.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$captures.seller_receivable_breakdown.gross_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "120.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$captures.seller_receivable_breakdown.net_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "120.00",
+          "raw_json_type": "str"
+        }
+      ]
+    },
+    {
+      "record_type": "captures",
+      "note": "seller_receivable_breakdown - the FX and settlement evidence",
+      "request_path": "/v2/payments/captures/{id}",
+      "http_status": 200,
+      "fetched_at": "2026-11-06T03:34:16.529779+00:00",
+      "status": "ok",
+      "body": {
+        "id": "<redacted:id>",
+        "amount": {
+          "currency_code": "EUR",
+          "value": "95.50"
+        },
+        "final_capture": true,
+        "seller_protection": {
+          "status": "NOT_ELIGIBLE"
+        },
+        "seller_receivable_breakdown": {
+          "gross_amount": {
+            "currency_code": "EUR",
+            "value": "95.50"
+          },
+          "net_amount": {
+            "currency_code": "EUR",
+            "value": "95.50"
+          },
+          "receivable_amount": {
+            "currency_code": "USD",
+            "value": "104.05"
+          },
+          "exchange_rate": {
+            "source_currency": "EUR",
+            "target_currency": "USD",
+            "value": "1.089477173902071"
+          }
+        },
+        "status": "COMPLETED",
+        "processor_response": {
+          "avs_code": "",
+          "cvv_code": "M",
+          "response_code": "0000"
+        },
+        "supplementary_data": {
+          "related_ids": {
+            "order_id": "<redacted:id>"
+          }
+        },
+        "payee": {
+          "email_address": "<redacted:pii>",
+          "merchant_id": "<redacted:id>"
+        },
+        "create_time": "2026-11-06T03:04:17Z",
+        "update_time": "2026-11-06T03:04:17Z",
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/captures/{id}",
+            "rel": "self",
+            "method": "GET"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/captures/{id}/refund",
+            "rel": "refund",
+            "method": "POST"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/checkout/orders/{id}",
+            "rel": "up",
+            "method": "GET"
+          }
+        ],
+        "network_transaction_reference": {
+          "id": "<redacted:id>",
+          "network": "VISA"
+        }
+      },
+      "money_values": [
+        {
+          "path": "$captures.amount",
+          "currency": "EUR",
+          "currency_key": "currency_code",
+          "amount": "95.50",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$captures.seller_receivable_breakdown.gross_amount",
+          "currency": "EUR",
+          "currency_key": "currency_code",
+          "amount": "95.50",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$captures.seller_receivable_breakdown.net_amount",
+          "currency": "EUR",
+          "currency_key": "currency_code",
+          "amount": "95.50",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$captures.seller_receivable_breakdown.receivable_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "104.05",
+          "raw_json_type": "str"
+        }
+      ]
+    }
+  ]
+}

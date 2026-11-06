@@ -64,10 +64,14 @@ states is what made the fee finding in `notes.md` possible.
 
 `batch_header.fees` is USD 0.50, equal to the sum of the item fees.
 
-This makes `transaction_id` and `time_processed` observable: both are populated
-on a successful item and `null` on a failed one, so each is
+This makes `transaction_id` and `time_processed` observable. **Corrected
+2026-11-06 by Group 3**, which probed both terminal states: `transaction_id` and
+`activity_id` are populated only on a successful item, so each is
 `present-but-unreliable` with the condition "only on a successfully processed
-payout item".
+payout item". `time_processed` is **populated on failed items too** — 4 of 4
+items across both batches — so it is `present`. PayPal stamps a processing time
+on an item it attempted, whatever the outcome, and an item's timestamp therefore
+cannot be used to infer that it paid out. See `notes.md` F1.
 
 The recipient was a sandbox personal account supplied for this purpose. Its
 address is deliberately **not recorded here** — `plan.md` Group 3 step 3 keeps
@@ -109,21 +113,57 @@ precisely the error `notes.md` warns about for `403`.
 
 ## Re-running the probe against these fixtures
 
+This is the exact sequence Group 3 ran to produce `artifacts/`. `RAW` must be a
+directory **outside the working tree** — the probe's output is unredacted, and
+`.gitignore` excludes `*.raw.json` as defence in depth, not as the intended
+location.
+
 ```bash
-uv run scripts/probe_paypal.py --record-type captures --id 3VG831163X0730421 \
-  --out probe.raw.json
-uv run scripts/probe_paypal.py --record-type captures --id 8RW04003P5846784X \
-  --out probe.raw.json
-uv run scripts/probe_paypal.py --record-type refunds --id 3435955072478500X \
-  --out probe.raw.json
-uv run scripts/probe_paypal.py --record-type orders --id 476677408G744563T \
-  --out probe.raw.json
-uv run scripts/probe_paypal.py --record-type payouts --id PGHX46EKCCH3Q \
-  --out probe.raw.json
+RAW=/tmp/reckonai-probe        # outside the repo; unredacted
+ART=specs/2026-11-05-paypal-field-discovery/artifacts
+mkdir -p "$RAW"
+
+uv run scripts/probe_paypal.py \
+  --record-type captures --id 8RW04003P5846784X \
+  --record-type captures --id 3VG831163X0730421 \
+  --out "$RAW/captures.raw.json"
+uv run scripts/probe_paypal.py \
+  --record-type refunds --id 3435955072478500X \
+  --out "$RAW/refunds.raw.json"
+uv run scripts/probe_paypal.py \
+  --record-type orders --id 4U503564VJ470545D \
+  --record-type orders --id 476677408G744563T \
+  --out "$RAW/orders.raw.json"
+uv run scripts/probe_paypal.py \
+  --record-type payouts --id 55LJJ7SBMXHY6 \
+  --record-type payouts --id PGHX46EKCCH3Q \
+  --out "$RAW/payouts.raw.json"
+uv run scripts/probe_paypal.py --record-type disputes     --out "$RAW/disputes.raw.json"
+uv run scripts/probe_paypal.py --record-type transactions --out "$RAW/transactions.raw.json"
+uv run scripts/probe_paypal.py --record-type balances     --out "$RAW/balances.raw.json"
+
+uv run scripts/derive_observed.py \
+  --raw "$RAW"/*.raw.json \
+  --out-raw "$ART/raw" \
+  --out-observed "$ART/observed.json" \
+  --label 8RW04003P5846784X=capture-same-currency \
+  --label 3VG831163X0730421=capture-cross-currency \
+  --label 3435955072478500X=refund-partial \
+  --label 4U503564VJ470545D=order-same-currency \
+  --label 476677408G744563T=order-cross-currency \
+  --label 55LJJ7SBMXHY6=payout-batch-success \
+  --label PGHX46EKCCH3Q=payout-batch-denied \
+  --note "disputes=No dispute record exists to observe. ..."
 ```
 
-Record types needing no id — `disputes`, `transactions`, `balances` — can be
-probed without any fixture.
+`--id` pairs positionally with `--record-type`, so repeating the pair probes
+several records of one type in a single run — which is what gives a field its
+`populated_on` count out of N. Record types needing no id — `disputes`,
+`transactions`, `balances` — can be probed without any fixture.
+
+The `--label` values are what make a `present-but-unreliable` row able to state
+its condition (`requirements.md` D5): without them `observed.json` could say a
+field appeared on 1 of 2 captures but not on **which**.
 
 **Capture `3VG831163X0730421` is the most important fixture in this phase.** It
 is the only record carrying real provider conversion evidence, and therefore the

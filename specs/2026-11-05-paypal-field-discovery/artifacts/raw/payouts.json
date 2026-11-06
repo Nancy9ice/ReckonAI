@@ -1,0 +1,322 @@
+{
+  "raw": {
+    "record_type": "payouts",
+    "source": "scripts/probe_paypal.py",
+    "redacted_by": "scripts/derive_observed.py",
+    "redacted": true,
+    "api_base": "https://api-m.sandbox.paypal.com",
+    "sample_labels": [
+      "payout-batch-success",
+      "payout-batch-denied"
+    ],
+    "redaction_note": "Identifiers and buyer PII replaced with <redacted:id> and <redacted:pii>. Amounts, currencies, rates, fees, timestamps, statuses and error codes are kept: they are the evidence (plan.md group 3 step 3). Unredacted fixture ids are in fixtures.md."
+  },
+  "results": [
+    {
+      "record_type": "payouts",
+      "note": "batch header and items",
+      "request_path": "/v1/payments/payouts/{id}",
+      "http_status": 200,
+      "fetched_at": "2026-11-06T03:34:31.863214+00:00",
+      "status": "ok",
+      "body": {
+        "batch_header": {
+          "payout_batch_id": "<redacted:id>",
+          "batch_status": "SUCCESS",
+          "time_created": "2026-11-06T03:27:19Z",
+          "time_completed": "2026-11-06T03:27:52Z",
+          "time_closed": "2026-11-06T03:27:52Z",
+          "sender_batch_header": {
+            "sender_batch_id": "<redacted:id>",
+            "email_subject": "ReckonAI phase-0 fixture payout"
+          },
+          "funding_source": "BALANCE",
+          "amount": {
+            "currency": "USD",
+            "value": "65.00"
+          },
+          "fees": {
+            "currency": "USD",
+            "value": "0.50"
+          }
+        },
+        "items": [
+          {
+            "payout_item_id": "<redacted:id>",
+            "transaction_id": "<redacted:id>",
+            "activity_id": "<redacted:id>",
+            "transaction_status": "SUCCESS",
+            "payout_item_fee": {
+              "currency": "USD",
+              "value": "0.25"
+            },
+            "payout_batch_id": "<redacted:id>",
+            "payout_item": {
+              "recipient_type": "EMAIL",
+              "amount": {
+                "currency": "USD",
+                "value": "40.00"
+              },
+              "note": "seller settlement 1",
+              "receiver": "<redacted:pii>",
+              "sender_item_id": "<redacted:id>",
+              "recipient_wallet": "PAYPAL",
+              "purpose": "GOODS"
+            },
+            "time_processed": "2026-11-06T03:27:44Z",
+            "links": [
+              {
+                "href": "https://api.sandbox.paypal.com/v1/payments/payouts-item/{id}",
+                "rel": "item",
+                "method": "GET",
+                "encType": "application/json"
+              }
+            ]
+          },
+          {
+            "payout_item_id": "<redacted:id>",
+            "transaction_id": "<redacted:id>",
+            "activity_id": "<redacted:id>",
+            "transaction_status": "SUCCESS",
+            "payout_item_fee": {
+              "currency": "USD",
+              "value": "0.25"
+            },
+            "payout_batch_id": "<redacted:id>",
+            "payout_item": {
+              "recipient_type": "EMAIL",
+              "amount": {
+                "currency": "USD",
+                "value": "25.00"
+              },
+              "note": "seller settlement 2",
+              "receiver": "<redacted:pii>",
+              "sender_item_id": "<redacted:id>",
+              "recipient_wallet": "PAYPAL",
+              "purpose": "GOODS"
+            },
+            "time_processed": "2026-11-06T03:27:44Z",
+            "links": [
+              {
+                "href": "https://api.sandbox.paypal.com/v1/payments/payouts-item/{id}",
+                "rel": "item",
+                "method": "GET",
+                "encType": "application/json"
+              }
+            ]
+          }
+        ],
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v1/payments/payouts/{id}?page_size=1000&page=1",
+            "rel": "self",
+            "method": "GET",
+            "encType": "application/json"
+          }
+        ]
+      },
+      "money_values": [
+        {
+          "path": "$payouts.batch_header.amount",
+          "currency": "USD",
+          "currency_key": "currency",
+          "amount": "65.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$payouts.batch_header.fees",
+          "currency": "USD",
+          "currency_key": "currency",
+          "amount": "0.50",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$payouts.items[0].payout_item_fee",
+          "currency": "USD",
+          "currency_key": "currency",
+          "amount": "0.25",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$payouts.items[0].payout_item.amount",
+          "currency": "USD",
+          "currency_key": "currency",
+          "amount": "40.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$payouts.items[1].payout_item_fee",
+          "currency": "USD",
+          "currency_key": "currency",
+          "amount": "0.25",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$payouts.items[1].payout_item.amount",
+          "currency": "USD",
+          "currency_key": "currency",
+          "amount": "25.00",
+          "raw_json_type": "str"
+        }
+      ]
+    },
+    {
+      "record_type": "payouts",
+      "note": "batch header and items",
+      "request_path": "/v1/payments/payouts/{id}",
+      "http_status": 200,
+      "fetched_at": "2026-11-06T03:34:32.911762+00:00",
+      "status": "ok",
+      "body": {
+        "batch_header": {
+          "payout_batch_id": "<redacted:id>",
+          "batch_status": "DENIED",
+          "time_created": "2026-11-06T03:04:22Z",
+          "time_completed": "2026-11-06T03:04:54Z",
+          "time_closed": "2026-11-06T03:04:54Z",
+          "sender_batch_header": {
+            "sender_batch_id": "<redacted:id>",
+            "email_subject": "ReckonAI phase-0 fixture payout"
+          },
+          "funding_source": "BALANCE",
+          "amount": {
+            "currency": "USD",
+            "value": "65.00"
+          },
+          "fees": {
+            "currency": "USD",
+            "value": "1.30"
+          }
+        },
+        "items": [
+          {
+            "payout_item_id": "<redacted:id>",
+            "transaction_status": "FAILED",
+            "payout_item_fee": {
+              "currency": "USD",
+              "value": "0.00"
+            },
+            "payout_batch_id": "<redacted:id>",
+            "payout_item": {
+              "recipient_type": "EMAIL",
+              "amount": {
+                "currency": "USD",
+                "value": "40.00"
+              },
+              "note": "seller settlement 1",
+              "receiver": "<redacted:pii>",
+              "sender_item_id": "<redacted:id>",
+              "recipient_wallet": "PAYPAL",
+              "purpose": "GOODS"
+            },
+            "time_processed": "2026-11-06T03:04:46Z",
+            "errors": {
+              "name": "RECEIVER_COUNTRY_NOT_ALLOWED",
+              "message": "As the recipient's country can't receive payments, this transaction is not allowed.",
+              "information_link": "https://developer.paypal.com/docs/api/payments.payouts-batch/#errors",
+              "details": [],
+              "links": []
+            },
+            "links": [
+              {
+                "href": "https://api.sandbox.paypal.com/v1/payments/payouts-item/{id}",
+                "rel": "item",
+                "method": "GET",
+                "encType": "application/json"
+              }
+            ]
+          },
+          {
+            "payout_item_id": "<redacted:id>",
+            "transaction_status": "FAILED",
+            "payout_item_fee": {
+              "currency": "USD",
+              "value": "0.00"
+            },
+            "payout_batch_id": "<redacted:id>",
+            "payout_item": {
+              "recipient_type": "EMAIL",
+              "amount": {
+                "currency": "USD",
+                "value": "25.00"
+              },
+              "note": "seller settlement 2",
+              "receiver": "<redacted:pii>",
+              "sender_item_id": "<redacted:id>",
+              "recipient_wallet": "PAYPAL",
+              "purpose": "GOODS"
+            },
+            "time_processed": "2026-11-06T03:04:46Z",
+            "errors": {
+              "name": "RECEIVER_COUNTRY_NOT_ALLOWED",
+              "message": "As the recipient's country can't receive payments, this transaction is not allowed.",
+              "information_link": "https://developer.paypal.com/docs/api/payments.payouts-batch/#errors",
+              "details": [],
+              "links": []
+            },
+            "links": [
+              {
+                "href": "https://api.sandbox.paypal.com/v1/payments/payouts-item/{id}",
+                "rel": "item",
+                "method": "GET",
+                "encType": "application/json"
+              }
+            ]
+          }
+        ],
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v1/payments/payouts/{id}?page_size=1000&page=1",
+            "rel": "self",
+            "method": "GET",
+            "encType": "application/json"
+          }
+        ]
+      },
+      "money_values": [
+        {
+          "path": "$payouts.batch_header.amount",
+          "currency": "USD",
+          "currency_key": "currency",
+          "amount": "65.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$payouts.batch_header.fees",
+          "currency": "USD",
+          "currency_key": "currency",
+          "amount": "1.30",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$payouts.items[0].payout_item_fee",
+          "currency": "USD",
+          "currency_key": "currency",
+          "amount": "0.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$payouts.items[0].payout_item.amount",
+          "currency": "USD",
+          "currency_key": "currency",
+          "amount": "40.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$payouts.items[1].payout_item_fee",
+          "currency": "USD",
+          "currency_key": "currency",
+          "amount": "0.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$payouts.items[1].payout_item.amount",
+          "currency": "USD",
+          "currency_key": "currency",
+          "amount": "25.00",
+          "raw_json_type": "str"
+        }
+      ]
+    }
+  ]
+}

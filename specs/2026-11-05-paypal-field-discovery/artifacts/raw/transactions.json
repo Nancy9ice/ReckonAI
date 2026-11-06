@@ -1,0 +1,99 @@
+{
+  "raw": {
+    "record_type": "transactions",
+    "source": "scripts/probe_paypal.py",
+    "redacted_by": "scripts/derive_observed.py",
+    "redacted": true,
+    "api_base": "https://api-m.sandbox.paypal.com",
+    "sample_labels": [
+      "transactions:list"
+    ],
+    "redaction_note": "Identifiers and buyer PII replaced with <redacted:id> and <redacted:pii>. Amounts, currencies, rates, fees, timestamps, statuses and error codes are kept: they are the evidence (plan.md group 3 step 3). Unredacted fixture ids are in fixtures.md."
+  },
+  "results": [
+    {
+      "record_type": "transactions",
+      "note": "transaction search, fee breakdown",
+      "request_path": "/v1/reporting/transactions",
+      "http_status": 200,
+      "fetched_at": "2026-11-06T03:34:35.742007+00:00",
+      "status": "ok",
+      "body": {
+        "transaction_details": [
+          {
+            "transaction_info": {
+              "transaction_id": "<redacted:id>",
+              "transaction_event_code": "T1900",
+              "transaction_initiation_date": "2026-10-31T22:18:56Z",
+              "transaction_updated_date": "2026-10-31T22:18:56Z",
+              "transaction_amount": {
+                "currency_code": "USD",
+                "value": "5000.00"
+              },
+              "transaction_status": "S",
+              "transaction_subject": "Initial balance",
+              "ending_balance": {
+                "currency_code": "USD",
+                "value": "5000.00"
+              },
+              "available_balance": {
+                "currency_code": "USD",
+                "value": "5000.00"
+              },
+              "protection_eligibility": "02",
+              "instrument_type": "PayPal",
+              "instrument_sub_type": "PayPal Wallet"
+            },
+            "payer_info": {
+              "address_status": "N",
+              "payer_name": {}
+            },
+            "shipping_info": {},
+            "cart_info": {},
+            "store_info": {},
+            "auction_info": {},
+            "incentive_info": {}
+          }
+        ],
+        "account_number": "<redacted:id>",
+        "start_date": "2026-10-09T03:34:35Z",
+        "end_date": "2026-11-06T01:29:59Z",
+        "last_refreshed_datetime": "2026-11-06T01:29:59Z",
+        "page": 1,
+        "total_items": 1,
+        "total_pages": 1,
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v1/reporting/transactions?fields=all&end_date=2026-11-06T03%3A34%3A35-0000&start_date=2026-10-09T03%3A34%3A35-0000&page_size=100&page=1",
+            "rel": "self",
+            "method": "GET",
+            "encType": "application/json"
+          }
+        ]
+      },
+      "money_values": [
+        {
+          "path": "$transactions.transaction_details[0].transaction_info.transaction_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "5000.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[0].transaction_info.ending_balance",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "5000.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[0].transaction_info.available_balance",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "5000.00",
+          "raw_json_type": "str"
+        }
+      ]
+    }
+  ]
+}

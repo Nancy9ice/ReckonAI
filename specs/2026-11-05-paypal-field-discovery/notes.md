@@ -1711,3 +1711,28 @@ by a two-minute experiment, one confirmed from the pinned contract and changing
 a verdict. Neither was discoverable by reading the field tables alone, which is
 what this phase had been doing. The `paypal_fee` row stayed where it was for a
 better reason, and the `platform_fee` row should never have been `absent`.
+
+### The direction change this uncovered
+
+Following the platform-fee thread to its end established that `platform_fees`
+exists only in PayPal's **multiparty** model, and that the model this product
+was specified against — the marketplace as merchant of record, collecting
+centrally and disbursing through the Payouts API — is not the model it is being
+built for.
+
+**The product now targets PayPal Complete Payments Platform for Marketplaces,
+with both `INSTANT` and `DELAYED` disbursement.** That decision, what it changes
+in `readme.md`, [[mission]] and [[roadmap]], the five-state disbursement
+lifecycle, the false-positive rule that comes with it, and the six questions a
+multiparty probe must answer are all recorded in **`specs/multiparty-direction.md`**.
+
+It is recorded there and **not applied**, because `validation.md` §5 forbids
+amending the canonical model on this branch. It is also the answer to `plan.md`
+Group 8 step 2, in the strongest form that step allows for: the canonical model
+does not survive contact with the real API unchanged, and neither does the
+product definition above it. Phase 0 ran first so this would surface before
+Phases 2 and 3 built on it.
+
+Everything in Groups 1 to 6 still stands; the declared column is
+architecture-independent and so are most of the observed findings. What needs
+re-observation is listed in `multiparty-direction.md` §9.

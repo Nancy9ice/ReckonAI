@@ -197,8 +197,30 @@ on some records and not others. It must state the condition under which it
 appears — a field present only on cross-currency transactions is useful
 information, not a failure.
 
-**D6 — Three verdicts only.** `present`, `absent`, `present-but-unreliable`.
-No "probably", no blank cells. An unknown is an unfinished phase.
+**D6 — Four verdicts only.** `present`, `absent`, `present-but-unreliable`, and
+`unanswered`. No "probably", no blank cells. An unknown is an unfinished phase.
+
+**Amended 2026-11-06, during Group 5.** This decision originally allowed three
+verdicts. `unanswered` was added because two fixtures proved uncreatable and
+forcing those rows into `absent` would have published a false claim about
+PayPal — the precise failure `notes.md` warns about for a `403` and which
+§5 calls "a permissions artefact masquerading as a finding". `validation.md` §5
+already used the word for the FX row, so this aligns D6 with a term the merge
+gate had already blessed, rather than inventing one.
+
+It is constrained, not a loophole:
+
+- `absent` means a record that should have carried the field did not. It is a
+  claim about PayPal.
+- `unanswered` means no fixture exercised the condition under which the field
+  could appear. It is a statement about **our fixtures**, and the row must name
+  the condition and what would answer it.
+- `unanswered` may **never** be used where a record was observed and the field
+  was simply missing. That is `absent`.
+
+A row saying "no dispute record exists; a wallet-funded capture would answer it"
+is a determinate finding with an owner and a next step. That is not hedging,
+which is what D6 exists to forbid.
 
 ## 7. Context for whoever picks this up
 

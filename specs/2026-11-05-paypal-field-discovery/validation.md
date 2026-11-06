@@ -18,7 +18,7 @@ Every roadmap exit criterion, and how it is proven.
 | E1 | APIMatic plugin installed and returning context | §3 M1 | Manual |
 | E1a | Declared column traceable to a pinned source | `check_fields_doc.py --declared-provenance` | Auto |
 | E2 | `specs/paypal-fields.md` committed with declared and observed as separate columns | `check_fields_doc.py --columns` | Auto |
-| E3 | Every canonical-intent field marked present / absent / unreliable | `check_fields_doc.py --coverage` | Auto |
+| E3 | Every canonical-intent field marked present / absent / unreliable / unanswered | `check_fields_doc.py --coverage` | Auto |
 | E4 | Verdicts judged on observed, not declared | `check_fields_doc.py --verdict-source` | Auto |
 | E5 | Declared-but-not-observed set listed explicitly | `check_fields_doc.py --gap-section` | Auto |
 | E6 | Every absent field carries a decision | `check_fields_doc.py --decisions` | Auto |
@@ -76,9 +76,16 @@ checked is the exact failure this phase exists to prevent.
 uv run scripts/check_fields_doc.py --verdicts
 ```
 
-Every verdict is exactly one of `present`, `absent`, `present-but-unreliable`.
-No blanks, no hedging, no "probably" (`requirements.md` D6). Every
-`present-but-unreliable` row states its condition (D5).
+Every verdict is exactly one of `present`, `absent`, `present-but-unreliable`,
+`unanswered`. No blanks, no hedging, no "probably" (`requirements.md` D6). Every
+`present-but-unreliable` row states its condition (D5), and every `unanswered`
+row states the unexercised condition and what would answer it.
+
+**`unanswered` added 2026-11-06**, alongside the D6 amendment. §5 below already
+used the term for the FX row; this makes the check agree with it. The checker
+must also enforce the boundary: a field marked `unanswered` whose record type
+*was* sampled with the field missing, and which carries no stated unexercised
+condition, is an `absent` field in disguise and fails.
 
 ### C6 — Verdicts derive from observed, not declared
 

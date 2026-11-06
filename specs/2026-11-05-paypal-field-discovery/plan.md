@@ -117,9 +117,14 @@ the plugin. The plugin holds no field names; see `requirements.md` §1.
    table whose Tags column carries `Required`, `Optional` and `Read-only`.
    Cross-check against the model classes in `paypalserversdk/models/`, where
    `_names`, `_optionals`, `_nullables` and `from_dictionary` live.
-3. For **disputes and payouts**, the SDK has no coverage at all. Take the
-   declared shape from PayPal's REST reference and mark every such row as
-   prose-sourced, per `requirements.md` §3.1.
+3. For **disputes and payouts**, the SDK has no coverage at all. **Amended
+   2026-11-06:** take the declared shape from PayPal's published OpenAPI 3.0.3
+   documents in `paypal/paypal-rest-api-specifications`, pinned to a commit, and
+   mark every such row with the `openapi_specification` source grade. The
+   original instruction was to read PayPal's prose REST reference; a pinned
+   machine-readable document from PayPal is strictly better evidence on the
+   exact axis `requirements.md` §3.1 cares about. See the §3.1 amendment and
+   `notes.md`, Group 4.
 4. Write `artifacts/declared.json` keyed on the **API property name** — the
    value side of each model's `_names` map, not the Python attribute name. The
    generator renames fields (`mtype` for a property called `type`,

@@ -60,15 +60,29 @@ controller and no payouts controller, and zero models matching `payout`.
 | **Transactions / captures** | ids, amounts, currencies, fees | SDK 2.4.0 generated contract |
 | **Refunds** | linkage back to the original capture, partial-refund shape | SDK 2.4.0 generated contract |
 | **Settlement and FX** | rate, conversion fee, settlement currency, conversion timestamp | SDK 2.4.0 generated contract |
-| **Disputes** | status, amount, lifecycle states | PayPal REST reference (Disputes v1) — prose documentation, not a generated contract |
-| **Payouts** | batch and item structure | PayPal REST reference (Payouts v1) — prose documentation, not a generated contract |
+| **Disputes** | status, amount, lifecycle states | PayPal's published OpenAPI document (Disputes v1) — see the amendment below |
+| **Payouts** | batch and item structure | PayPal's published OpenAPI document (Payouts v1) — see the amendment below |
 
 A generated contract and a prose reference are not equivalent evidence. The
 first is machine-extracted and version-pinned; the second is read by a human and
-can drift from the deployed API without any signal. Rows sourced from prose must
-be marked as such, so a reader can tell how much the declared cell is worth.
-This does not change the observed column: Group 2 still creates dispute and
-payout fixtures and Group 3 still probes them.
+can drift from the deployed API without any signal. Rows not sourced from the
+generated contract must be marked with the source they did use, so a reader can
+tell how much the declared cell is worth. This does not change the observed
+column: Group 2 still creates dispute and payout fixtures and Group 3 still
+probes them.
+
+**Amended 2026-11-06, during Group 4.** These two rows originally specified
+PayPal's prose REST reference, on the assumption that nothing machine-readable
+existed for the record types the SDK does not model. PayPal does publish
+OpenAPI 3.0.3 documents for both, in
+`paypal/paypal-rest-api-specifications`, and those were used instead, pinned to
+a commit. This answers the objection above on its own terms — the source is
+machine-extracted and version-pinned, so drift is a diff rather than an
+unsignalled change — without claiming grade 1, because it is not the contract
+the tested SDK generates and a published spec can still lag the deployed API.
+It is recorded as a third grade, `openapi_specification`. **No prose reference
+was used anywhere in this phase.** See `notes.md`, Group 4, and G1 for a case
+where PayPal's own document overstates the payload.
 - Every field the canonical model intends to carry marked `present`, `absent`,
   or `present-but-unreliable` — **judged on observed, never on declared.**
 - Every declared-but-not-observed field listed explicitly, as its own section.
@@ -210,6 +224,19 @@ No "probably", no blank cells. An unknown is an unfinished phase.
   `paypal_fee_in_receivable_currency` are declared, but neither is declared *as*
   an FX conversion fee, and treating one as such would be the substitution
   [[mission]] P3 forbids. Group 6 consumes this; see `notes.md`.
+- **Extended 2026-11-06 by Group 4, and now settled rather than inferred.** The
+  conclusion above was drawn from one model, `ExchangeRate`. PayPal's contract
+  declares conversion records in **four** places — on captures, on
+  order-embedded captures, on refunds as
+  `seller_payable_breakdown.net_amount_breakdown[].exchange_rate`, and on payout
+  items as `items[].currency_conversion` — across both source grades. **None of
+  the four declares a temporal field, and none declares a conversion fee.** So
+  `fx_conversion.timestamp` has no declared source anywhere in PayPal's
+  published contract, not merely none in the SDK, and no further probing can
+  change that. Group 6 may decide on settled evidence. Two of the four sites
+  were also **not observed**, because Group 2's refund and payouts were
+  same-currency; those rows are unanswered, not absent. See `notes.md`, G2 and
+  G3.
 - **The declared contract requires no change to the money rules.** `float`
   appears zero times across all 373 generated model pages; every monetary field
   is `Money{currency_code: str, value: str}`. PayPal declares money as strings

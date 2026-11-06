@@ -598,6 +598,194 @@ CANONICAL: list[dict[str, Any]] = [
     },
 ]
 
+# Task group 6: one decision per absent and per present-but-unreliable field
+# (plan.md group 6, validation.md C8). Keyed on (entity, field).
+#
+# Four kinds, and the distinction is the point:
+#
+#   derive               we can compute the value. It must be written with
+#                        is_derived true and may never be presented as
+#                        provider evidence (tech-stack.md section 2,
+#                        mission.md P3).
+#   limitation           we cannot have the value. The entry states what the
+#                        product therefore cannot do.
+#   no_action            the conditional availability is correct for the
+#                        domain. Nothing is derived and nothing is lost - the
+#                        entry says why the condition is right.
+#   connector_metadata   not a PayPal field at all. In the table only because
+#                        requirements.md section 7 lists it.
+DECISIONS: dict[tuple[str, str], dict[str, Any]] = {
+    ("capture", "paypal_fee"): {
+        "kind": "limitation",
+        "is_derived": False,
+        "text": "The engine cannot attribute a PayPal fee to a capture, and "
+        "**must not derive one as gross minus net.** PayPal's contract gives "
+        "only boilerplate Money descriptions for `net_amount` and `paypal_fee` "
+        "and never states the formula; with `platform_fees` also absent that "
+        "equation has two unknowns. Treat a capture fee as **unknown, never as "
+        "zero** - `tech-stack.md` section 9.6 forbids defaulting money to zero. "
+        "A fee-inclusive entitlement check must exclude capture fees and say so "
+        "in its exception report rather than silently assuming none were "
+        "charged. **Re-verify against production or a fee-bearing sandbox "
+        "transaction before Phase 10 treats this as settled** - this is the one "
+        "row whose absence is plausibly a sandbox artefact.",
+    },
+    ("capture", "platform_fee"): {
+        "kind": "limitation",
+        "is_derived": False,
+        "text": "Marketplace commission is not readable from a capture. PayPal "
+        "reported `platform_fees` on the **refund of this same capture** as an "
+        "explicit `0.00` through the order view, and omitted it from the capture "
+        "itself, so the data exists and the capture record does not carry it. "
+        "Phase 7 must take the platform fee for a capture from the marketplace "
+        "side, which is the authoritative source for the marketplace's own "
+        "commission anyway, and must not read the PayPal absence as zero.",
+    },
+    ("fx_conversion", "timestamp"): {
+        "kind": "derive",
+        "is_derived": True,
+        "text": "Derive from the conversion-bearing capture's `create_time` and "
+        "write it with **`is_derived` true**. It may never be presented as a "
+        "PayPal-supplied conversion time: PayPal declares no temporal field on "
+        "any of its four conversion structures, so we cannot show the rate was "
+        "struck at that instant - only that the capture carrying it was created "
+        "then. Any agent explanation citing a conversion time must cite it as "
+        "derived (`mission.md` P3).",
+    },
+    ("fx_conversion", "fee"): {
+        "kind": "limitation",
+        "is_derived": False,
+        "text": "No conversion fee can be reported, and none may be "
+        "manufactured. Substituting `paypal_fee` or "
+        "`paypal_fee_in_receivable_currency` is the substitution `mission.md` P3 "
+        "forbids - neither is declared as the fee for a conversion. **Nor is the "
+        "arithmetic residue a fee**: gross times rate minus `receivable_amount` "
+        "came to `-0.00492989235221950` on our fixture, which is PayPal rounding "
+        "the settlement to the cent. Recording that as a conversion fee would be "
+        "fabricating a financial value. Consequence: readme section 13 "
+        "Scenario 3 narrows to an incorrect conversion **value** and cannot "
+        "cover an incorrect conversion **fee**.",
+    },
+    ("fx_conversion", "provider"): {
+        "kind": "connector_metadata",
+        "is_derived": False,
+        "text": "Set by the ingestion connector, which knows which provider it "
+        "called. Not derived from PayPal data and so carries no `is_derived` "
+        "flag; it asserts nothing about money.",
+    },
+    ("fx_conversion", "is_derived"): {
+        "kind": "connector_metadata",
+        "is_derived": False,
+        "text": "Our own provenance flag. It is the mechanism the decisions "
+        "above rely on, not a field needing one.",
+    },
+    ("capture", "settlement_amount"): {
+        "kind": "derive",
+        "is_derived": True,
+        "text": "Present on a cross-currency capture. For a same-currency "
+        "capture there is no `receivable_amount` and none is needed: derive the "
+        "settlement amount as `net_amount`, valid **only** where no "
+        "`exchange_rate` is present and the breakdown currency equals the "
+        "account's settlement currency from `/v1/reporting/balances`. Flag "
+        "`is_derived` true. **Where a conversion did occur, never derive it** - "
+        "use PayPal's reported `receivable_amount`, which is rounded to the "
+        "cent, and never a recomputation of gross times rate.",
+    },
+    ("refund", "platform_fee"): {
+        "kind": "limitation",
+        "is_derived": False,
+        "text": "A read-path requirement rather than an API absence. The refund "
+        "endpoint does not carry `platform_fees`; the same record read through "
+        "`GET /v2/checkout/orders/{id}` does. **Phase 7 must ingest refunds via "
+        "the order** to obtain it, and a refund ingested from the refund "
+        "endpoint alone must record the platform fee as unknown, not zero.",
+    },
+    ("payout_item", "transaction_id"): {
+        "kind": "no_action",
+        "is_derived": False,
+        "text": "Absent only on a failed item, which is correct - no transaction "
+        "occurred, so there is no id. The canonical model must make it nullable "
+        "and must not quarantine a failed item for lacking one. Its absence is "
+        "itself evidence that the item did not pay out, and pairs with "
+        "`processed_at`, which **is** populated on a failed item and therefore "
+        "proves nothing about payment.",
+    },
+    ("payout_item", "failure_reason"): {
+        "kind": "limitation",
+        "is_derived": False,
+        "text": "Populated only on a failed item, and **account-dependent**: a "
+        "different sandbox account denied identical requests with `errors` "
+        "empty. When present it is provider evidence and may be cited as the "
+        "cause. When absent, the product reports that the payout was denied, "
+        "cites `batch_status` and `transaction_status`, and **stops** - "
+        "`insufficient_evidence` per roadmap Phase 12. It must never assemble a "
+        "plausible cause from context. The failure is silent in the worst way: "
+        "the status fields are always present and always look authoritative.",
+    },
+}
+
+# The five fx_conversion rows whose conditional availability is simply correct.
+_FX_CONDITION_IS_CORRECT = {
+    "kind": "no_action",
+    "is_derived": False,
+    "text": "Populated only where a conversion occurred, which is right: a "
+    "same-currency transaction has no conversion and must carry **no "
+    "`fx_conversion` row at all**. Nothing is derived and nothing is lost. "
+    "Phase 3 should create an `fx_conversion` record only when PayPal reports an "
+    "`exchange_rate`, so that an empty row can never be mistaken for a "
+    "conversion whose fields went missing.",
+}
+for _field in ("source_amount", "source_currency", "target_currency", "rate"):
+    DECISIONS[("fx_conversion", _field)] = _FX_CONDITION_IS_CORRECT
+DECISIONS[("fx_conversion", "target_amount")] = {
+    "kind": "no_action",
+    "is_derived": False,
+    "text": _FX_CONDITION_IS_CORRECT["text"]
+    + " And where it does exist, **compare against this figure** rather than "
+    "recomputing gross times rate: PayPal rounds the settlement to the cent "
+    "while leaving the rate unrounded, so a recomputation shows a half-cent "
+    "exception on every cross-currency transaction. That would breach the "
+    "hardest exit criterion in roadmap Phase 11 - the clean baseline producing "
+    "zero exceptions.",
+}
+
+# Task group 6, for the rows that are unanswered rather than absent. These get
+# an interim handling and the fixture that would settle them, NOT a decision: a
+# decision implies the evidence is in, and for these it is not.
+PENDING: dict[tuple[str, str], dict[str, str]] = {
+    ("payment", "payer_identity"): {
+        "answered_by": "a wallet-funded order, which needs a sandbox personal "
+        "account to approve the order in a browser",
+        "interim": "Treat payer identity as unavailable for card-funded "
+        "payments. Do not make it required, and do not quarantine a card "
+        "payment for lacking it. **Reconciling a marketplace buyer to a PayPal "
+        "buyer account is impossible for card transactions**, so any matching "
+        "rule must key on the order or capture id instead.",
+    },
+}
+_DISPUTE_PENDING = {
+    "answered_by": "a wallet-funded capture, which `POST /v1/customer/disputes` "
+    "would then accept",
+    "interim": "Phase 3 may build the dispute table from the declared shape, "
+    "which is pinned and complete, but **no dispute field may be marked "
+    "required** and Phase 7 must not assume any of them is populated. Re-run "
+    "the probe once a dispute exists; until then the product cannot "
+    "reconcile disputes and should say so rather than report zero disputes.",
+}
+for _field in (
+    "dispute_id",
+    "status",
+    "lifecycle_stage",
+    "dispute_state",
+    "amount",
+    "currency",
+    "reason",
+    "created_at",
+    "seller_response_due_date",
+    "capture_linkage",
+):
+    PENDING[("dispute", _field)] = _DISPUTE_PENDING
+
 # What a declared-but-not-observed field's absence means. Keyed on the exact
 # path; the grouped rules below cover the rest.
 GAP_MEANING: dict[str, str] = {
@@ -1018,6 +1206,124 @@ def build(
             )
         add("")
 
+    # --------------------------------------------------------- decisions (G6)
+    needs_decision = [r for r in rows if r["verdict"] in (ABSENT, UNRELIABLE)]
+    pending_rows = [r for r in rows if r["verdict"] == UNANSWERED]
+
+    missing = [
+        f"{r['entity']}.{r['field']}"
+        for r in needs_decision
+        if (r["entity"], r["field"]) not in DECISIONS
+    ]
+    if missing:
+        # Fail loudly rather than emit a table with a hole in it. This is the
+        # mechanical form of plan.md group 6's verify step.
+        sys.exit(
+            "error: no decision recorded for: "
+            + ", ".join(missing)
+            + "\nAdd an entry to DECISIONS in scripts/build_fields_doc.py."
+        )
+    missing_pending = [
+        f"{r['entity']}.{r['field']}"
+        for r in pending_rows
+        if (r["entity"], r["field"]) not in PENDING
+    ]
+    if missing_pending:
+        sys.exit(
+            "error: no interim handling recorded for: " + ", ".join(missing_pending)
+        )
+
+    add("## Decisions")
+    add("")
+    add(
+        "Every `absent` and every `present-but-unreliable` field carries one of "
+        "four decisions (`plan.md` Group 6, `validation.md` C8). A field left "
+        "undecided fails the build of this document, not merely its review."
+    )
+    add("")
+    add("| Kind | Means |")
+    add("|---|---|")
+    add(
+        "| `derive` | We can compute the value. It is written with **`is_derived` "
+        "true** and may never be presented as provider evidence "
+        "(`tech-stack.md` section 2, `mission.md` P3). |"
+    )
+    add(
+        "| `limitation` | We cannot have the value. The entry states what the "
+        "product therefore cannot do. |"
+    )
+    add(
+        "| `no_action` | The conditional availability is correct for the domain. "
+        "Nothing is derived and nothing is lost; the entry says why the "
+        "condition is right. |"
+    )
+    add(
+        "| `connector_metadata` | Not a PayPal field at all, and in this table "
+        "only because `requirements.md` section 7 lists it. |"
+    )
+    add("")
+    kind_counts: dict[str, int] = {}
+    for row in needs_decision:
+        kind = DECISIONS[(row["entity"], row["field"])]["kind"]
+        kind_counts[kind] = kind_counts.get(kind, 0) + 1
+    add(
+        f"{len(needs_decision)} fields need a decision: "
+        + ", ".join(f"{count} `{kind}`" for kind, count in sorted(kind_counts.items()))
+        + "."
+    )
+    add("")
+    add("| Field | Verdict | Decision | `is_derived` | Detail |")
+    add("|---|---|---|---|---|")
+    for row in needs_decision:
+        decision = DECISIONS[(row["entity"], row["field"])]
+        flag = "**yes**" if decision["is_derived"] else "no"
+        add(
+            f"| `{row['entity']}.{row['field']}` | `{row['verdict']}` | "
+            f"`{decision['kind']}` | {flag} | {md_escape(decision['text'])} |"
+        )
+    add("")
+    add(
+        "**Two derivations exist, and both are labelled.** "
+        "`fx_conversion.timestamp` and the same-currency case of "
+        "`capture.settlement_amount` are the only values this phase authorises "
+        "computing, and each must carry `is_derived`. Everything else is either "
+        "a stated limitation or a condition that is correct as it stands. No "
+        "monetary value is derived from an undocumented formula - the "
+        "`capture.paypal_fee` row explains why that mattered."
+    )
+    add("")
+    add("---")
+    add("")
+
+    # ----------------------------------------------------- pending answers (G6)
+    add("## Pending answers")
+    add("")
+    add(
+        f"The {len(pending_rows)} `unanswered` fields get an interim handling "
+        "and the fixture that would settle them - **not** a decision. A decision "
+        "implies the evidence is in; for these it is not, and recording a "
+        "limitation would overstate what we know."
+    )
+    add("")
+    add("| Field | What would answer it | Interim handling |")
+    add("|---|---|---|")
+    for row in pending_rows:
+        entry = PENDING[(row["entity"], row["field"])]
+        add(
+            f"| `{row['entity']}.{row['field']}` | "
+            f"{md_escape(entry['answered_by'])} | "
+            f"{md_escape(entry['interim'])} |"
+        )
+    add("")
+    add(
+        "Both fixtures need the same thing: **a wallet-funded capture**, which "
+        "requires a sandbox personal account to approve an order in a browser. "
+        "That one fixture would answer eleven rows, and would also let a "
+        "cross-currency refund and payout settle the two unobserved conversion "
+        "sites. It is the highest-value follow-up this phase produces and it is "
+        "cheap."
+    )
+    add("")
     add("---")
     add("")
 

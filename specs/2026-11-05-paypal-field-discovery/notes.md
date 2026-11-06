@@ -1439,3 +1439,170 @@ so those rows report the narrower count and name the gate in the row. Without
 the gate the table would have claimed `present` for conversion evidence that
 exists on one capture out of two. The checker must apply the same rule or it
 will read a gated row as a mismatch.
+
+---
+
+## Group 6 — decisions for absent fields, 2026-11-06
+
+### What was produced
+
+Two new sections in `specs/paypal-fields.md`, generated from the same script:
+
+- **Decisions** — all 15 `absent` and `present-but-unreliable` fields, each with
+  one of four kinds: 5 `limitation`, 2 `derive`, 6 `no_action`,
+  2 `connector_metadata`.
+- **Pending answers** — the 11 `unanswered` fields, with an interim handling and
+  the fixture that would settle each.
+
+A field left undecided now **fails the build** of the document rather than its
+review: the generator exits with the offending field names. Verified by removing
+a decision and confirming the refusal. That is `plan.md` Group 6's verify step
+made mechanical.
+
+### Why `unanswered` rows get handling and not decisions
+
+`validation.md` C8 asks for a derivation or a declared limitation for every
+`absent` and `present-but-unreliable` field. The 11 `unanswered` rows are
+neither. Recording a limitation for them would overstate what we know — a
+limitation says the product cannot do something, and for a dispute field we do
+not know that; we know we have not looked. So they get an interim handling and a
+named fixture instead, in a separate section, and the distinction is stated in
+the document.
+
+### The one derivation we refused, and why that matters
+
+`capture.paypal_fee` looks derivable as `gross_amount - net_amount`. It is not,
+and settling that was the most consequential call in this group.
+
+PayPal's contract gives **only boilerplate `Money` descriptions** for
+`net_amount`, `paypal_fee` and `platform_fees` — "The currency and amount for a
+financial transaction, such as a balance or payment due" — and **never states
+the formula** relating them. So `net = gross - paypal_fee` is our assumption,
+not PayPal's statement, and because `platform_fees` is also absent from the
+capture the equation has two unknowns and one observation.
+
+Deriving a fee from it would be arithmetic reaching a financial conclusion on an
+unverified formula, which [[mission]] P1 gives to the deterministic engine and
+P3 forbids inventing. The decision is a limitation: capture fees are **unknown,
+never zero** ([[tech-stack]] §9.6 already forbids defaulting money to zero), a
+fee-inclusive entitlement check must exclude them and say so, and the row must
+be re-verified against production before Phase 10 treats it as settled.
+
+Only two derivations are authorised by this phase, and both carry `is_derived`:
+`fx_conversion.timestamp` from the capture's `create_time`, and the
+same-currency case of `capture.settlement_amount` from `net_amount`. No
+monetary value is derived from an undocumented formula.
+
+### Blast radius 1 — readme §13 Scenario 3 narrows, and the half that survives is the important one
+
+Scenario 3 is *Currency conversion discrepancy*: the customer pays EUR,
+settlement occurs in USD, and "the marketplace records an expected settlement
+using an **incorrect conversion value or fee**".
+
+| Scenario 3 step | Status |
+|---|---|
+| Customer pays in EUR | **Supported** — observed, EUR 95.50 |
+| PayPal records the original transaction | **Supported** |
+| Settlement occurs in USD | **Supported** — `receivable_amount` USD 104.05 |
+| Marketplace records an incorrect conversion **value** | **Supported** — rate `1.089477173902071` is real provider evidence |
+| Marketplace records an incorrect conversion **fee** | **Not supported** |
+| Engine compares recorded conversion evidence | **Supported**, with the caveat below |
+| AI explains the discrepancy | **Supported** |
+
+**The fee half of Scenario 3 cannot be demonstrated.** There is no
+PayPal-declared FX conversion fee at any of the four conversion sites, so there
+is nothing to compare a marketplace's claimed conversion fee against. If the
+demo injects an incorrect conversion *fee*, the engine has no provider figure to
+contradict it and the agent's only honest answer is
+`insufficient_evidence` — which is a correct behaviour to show but not the
+exception story the scenario intends.
+
+**The fault injected in Scenario 3 must therefore be an incorrect conversion
+value or rate, not an incorrect conversion fee.** `requirements.md` §7
+anticipated exactly this outcome: "If PayPal does not supply it, Scenario 3
+narrows to what PayPal does supply and the gap is stated openly." It is stated
+here. The readme is the product document and is **not** edited on this branch;
+narrowing it is a decision for whoever builds the demo, carrying this note.
+
+### Blast radius 2 — Phase 11's false-positive gate is the real exposure
+
+[[roadmap]] Phase 11's exit criteria include "**The clean Phase 4 baseline
+produces zero exceptions** — the false-positive gate, and the hardest criterion
+in this document."
+
+**A naive implementation fails that gate on every cross-currency transaction.**
+From our own fixture, computed with `Decimal`:
+
+```
+95.50 * 1.089477173902071 = 104.04507010764778050
+PayPal receivable_amount  = 104.05
+residue                   =  -0.00492989235221950
+```
+
+PayPal rounds the settlement to the cent and leaves the rate unrounded. An
+engine that recomputes `gross * rate` and compares it against the reported
+settlement produces a half-cent discrepancy on clean data — a false positive on
+every converted transaction, and the hardest criterion in the roadmap breached
+by arithmetic rather than by a bug in the matching.
+
+Four requirements for Phase 11 follow, and they are not optional:
+
+1. **Compare against PayPal's reported `receivable_amount`**, never against a
+   recomputation of gross times rate. The provider's figure is the evidence
+   ([[mission]] P1); our arithmetic checks the marketplace against it, not
+   PayPal against itself.
+2. **Record the rounding tolerance explicitly**, as a stated decision rather
+   than a constant discovered while chasing noise. The residue above is the
+   worked example.
+3. **Store the rate at full precision as `Decimal` from the string.** Fifteen
+   decimal places were observed; rounding the rate before the comparison
+   manufactures a discrepancy larger than the one being measured.
+4. **Do not use the conversion timestamp as a matching key or a staleness
+   signal.** It is derived from `create_time` and flagged `is_derived`; keying
+   on it would let a derived value drive a financial conclusion.
+
+Two further Phase 11 consequences from earlier groups: refund-to-capture
+matching rests on a **derived** linkage parsed out of `links[rel=up]`, since no
+`capture_id` field exists on a refund, and **dispute matching is unavailable
+entirely** until a dispute fixture exists.
+
+### Blast radius 3 — which `fx_conversion` fields cannot come from PayPal
+
+`plan.md` Group 6 step 2 asks for this list explicitly. Of the nine fields
+`requirements.md` §7 enumerates:
+
+| Field | From PayPal? |
+|---|---|
+| `source_amount` | **Yes**, on a converted capture only |
+| `source_currency` | **Yes**, on a converted capture only |
+| `target_amount` | **Yes**, on a converted capture only |
+| `target_currency` | **Yes**, on a converted capture only |
+| `rate` | **Yes**, on a converted capture only |
+| `timestamp` | **No** — derived from `create_time`, `is_derived` true |
+| `fee` | **No** — no source anywhere; a declared limitation |
+| `provider` | Not PayPal's to give; set by the connector |
+| `is_derived` | Not PayPal's to give; our own provenance flag |
+
+**Two of the eight PayPal-sourced fields cannot be populated from PayPal:
+`timestamp` and `fee`.** The remaining five are available and real, but only
+where a conversion actually occurred — which is correct, because a
+same-currency transaction has no conversion and should carry no `fx_conversion`
+row at all.
+
+So [[mission]] P3 is satisfiable: we never need to substitute a public FX rate,
+and the two gaps are a labelled derivation and a stated limitation rather than
+an estimate dressed as evidence. The quote endpoints noted earlier as a trap
+stay unused.
+
+### The single highest-value follow-up
+
+Eleven of the fifteen open rows, plus both unobserved conversion sites, trace
+back to one missing fixture: **a wallet-funded capture**, which needs a sandbox
+personal account to approve an order in a browser.
+
+It would answer `payment.payer_identity`, unblock dispute creation and therefore
+all ten dispute rows, and the same browser-approved account would allow a
+cross-currency refund and a cross-currency payout to settle
+`refunds.net_amount_breakdown` and `payouts.items[].currency_conversion`. One
+fixture, thirteen open questions. It is recommended before Phase 11 and is not
+required for this phase to merge.

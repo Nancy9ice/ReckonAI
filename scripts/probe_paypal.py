@@ -167,17 +167,25 @@ def default_params(record_type: str) -> dict[str, str]:
     return {}
 
 
+# PayPal is not consistent about the money envelope between its APIs:
+#   Orders v2 and Payments v2 use {"currency_code": str, "value": str}
+#   Payouts v1 uses            {"currency": str,      "value": str}
+# Both must be recognised or the observed column silently under-reports. This
+# was found by probing a real payout batch whose amounts were missed entirely.
+CURRENCY_KEYS = ("currency_code", "currency")
+
+
 def walk_money(node: Any, path: str = "$") -> list[dict[str, str]]:
     """Find every PayPal money object and parse its value as a Decimal.
 
-    PayPal money is {"currency_code": str, "value": str}. Parsing each one
-    proves the amount is Decimal-representable and surfaces anything that is
-    not, rather than discovering it in Phase 7. Every amount is recorded with
-    its currency, never alone.
+    Parsing each one proves the amount is Decimal-representable and surfaces
+    anything that is not, rather than discovering it in Phase 7. Every amount
+    is recorded with its currency, never alone.
     """
     out: list[dict[str, str]] = []
     if isinstance(node, dict):
-        if "value" in node and "currency_code" in node:
+        currency_key = next((k for k in CURRENCY_KEYS if k in node), None)
+        if "value" in node and currency_key:
             raw = node["value"]
             try:
                 amount = Decimal(str(raw))
@@ -186,7 +194,8 @@ def walk_money(node: Any, path: str = "$") -> list[dict[str, str]]:
             out.append(
                 {
                     "path": path,
-                    "currency": str(node["currency_code"]),
+                    "currency": str(node[currency_key]),
+                    "currency_key": currency_key,
                     # str() of a Decimal, so the artifact carries no float.
                     "amount": str(amount),
                     "raw_json_type": type(raw).__name__,

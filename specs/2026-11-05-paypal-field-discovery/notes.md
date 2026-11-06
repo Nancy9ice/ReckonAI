@@ -24,7 +24,7 @@ on whether the plugin returns real context.
 | 1 | APIMatic Context Plugin installed and returning PayPal context | **Pass, with an amendment to what it supplies** — see "Prerequisite 1" below | Installed 2026-11-05 as `paypal@context-plugins-local` (user scope) from `github:paypaldev/server-sdk-context-plugin-preview`. Required installing Node first (none was present); Node 26.13.0 via Homebrew. |
 | 2 | `paypal-sandbox` MCP server reachable | **Fail — token not in the process environment** | Credentials now exist in a local, gitignored `.env`, but the MCP server expands `${PAYPAL_SANDBOX_ACCESS_TOKEN}` from Claude Code's own process environment at startup and never reads `.env`. Root cause below. |
 | 3 | Sandbox credentials available to a local script as env vars | **Met 2026-11-05** | Client id and secret both present and loadable by a local script; base URL `https://api-m.sandbox.paypal.com`. Verified without printing any value. |
-| 4 | PayPal developer sandbox account with API access | **Met 2026-11-05** | `POST /v1/oauth2/token` returns `HTTP 200` with a bearer token, `expires_in` 32242 s (about 9 hours), and 29 granted scopes. Six of the eight endpoint paths this phase needs are permitted; see the permission map below. |
+| 4 | PayPal developer sandbox account with API access | **Met** | Token acquired, `expires_in` about 9 hours. **The account was replaced on 2026-11-06**; the scope counts and permission map recorded further down describe the superseded account. On the current account — merchant `C24NAWELTTHXJ`, app `APP-9C108748UB224713D` — all eight endpoint paths this phase needs are permitted, and card processing is additionally enabled, which is what made Group 2's captures possible. |
 
 ### Prerequisite 1 — installed, but it is not a field-shape oracle
 
@@ -389,6 +389,337 @@ the history is recorded below under "Transaction Search", because the sequence
 matters for reading the earlier probe output. `/v1/reporting/balances` gives the
 settlement currency directly, which is a better source than inferring it from
 `seller_receivable_breakdown` fields per capture.
+
+### Finding — PayPal uses two different money envelopes across its APIs
+
+Found 2026-11-05 during Group 2, by probing a real payout batch whose amounts
+the probe reported as **zero** when six were plainly present.
+
+| API | Money shape |
+|---|---|
+| Orders v2, Payments v2 | `{"currency_code": "USD", "value": "40.00"}` |
+| **Payouts v1** | `{"currency": "USD", "value": "40.00"}` |
+
+The key is `currency`, not `currency_code`. Same concept, different field name,
+same provider. The probe's money walker matched only `currency_code`, so every
+payout amount was silently missed: `money_values = 0` on a batch carrying a
+65.00 total, two item amounts and two item fees.
+
+**Consequences, in order of importance:**
+
+1. **It is a normalization requirement for Phase 6 and 7, not a curiosity.** Any
+   code that reads PayPal money by looking for `currency_code` will silently
+   skip every payout amount. Silently, because the field is simply absent — no
+   error, no type mismatch, just nothing found. A reconciliation engine that
+   loses payout fees is wrong in exactly the way this product exists to detect.
+2. **It argues for the canonical model carrying one money shape** and the
+   provider adapter mapping both spellings onto it ([[tech-stack]] §9.3 already
+   anticipates composite money fields needing care).
+3. **It is an argument for probing rather than reading documentation.** The
+   declared contract describes each API correctly in isolation; nothing in it
+   says "these two disagree". The inconsistency is only visible when you hold
+   two real responses side by side, which is what the observed column is for.
+
+Fixed in `scripts/probe_paypal.py` by matching either key and recording which
+one was used, so `observed.json` will carry the spelling per field path rather
+than flattening the difference away.
+
+### ANSWERED — Q1 and Q3. PayPal does supply real conversion evidence.
+
+2026-11-06, from capture `3VG831163X0730421` (EUR 95.50, cross-currency).
+This is the central question of the phase.
+
+```json
+"seller_receivable_breakdown": {
+  "gross_amount":      { "currency_code": "EUR", "value": "95.50" },
+  "net_amount":        { "currency_code": "EUR", "value": "95.50" },
+  "receivable_amount": { "currency_code": "USD", "value": "104.05" },
+  "exchange_rate": {
+    "source_currency": "EUR",
+    "target_currency": "USD",
+    "value": "1.089477173902071"
+  }
+}
+```
+
+**Q3 resolved:** a cross-currency payment *can* be created in sandbox, with no
+second funding source — a card-funded order in EUR against a USD-settling
+account. **Q1 resolved:** the sandbox does expose settlement and FX detail, on
+captures.
+
+Consequences:
+
+- [[mission]] P3 is satisfiable. We have a provider conversion record and never
+  need to substitute a public FX rate. The quote endpoints noted below as a trap
+  stay unused.
+- readme §13 Scenario 3 is viable as written, not narrowed.
+- The rate carries **15 decimal places** (`1.089477173902071`). It must be
+  parsed as `Decimal` from the string and stored at full precision; a `float`
+  would lose digits, and rounding it before the comparison in [[roadmap]]
+  Phase 11 would manufacture a discrepancy.
+- **The receivable is rounded; the rate is not.** Computed with `Decimal`:
+
+  ```
+  95.50 * 1.089477173902071 = 104.04507010764778050
+  PayPal receivable_amount  = 104.05
+  difference                =  -0.00492989235221950
+  ```
+
+  So PayPal rounds the product to the cent. **The engine must compare against
+  the reported `receivable_amount`, not against its own recomputation of gross
+  times rate**, or every cross-currency transaction shows a half-cent exception
+  that is purely a rounding artefact. This is a concrete instance of
+  [[mission]] P1: the provider's figure is the evidence, and our arithmetic is
+  for checking the marketplace against it, not for second-guessing PayPal's own
+  settlement line. Record the tolerance decision in Phase 11 explicitly rather
+  than discovering it as noise.
+
+### Field presence on captures — same-currency versus cross-currency
+
+Observed across both fixtures. This is the `observed.json` content for captures
+in miniature, and it is what Group 5's verdicts rest on.
+
+| Field | Same-currency | Cross-currency | Verdict under D1 |
+|---|---|---|---|
+| `gross_amount` | yes | yes | `present` |
+| `net_amount` | yes | yes | `present` |
+| `receivable_amount` | **no** | yes | `present-but-unreliable` — only on cross-currency |
+| `exchange_rate` | **no** | yes | `present-but-unreliable` — only on cross-currency |
+| `paypal_fee` | **no** | **no** | `absent` |
+| `paypal_fee_in_receivable_currency` | no | no | `absent` |
+| `platform_fees` | no | no | `absent` |
+
+Two of these need comment.
+
+**`receivable_amount` and `exchange_rate` are the textbook D5 case.** The
+declared contract marks both Optional; observation shows the condition exactly —
+they appear when, and only when, a conversion occurred. `requirements.md` D5
+anticipated this: "a field present only on cross-currency transactions is useful
+information, not a failure." Group 5 must state that condition on the row.
+
+**`paypal_fee` absent on captures is the uncomfortable finding, and it needs a
+caveat Group 6 must carry.** Under D1 the verdict is `absent`, judged on
+observation. But the refund fixture *does* carry `paypal_fee` (as `"0.00"`), so
+PayPal clearly emits the field, with an explicit zero, when it has a value. The
+likely explanation is that this sandbox assessed no fee on these captures.
+
+That makes `absent` true of our observation and **potentially false of
+production**, which is a different thing from every other `absent` in this
+phase. Do not let Phase 7 infer "PayPal does not return capture fees." The
+honest record is: absent in sandbox on card-funded captures, cause not
+established, must be re-verified against production or a fee-bearing sandbox
+transaction before the canonical model treats capture fees as unavailable. This
+is the one row where our evidence is weaker than the format suggests.
+
+### Finding — refunds use a different breakdown name, and link rather than reference
+
+From refund `3435955072478500X`:
+
+```json
+"seller_payable_breakdown": {
+  "gross_amount":          { "currency_code": "USD", "value": "30.00" },
+  "paypal_fee":            { "currency_code": "USD", "value": "0.00" },
+  "net_amount":            { "currency_code": "USD", "value": "30.00" },
+  "total_refunded_amount": { "currency_code": "USD", "value": "30.00" }
+}
+```
+
+Two structural facts that bear on Phase 3 and Phase 7:
+
+1. **A capture carries `seller_receivable_breakdown`; a refund carries
+   `seller_payable_breakdown`.** Different names for the analogous structure,
+   with different members — a refund has `total_refunded_amount` and no
+   `receivable_amount` or `exchange_rate`. Mapping code cannot share one path.
+2. **There is no `capture_id` field on a refund.** The link back to the original
+   capture exists only as a HATEOAS link:
+
+   ```
+   rel=self  /v2/payments/refunds/3435955072478500X
+   rel=up    /v2/payments/captures/8RW04003P5846784X
+   ```
+
+   `requirements.md` §3.1 asks for "linkage back to the original capture" on
+   refunds. The answer is: **it exists, but only by parsing a URL out of
+   `links[rel=up]`.** The refund's top-level keys are `amount`, `create_time`,
+   `id`, `links`, `note_to_payer`, `payer`, `seller_payable_breakdown`,
+   `status`, `update_time` — no capture reference among them.
+
+   For Phase 7 this means refund-to-capture linkage is derived from a link href,
+   and `total_refunded_amount` is what makes partial-refund tracking possible
+   (readme §13 Scenario 1 depends on exactly this). A derived linkage should be
+   recorded as such rather than presented as a provider-supplied foreign key.
+
+### Finding — Transaction Search is not real-time
+
+After creating two captures and a refund, `GET /v1/reporting/transactions` over
+a 28-day window still returned `total_items: 1` — only the account's opening
+balance credit (`T1900`), with `fee_amount: null`. The new transactions had not
+been indexed.
+
+This matters operationally, not just for field discovery. A reconciliation run
+driven off Transaction Search will not see recent activity, and the lag is
+unbounded as far as we can tell from one observation. [[roadmap]] Phase 9's
+event-driven ingestion and Phase 8's scheduled backfill should both treat
+Transaction Search as an eventually-consistent source and the v2 resource
+endpoints (`/v2/payments/captures/{id}`) as the authoritative one.
+
+It also means the fee question above cannot be answered from Transaction Search
+yet. Re-probe once the window has caught up; `fee_amount` there may carry what
+the capture omits.
+
+### RESOLVED — the payout denial, and a refuted hypothesis
+
+The new account's payout attempt (batch `PGHX46EKCCH3Q`) denied with a
+**populated** `errors` object:
+
+```json
+{"name": "RECEIVER_COUNTRY_NOT_ALLOWED",
+ "message": "As the recipient's country can't receive payments, this
+             transaction is not allowed.",
+ "information_link": "https://developer.paypal.com/docs/api/payments.payouts-batch/#errors"}
+```
+
+**The cause is receiver-side: the recipient's country cannot receive payouts.**
+The receiver, `sb-0ugzd53471943@personal.example.com`, was created under the
+previous sandbox setup.
+
+**An earlier hypothesis in this file was wrong.** On the previous account, every
+payout denied with `errors` empty, and that was recorded as probably a
+sender-side restriction: Payouts not enabled on the business account. The cause
+is receiver-side. What settled it was not better reasoning but a different
+*account* — the new merchant surfaces the error the old one withheld.
+
+Two durable lessons from the denial, both worth more than the fixture:
+
+- **`items[].errors` is populated when PayPal has a mapped reason, so Phase 7
+  must read it.** The field is not decorative and not always empty. A client
+  that ignores it discards the only machine-readable account of why a
+  disbursement failed.
+- **Two accounts, same request, different diagnostics.** The previous sandbox
+  account denied identical requests with `errors` empty; this one names
+  `RECEIVER_COUNTRY_NOT_ALLOWED`. Error verbosity is therefore
+  account-dependent. An integration cannot assume the diagnostics it sees in one
+  environment are what it will get in another, and a product that explains
+  failures to a finance team must degrade gracefully when the reason is absent.
+
+### What the product can and cannot say about a failed payout
+
+Bearing directly on what the Phase 12 agent may claim.
+
+**When `errors` is populated**, the product reports the provider's own reason and
+cites it. `RECEIVER_COUNTRY_NOT_ALLOWED` is provider evidence and may be
+presented as the cause.
+
+**When `errors` is empty** — which we observed on a different account for the
+same request — the product reports *that* the payout was denied, cites
+`batch_status` and `transaction_status`, and stops. It does not assemble a
+plausible cause from context. That is `insufficient_evidence`
+([[roadmap]] Phase 12), and it is the honest answer.
+
+The distinction matters because the failure is silent in the worst way: the
+status fields are always present and always look authoritative, so there is
+nothing to signal that the reason is missing except the absence of the `errors`
+object itself.
+
+Compounding this: payouts have **no declared contract either**, because the SDK
+has no payouts controller (see "Scope gap" above). So the `errors` field is a
+case where neither column of `paypal-fields.md` can be filled from a contract —
+only from observation, and the observation differs by account.
+
+Phase 7 should retain the raw payout payload regardless, so that a change in
+what PayPal populates is detected rather than assumed away.
+
+### Payout fees — they reconcile on success, and are unreliable on denial
+
+Three batches, all USD 65.00 over two items (40.00 and 25.00), same request
+shape:
+
+| Batch | State | `batch_header.fees` | Sum of `payout_item_fee` | Agree? |
+|---|---|---|---|---|
+| `LY9LEES5KP2WN` (previous account) | `DENIED` | 0.00 | 1.30 | no |
+| `PGHX46EKCCH3Q` (current account) | `DENIED` | 1.30 | 0.00 | no, inverted |
+| **`55LJJ7SBMXHY6`** (current account) | **`SUCCESS`** | **0.50** | **0.50** | **yes** |
+
+**On a batch that actually processes, the batch fee equals the sum of the item
+fees.** The two fields are two views of one quantity, and they agree. The
+disagreement seen earlier is an artefact of the `DENIED` state, where PayPal
+populates one field or the other inconsistently — on one account the items, on
+another the header.
+
+**A second and more serious point: the fee quoted on a denied batch is not the
+fee that would have been charged.** On the current account, the denied batch
+reported a 1.30 total; the successful batch, for identical amounts, charged
+**0.50**. So denied-batch fee figures are not predictive and must not be used as
+an estimate of the cost of a retry.
+
+Consequences for the deterministic engine (Phases 10 and 11):
+
+- **On a successful batch**, `batch_header.fees` and `sum(payout_item_fee)`
+  may be reconciled against each other, and a mismatch is a real exception.
+- **On a failed batch**, do not compare them and do not treat either as the
+  cost of the attempt. No fee was charged; the figures present are not a
+  settlement record. Record them as raw payload and exclude them from any fee
+  total.
+- **Never carry a denied batch's fee forward as the expected fee of a retry.**
+  Observed to be wrong by a factor of 2.6 on our own data.
+
+Note how this was found. Two denied batches on two accounts gave two mutually
+contradictory pictures, and a single account would have produced one of them
+looking entirely self-consistent. It took a *successful* batch to show that
+neither denied-state reading was meaningful. Group 3 should sample more than one
+record per type, and more than one terminal state per type, wherever it can.
+
+### Disputes — creatable in principle, blocked by card funding in practice
+
+Tested 2026-11-06 against the real captures, not placeholder ids.
+
+| Payload | Result |
+|---|---|
+| `buyer_transaction_id` = capture `8RW04003P5846784X` | 400 `TRANSACTION_NOT_ELIGIBLE` |
+| `seller_transaction_id` = same capture | 400 `INVALID_BUYER_TRANSACTION_ID` |
+| `buyer_transaction_id` = FX capture `3VG831163X0730421` | 400 `TRANSACTION_NOT_ELIGIBLE` |
+| both ids supplied | 400 `TRANSACTION_NOT_ELIGIBLE` |
+
+The endpoint requires `buyer_transaction_id`; supplying only
+`seller_transaction_id` is rejected for the missing field. Supplying a real
+capture id as `buyer_transaction_id` changes the error to
+`TRANSACTION_NOT_ELIGIBLE` — so **the id is recognised and the refusal is on
+eligibility**, not on form.
+
+PayPal does not state the eligibility criterion. What we can observe is that
+these captures were card-funded and carry **no `payer` at all**:
+
+```
+capture top-level keys: amount, create_time, final_capture, id, links, payee,
+  processor_response, seller_protection, seller_receivable_breakdown, status,
+  supplementary_data, update_time
+order payer: null
+order payment_source keys: ['card']
+```
+
+So there is no PayPal buyer account behind the transaction. A customer dispute
+is a buyer-initiated instrument, and with no buyer identity on the record the
+ineligibility is consistent — but the criterion is inferred from the absence of
+`payer`, not stated by PayPal, and should be read that way.
+
+**To unblock:** a wallet-funded capture, which requires a sandbox personal
+account to approve the order in a browser. The same account would also unblock
+the payout, whose recipient must sit in a permitted country.
+
+**Note for Group 3**, since it bears on more than the dispute row: a card-funded
+capture has no `payer`. If the canonical model expects payer identity on a
+payment ([[tech-stack]] §3), that expectation does not survive a card
+transaction, and the field's verdict depends on funding instrument rather than
+on record type. Worth a stated condition on the row.
+
+An earlier revision of this file claimed merchants cannot open a dispute through
+the API at all. That was wrong — the endpoint exists and accepts creation. The
+constraint is transaction eligibility, as recorded above.
+
+One Phase 7 caution observed while establishing that: a partially-formed dispute
+payload drew a `500 INTERNAL_SERVER_ERROR` rather than a validation message. An
+ingestion client therefore cannot treat `5xx` from this API as purely transient
+and safe to retry; a malformed request can produce one indefinitely.
 
 ### Trap — this app can read exchange rate QUOTES. They are not evidence.
 

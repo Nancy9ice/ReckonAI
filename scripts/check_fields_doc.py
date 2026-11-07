@@ -98,11 +98,37 @@ EMOJI_RANGES = (
     (0x2B00, 0x2BFF),
 )
 EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
-# Value-shaped, not name-shaped: a long opaque token, not the word "secret".
-CREDENTIAL = re.compile(
-    r"(Bearer\s+[A-Za-z0-9._~+/-]{20,})"
-    r"|((client_secret|access_token|client_id)\s*[:=]\s*[\"']?[A-Za-z0-9._~+/-]{20,})"
+
+# Value-shaped, not name-shaped: a long opaque token, never the bare word
+# "secret". Rewritten 2026-11-07 after testing showed the previous pattern
+# missed the likeliest leak of all - an uppercase environment assignment such
+# as PAYPAL_CLIENT_SECRET=<value> - because it was case-sensitive and allowed
+# no quote between the key and its separator. validation.md section 6 makes a
+# committed credential one of five ways this phase fails outright, so the
+# check has to fire on the shapes a credential actually arrives in.
+BEARER = re.compile(r"Bearer\s+[A-Za-z0-9._~+/-]{20,}")
+CREDENTIAL_ASSIGNMENT = re.compile(
+    r"(client[_-]?secret|client[_-]?id|access[_-]?token|refresh[_-]?token"
+    r"|api[_-]?key|bn[_-]?code)"
+    r"[\"']?\s*[:=]\s*[\"']?(?P<value>[A-Za-z0-9._~+/-]{20,})",
+    re.IGNORECASE,
 )
+# A template's placeholder is not a credential. Without this the .env.example
+# that exists to prevent leaks would itself fail the check.
+PLACEHOLDER = re.compile(
+    r"replace[-_]with|your[-_]|example|placeholder|dummy|redacted|x{4,}|\.\.\.",
+    re.IGNORECASE,
+)
+
+
+def credential_in(line: str) -> str | None:
+    """The kind of credential a line exposes, or None."""
+    if BEARER.search(line):
+        return "bearer token"
+    found = CREDENTIAL_ASSIGNMENT.search(line)
+    if found and not PLACEHOLDER.search(found.group("value")):
+        return "credential assignment"
+    return None
 
 CANONICAL_ROW = re.compile(
     r"^\| `(?P<field>[a-z_0-9]+)` \| (?P<path>.+?) \| (?P<declared>.+?) \| "
@@ -496,8 +522,9 @@ def check_conventions(doc: Doc, declared: Any, observed: Any) -> list[str]:
                 failures.append(
                     f"C9: pictograph U+{ord(pictograph):04X} at {relative}:{number}"
                 )
-            if CREDENTIAL.search(line):
-                failures.append(f"C9: credential-shaped string at {relative}:{number}")
+            kind = credential_in(line)
+            if kind:
+                failures.append(f"C9: {kind} at {relative}:{number}")
 
     for artifact in sorted(ARTIFACTS.rglob("*.json")):
         relative = display(artifact)

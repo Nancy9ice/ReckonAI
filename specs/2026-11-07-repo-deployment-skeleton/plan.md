@@ -180,8 +180,15 @@ Steps 1 and 2 moved to Group 2 — see the note there.
    for, and a status-code assertion on a route that genuinely touches Postgres
    is a real one.
 4. `tests/test_migrations.py` — run `upgrade head`, assert `alembic_version`
-   holds the expected revision, run `downgrade base`, assert the table set is
-   back to empty. This is the automated form of Group 3 step 5.
+   holds the expected revision, run `downgrade base`, then assert
+   `alembic_version` holds **zero rows**. This is the automated form of Group 3
+   step 5.
+
+   **Corrected 2026-11-07, from running it.** This step previously said to
+   assert the table set is back to empty. It never will be: Alembic keeps the
+   `alembic_version` table across `downgrade base` and only deletes the row.
+   Asserting an empty schema would fail against correct behaviour, which is the
+   worst kind of test to write into a migration suite.
 5. `tests/test_conventions.py` — the no-emoji gate over tracked files
    (`requirements.md` §3.4). Match Unicode pictographic ranges, not
    non-ASCII: typographic punctuation, box-drawing characters and currency

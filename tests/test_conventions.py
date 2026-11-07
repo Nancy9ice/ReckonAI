@@ -122,16 +122,22 @@ def test_permitted_characters_are_not_flagged(char: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "char",
+    "codepoint",
     [
-        "\U0001f600",  # grinning face
-        "\U0001f680",  # rocket
-        "✅",  # white heavy check mark
-        "❌",  # cross mark
-        "⚠",  # warning sign
-        "⭐",  # star
+        0x1F600,  # grinning face
+        0x1F680,  # rocket
+        0x2705,  # white heavy check mark
+        0x274C,  # cross mark
+        0x26A0,  # warning sign
+        0x2B50,  # star
     ],
 )
-def test_pictographs_are_flagged(char: str) -> None:
-    """Including the cross mark section 13 names as the thing a log must not use."""
-    assert is_pictographic(char)
+def test_pictographs_are_flagged(codepoint: int) -> None:
+    """Including the cross mark section 13 names as the thing a log must not use.
+
+    These are built with `chr()` rather than written as literals, because this
+    file is itself a tracked file and `test_no_pictographs_in_tracked_files`
+    above would flag its own fixtures. That is the gate working, not a
+    limitation of it - caught on 2026-11-07 when exactly that happened.
+    """
+    assert is_pictographic(chr(codepoint))

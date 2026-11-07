@@ -271,18 +271,63 @@ lesson applies: success at one stage says nothing about the next. Whether the
 platform fee is actually taken, what the held-funds records look like, and
 whether a release succeeds are all still unobserved, and are Phase 0b's work.
 
-### 8.4 What remains before Phase 0b can run
+### 8.4 Seller onboarded, and question 2 is answered — 2026-11-07
 
-1. **A seller must complete onboarding.** The referral call returns an
-   `action_url` into PayPal's sandbox business signup, which a sandbox account
-   follows in a browser. Onboard with the `PARTNER_FEE` and
-   `DELAY_FUNDS_DISBURSEMENT` features.
-2. **Record the onboarded seller's merchant id** in `PAYPAL_SELLER_MERCHANT_ID`,
-   and its email in `PAYPAL_SELLER_EMAIL`. These are the `payee` on a purchase
-   unit and the `payer_id` claim in `PayPal-Auth-Assertion`.
-3. **Mint a fresh token afterwards.** A scope or capability granted after a
-   token is issued does not appear in that token, which Phase 0 established
-   while enabling Transaction Search.
+The existing merchant account `C24NAWELTTHXJ` was onboarded as the **seller**
+under platform `G2K2FVVLETKYG`. Using it rather than creating a new business
+account keeps Phase 0's fixtures in the same account they were seeded in.
+
+Two notes on getting there, both costly to rediscover:
+
+- **`products` must be `PPCP`, and products cannot be combined.** A referral
+  requesting `EXPRESS_CHECKOUT` produced an `action_url` that dead-ends at
+  `Cannot GET /unifiedonboarding/entry`; `PPCP` builds the URL correctly.
+  Requesting both returns `400 INVALID_PARAMETER_SYNTAX`, "Requested multiple
+  products are not supported together."
+- **The `action_url` is single use.**
+
+**All six requested features were granted.** They are reported as scope URIs
+under `oauth_integrations[].oauth_third_party[].scopes`, not as the feature
+names used in the request, so reading the `capabilities` array alone suggests
+wrongly that nothing was granted:
+
+| Requested feature | Granted scope |
+|---|---|
+| `PARTNER_FEE` | `payments/partnerfee` |
+| `DELAY_FUNDS_DISBURSEMENT` | `payments/delay-funds-disbursement` |
+| `ADVANCED_TRANSACTIONS_SEARCH` | `reporting/search/read` |
+| `ACCESS_MERCHANT_INFORMATION` | `customer/merchant-integrations/read` |
+| `REFUND` | `payments/refund` |
+| `PAYMENT` | `payments/payment/authcapture` |
+
+**Question 2 is answered, affirmatively.** The decisive cross-account test, with
+the control alongside it:
+
+| Platform reads the seller's capture | Result |
+|---|---|
+| without `PayPal-Auth-Assertion` | `401 NOT_AUTHORIZED` |
+| with the assertion for that seller | **`200`**, full capture returned |
+
+So a platform can read a seller's records, and **entitlement validation is
+implementable as specified**. This was the largest risk in the direction change
+and the one that would have forced the MVP to narrow.
+
+The integration also reports `payments_receivable: true`, `primary_currency:
+USD` and `country: US`. The `country.x=NG` seen in the onboarding URL is a
+locale default, not the merchant's country.
+
+### 8.5 What remains
+
+1. **Record the seller in the environment:** `PAYPAL_SELLER_MERCHANT_ID` is
+   `C24NAWELTTHXJ`, with its primary email in `PAYPAL_SELLER_EMAIL`. These are
+   the `payee` on a purchase unit and the `payer_id` claim in the assertion.
+2. **Teach `probe_paypal.py` which credentials to use.** It reads
+   `PAYPAL_CLIENT_ID` only, which is now the platform. Phase 0's fixtures belong
+   to the seller and answer `401` to the platform unless an assertion is sent,
+   so `validation.md` C2 cannot run until the probe can select a credential
+   profile and attach an assertion. This is Phase 0b's first task.
+3. **Questions 1, 3, 4, 5, 6, 7 and 8 remain open** and are what Phase 0b
+   observes, now that the path to them exists.
 
 Independent of all of the above, a **wallet-funded capture** still unblocks the
 twelve `unanswered` rows in `specs/paypal-fields.md` and dispute creation. It

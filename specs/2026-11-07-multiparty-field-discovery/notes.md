@@ -281,10 +281,36 @@ keyed on dispute closure would miss money that has already moved.
 
 | Question | Why |
 |---|---|
-| Whether the consolidated daily fee settlement is visible via any API | Only a monthly SFTP partner report is documented |
+| Whether the platform fee reaches the platform via any readable API | Not blocked - just not refreshed yet. See below |
 | What the `403` list endpoint would give | Not needed: reading an item by id works, and the capture links to it |
 
 No canonical field is left `unanswered`.
+
+### 5.1 The platform fee settlement needs one more probe, not more access
+
+Probed against the **platform's own** account, reading as itself:
+
+| | |
+|---|---|
+| balances | 5000.00 USD, the opening balance, unchanged |
+| transactions | 1 item, `T1900` "Initial balance" |
+| `last_refreshed` | `2026-11-07T07:59:59Z` |
+
+The captures were created at `08:01:29Z` — ninety seconds **after** that
+snapshot. So this is the roughly-daily reporting lag of §1, caught at an
+awkward moment, not a permissions wall: both endpoints answered `200`.
+
+**One re-probe after the next refresh settles it**, and it is worth doing
+before Phase 10 models commission revenue.
+
+**Read the result carefully when it comes.** PayPal documents that partner fees
+settle **to a bank account, not a PayPal balance**, and that an account
+receiving them **cannot hold a PayPal balance** — yet our platform account
+holds 5000.00 and was accepted as the fee payee. So either the sandbox does not
+enforce that constraint or fees behave differently here. If the fees appear in
+the platform's PayPal balance tomorrow, that may be a sandbox artefact rather
+than how production settles, and designing the aggregate reconciliation around
+it would repeat the mistake Phase 0 made with first-party captures.
 
 ## 6. Status
 

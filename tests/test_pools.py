@@ -25,6 +25,7 @@ from reckonai.db import (
     create_app_engine,
     create_short_lived_engine,
 )
+from reckonai.worker import WORKER_MAX_OVERFLOW, WORKER_POOL_SIZE
 
 _DUMMY_URL = "postgresql+psycopg://user:pass@127.0.0.1:5432/none"
 
@@ -71,11 +72,33 @@ def test_a_short_lived_engine_holds_no_pool() -> None:
         engine.dispose()
 
 
+def test_the_worker_engine_claims_the_declared_allocation() -> None:
+    engine = create_app_engine(
+        _DUMMY_URL, pool_size=WORKER_POOL_SIZE, max_overflow=WORKER_MAX_OVERFLOW
+    )
+    try:
+        assert engine.pool.size() == WORKER_POOL_SIZE
+        assert engine.pool._max_overflow == WORKER_MAX_OVERFLOW
+    finally:
+        engine.dispose()
+
+
 def test_the_declared_budget_fits_the_plan() -> None:
     assert USABLE_CONNECTIONS == POSTGRES_CONNECTION_CAP - POSTGRES_RESERVED_CONNECTIONS
 
-    # The worker's allocation joins this sum in Group 5, which is where
-    # worker.py and its constants arrive.
     web_peak = WEB_POOL_SIZE + WEB_MAX_OVERFLOW
+    worker_peak = WORKER_POOL_SIZE + WORKER_MAX_OVERFLOW
 
-    assert web_peak < USABLE_CONNECTIONS
+    # One cron invocation at a time holds a single unpooled connection; two
+    # overlapping is the realistic worst case. Phase 8 declares the cron job.
+    cron_peak = 2
+
+    total = web_peak + worker_peak + cron_peak
+
+    assert total <= USABLE_CONNECTIONS, (
+        f"declared peak {total} exceeds the usable budget {USABLE_CONNECTIONS}"
+    )
+
+    # Headroom is deliberate, not slack: a psql session, a pre-deploy migration
+    # and Phase 9's concurrent ingestion all draw on the same cap.
+    assert total < USABLE_CONNECTIONS // 2

@@ -44,6 +44,12 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     environment: Literal["local", "ci", "production"] = "local"
 
+    # How long the worker waits between ticks. In Phase 1 a tick only logs; in
+    # Phase 8 it becomes a claim against the `jobs` table, where this doubles as
+    # the queue's polling latency (specs/tech-stack.md section 4 accepts a
+    # second or two).
+    worker_tick_seconds: float = 30.0
+
     @field_validator("database_url")
     @classmethod
     def _normalise_driver(cls, value: SecretStr) -> SecretStr:

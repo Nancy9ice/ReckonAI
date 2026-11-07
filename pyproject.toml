@@ -35,6 +35,10 @@ dev = [
     # httpx: starlette deprecated the latter and warns on every test run.
     "httpx2>=2.16",
     "ruff>=0.8",
+    # Declared explicitly rather than relied on transitively through
+    # uvicorn[standard]: tests/test_render_blueprint.py parses render.yaml, and
+    # a test's dependency should not vanish because a runtime extra changed.
+    "pyyaml>=6",
 ]
 
 # ---------------------------------------------------------------------------

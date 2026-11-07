@@ -22,6 +22,19 @@ def client(database_url: str) -> TestClient:
         yield test_client
 
 
+def test_the_root_route_is_not_a_404(client: TestClient) -> None:
+    """The deployed URL must not read as a broken service in a browser."""
+    response = client.get("/")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["service"] == "reckonai"
+    assert body["version"] == __version__
+    # The paths it advertises have to actually exist.
+    for path in (body["docs"], body["health"], body["readiness"]):
+        assert client.get(path).status_code == 200
+
+
 def test_health_reports_ok(client: TestClient) -> None:
     response = client.get("/health")
 

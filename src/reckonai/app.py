@@ -68,6 +68,27 @@ app = FastAPI(
 )
 
 
+@app.get("/")
+def index() -> dict[str, str]:
+    """A service index, so the deployed URL does not answer 404 in a browser.
+
+    Added after the first successful deploy, where every route worked and `/`
+    returned `{"detail": "Not Found"}` - which reads as a broken deployment to
+    anyone opening the URL, including a judge.
+
+    It carries no financial data and names no record. Phase 14 adds the React
+    dashboard as a separate Render static site, so this stays the API's own
+    index rather than something the UI will later displace.
+    """
+    return {
+        "service": "reckonai",
+        "version": __version__,
+        "docs": "/docs",
+        "health": "/health",
+        "readiness": "/health/ready",
+    }
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     """Liveness. Touches no database, on purpose.

@@ -209,10 +209,64 @@ on `phase-1/repo-deployment-skeleton` is green in 33 seconds.
 | C13 no private key in a tracked file | PASS |
 | C14 money path absent, not untested | PASS |
 
-**What remains is `validation.md` §4**, which cannot run before the merge by
-`requirements.md` D4: applying the Blueprint, the deployed `/health` and
-`/health/ready` responses, the baseline migration against Render's database, and
-the worker's log stream. Phase 1 is **not complete** until those pass.
+## Post-merge gate · §4 · 2026-11-07
+
+Deployed URL: **https://reckonai-api.onrender.com**
+
+| Check | Result |
+|---|---|
+| M1 credits, workers, no expiry | PASS, recorded in Group 0 |
+| M2 deployed `/health` returns 200 | **PASS** - `{"status":"ok","version":"0.1.0"}` |
+| M2 deployed `/health/ready` returns 200 | **PASS** - `{"status":"ready","version":"0.1.0"}`, which is the deployed proof that Postgres is connected |
+| M3 baseline migration applied on Render | **PASS** - the deploy only promotes if `preDeployCommand` succeeds, and it did |
+| M4 worker up on Render | PASS - all three services reported successful |
+| M5 Cron Jobs available | PASS, answered in Group 0 |
+
+`x-render-origin-server: uvicorn` on the response confirms our process is
+serving rather than a Render placeholder.
+
+### It took two deploys, and the first failure was the design working
+
+The first apply failed in `preDeployCommand` with
+
+```
+psycopg.OperationalError: connection failed: connection to server at
+"10.232.64.1", port 5432 failed: server closed the connection unexpectedly
+```
+
+The database was still provisioning when the web service's pre-deploy ran - a
+race the first Blueprint apply can lose, since all three resources are created
+together. A redeploy fixed it.
+
+**Three things that failure confirmed**, which is why it is recorded rather than
+forgotten:
+
+1. **D7 behaved as designed.** The failure blocked promotion of the deploy
+   instead of leaving a live service over a half-migrated database. Render
+   answered `x-render-routing: no-deploy`, which is the correct outcome.
+2. **The driver normalisation works in production.** The traceback runs through
+   `psycopg/connection.py` - psycopg 3, not psycopg2 - so the `postgres://`
+   rewrite in `config.py` did its job. Without it the failure would have come
+   earlier and been harder to read.
+3. **`fromDatabase` wiring works.** The URL resolved to a private address, so
+   the service reached the database over Render's internal network and no
+   credential was ever written down.
+
+### One defect found in the deploy logs
+
+The pre-deploy log showed `Downloaded ruff` and `Installed 10 packages` while
+running `alembic upgrade head`. `uv run` syncs the environment before executing
+unless told not to, so every runtime command was undoing the build's `--no-dev`
+and doing network installs before the port was bound. Fixed by `--no-sync` on
+all three commands, with a test asserting it - the default is the wrong way
+round for a deployed service and nothing else would have noticed.
+
+### One gap the deploy exposed
+
+Every declared route worked and `/` returned `{"detail": "Not Found"}`, because
+no root route existed. That reads as a broken deployment to anyone opening the
+URL. A service index was added at `/`, carrying no financial data and naming no
+record.
 
 ### Findings from Groups 1-7
 

@@ -35,7 +35,12 @@ searching, which is the failure mode it exists to prevent.
 
 Then establish two columns and compare them:
 
-- **Declared** — what the PayPal API contract says exists, via the plugin.
+- **Declared** — what the PayPal API contract says exists. Corrected
+  2026-11-05: this comes from the APIMatic-generated PayPal Server SDK at a
+  pinned tag, which the plugin directs you to; the plugin itself carries no
+  field names. Disputes and payouts are not in the SDK and fall back to PayPal's
+  REST reference. See `specs/2026-11-05-paypal-field-discovery/requirements.md`
+  §1 and §3.1.
 - **Observed** — what the sandbox and the PayPal MCP toolkit actually return for
   our transactions.
 

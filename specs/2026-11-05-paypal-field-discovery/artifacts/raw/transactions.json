@@ -1,0 +1,1093 @@
+{
+  "raw": {
+    "record_type": "transactions",
+    "source": "scripts/probe_paypal.py",
+    "redacted_by": "scripts/derive_observed.py",
+    "redacted": true,
+    "api_base": "https://api-m.sandbox.paypal.com",
+    "sample_labels": [
+      "transactions:list@2026-11-06",
+      "transactions:list@2026-11-07"
+    ],
+    "redaction_note": "Identifiers and buyer PII replaced with <redacted:id> and <redacted:pii>. Amounts, currencies, rates, fees, timestamps, statuses and error codes are kept: they are the evidence (plan.md group 3 step 3). Unredacted fixture ids are in fixtures.md."
+  },
+  "results": [
+    {
+      "record_type": "transactions",
+      "note": "transaction search, fee breakdown",
+      "request_path": "/v1/reporting/transactions",
+      "http_status": 200,
+      "fetched_at": "2026-11-06T03:34:35.742007+00:00",
+      "status": "ok",
+      "body": {
+        "transaction_details": [
+          {
+            "transaction_info": {
+              "transaction_id": "<redacted:id>",
+              "transaction_event_code": "T1900",
+              "transaction_initiation_date": "2026-10-31T22:18:56Z",
+              "transaction_updated_date": "2026-10-31T22:18:56Z",
+              "transaction_amount": {
+                "currency_code": "USD",
+                "value": "5000.00"
+              },
+              "transaction_status": "S",
+              "transaction_subject": "Initial balance",
+              "ending_balance": {
+                "currency_code": "USD",
+                "value": "5000.00"
+              },
+              "available_balance": {
+                "currency_code": "USD",
+                "value": "5000.00"
+              },
+              "protection_eligibility": "02",
+              "instrument_type": "PayPal",
+              "instrument_sub_type": "PayPal Wallet"
+            },
+            "payer_info": {
+              "address_status": "N",
+              "payer_name": {}
+            },
+            "shipping_info": {},
+            "cart_info": {},
+            "store_info": {},
+            "auction_info": {},
+            "incentive_info": {}
+          }
+        ],
+        "account_number": "<redacted:id>",
+        "start_date": "2026-10-09T03:34:35Z",
+        "end_date": "2026-11-06T01:29:59Z",
+        "last_refreshed_datetime": "2026-11-06T01:29:59Z",
+        "page": 1,
+        "total_items": 1,
+        "total_pages": 1,
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v1/reporting/transactions?fields=all&end_date=2026-11-06T03%3A34%3A35-0000&start_date=2026-10-09T03%3A34%3A35-0000&page_size=100&page=1",
+            "rel": "self",
+            "method": "GET",
+            "encType": "application/json"
+          }
+        ]
+      },
+      "money_values": [
+        {
+          "path": "$transactions.transaction_details[0].transaction_info.transaction_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "5000.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[0].transaction_info.ending_balance",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "5000.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[0].transaction_info.available_balance",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "5000.00",
+          "raw_json_type": "str"
+        }
+      ]
+    },
+    {
+      "record_type": "transactions",
+      "note": "transaction search, fee breakdown",
+      "request_path": "/v1/reporting/transactions",
+      "http_status": 200,
+      "fetched_at": "2026-11-07T02:53:10.054754+00:00",
+      "status": "ok",
+      "body": {
+        "transaction_details": [
+          {
+            "transaction_info": {
+              "transaction_id": "<redacted:id>",
+              "transaction_event_code": "T1900",
+              "transaction_initiation_date": "2026-10-31T22:18:56Z",
+              "transaction_updated_date": "2026-10-31T22:18:56Z",
+              "transaction_amount": {
+                "currency_code": "USD",
+                "value": "5000.00"
+              },
+              "transaction_status": "S",
+              "transaction_subject": "Initial balance",
+              "ending_balance": {
+                "currency_code": "USD",
+                "value": "5000.00"
+              },
+              "available_balance": {
+                "currency_code": "USD",
+                "value": "5000.00"
+              },
+              "protection_eligibility": "02",
+              "instrument_type": "PayPal",
+              "instrument_sub_type": "PayPal Wallet"
+            },
+            "payer_info": {
+              "address_status": "N",
+              "payer_name": {}
+            },
+            "shipping_info": {},
+            "cart_info": {},
+            "store_info": {},
+            "auction_info": {},
+            "incentive_info": {}
+          },
+          {
+            "transaction_info": {
+              "paypal_account_id": "<redacted:id>",
+              "transaction_id": "<redacted:id>",
+              "paypal_reference_id": "<redacted:id>",
+              "paypal_reference_id_type": "TXN",
+              "transaction_event_code": "T0005",
+              "transaction_initiation_date": "2026-11-06T03:04:12Z",
+              "transaction_updated_date": "2026-11-06T03:04:12Z",
+              "transaction_amount": {
+                "currency_code": "USD",
+                "value": "120.00"
+              },
+              "transaction_status": "S",
+              "transaction_subject": "ReckonAI phase-0 fixture (same-currency)",
+              "ending_balance": {
+                "currency_code": "USD",
+                "value": "5120.00"
+              },
+              "available_balance": {
+                "currency_code": "USD",
+                "value": "5120.00"
+              },
+              "protection_eligibility": "02",
+              "instrument_type": "Debit Card",
+              "instrument_sub_type": "Visa"
+            },
+            "payer_info": {
+              "account_id": "<redacted:id>",
+              "address_status": "N",
+              "payer_status": "N",
+              "payer_name": {
+                "given_name": "<redacted:pii>",
+                "surname": "<redacted:pii>",
+                "alternate_full_name": "Test Buyer"
+              },
+              "country_code": "US"
+            },
+            "shipping_info": {
+              "name": "Test, Buyer"
+            },
+            "cart_info": {
+              "item_details": [
+                {
+                  "item_name": "ReckonAI phase-0 fixture (same-currency)",
+                  "item_description": "ReckonAI phase-0 fixture (same-currency)",
+                  "item_quantity": "1",
+                  "item_unit_price": {
+                    "currency_code": "USD",
+                    "value": "120.00"
+                  },
+                  "item_amount": {
+                    "currency_code": "USD",
+                    "value": "120.00"
+                  },
+                  "total_item_amount": {
+                    "currency_code": "USD",
+                    "value": "120.00"
+                  }
+                }
+              ]
+            },
+            "store_info": {},
+            "auction_info": {},
+            "incentive_info": {}
+          },
+          {
+            "transaction_info": {
+              "paypal_account_id": "<redacted:id>",
+              "transaction_id": "<redacted:id>",
+              "paypal_reference_id": "<redacted:id>",
+              "paypal_reference_id_type": "TXN",
+              "transaction_event_code": "T0005",
+              "transaction_initiation_date": "2026-11-06T03:04:17Z",
+              "transaction_updated_date": "2026-11-06T03:04:17Z",
+              "transaction_amount": {
+                "currency_code": "EUR",
+                "value": "95.50"
+              },
+              "transaction_status": "S",
+              "transaction_subject": "ReckonAI phase-0 fixture (cross-currency)",
+              "ending_balance": {
+                "currency_code": "EUR",
+                "value": "95.50"
+              },
+              "available_balance": {
+                "currency_code": "EUR",
+                "value": "95.50"
+              },
+              "protection_eligibility": "02",
+              "instrument_type": "Debit Card",
+              "instrument_sub_type": "Visa"
+            },
+            "payer_info": {
+              "account_id": "<redacted:id>",
+              "address_status": "N",
+              "payer_status": "N",
+              "payer_name": {
+                "given_name": "<redacted:pii>",
+                "surname": "<redacted:pii>",
+                "alternate_full_name": "Test Buyer"
+              },
+              "country_code": "US"
+            },
+            "shipping_info": {
+              "name": "Test, Buyer"
+            },
+            "cart_info": {
+              "item_details": [
+                {
+                  "item_name": "ReckonAI phase-0 fixture (cross-currency)",
+                  "item_description": "ReckonAI phase-0 fixture (cross-currency)",
+                  "item_quantity": "1",
+                  "item_unit_price": {
+                    "currency_code": "EUR",
+                    "value": "95.50"
+                  },
+                  "item_amount": {
+                    "currency_code": "EUR",
+                    "value": "95.50"
+                  },
+                  "total_item_amount": {
+                    "currency_code": "EUR",
+                    "value": "95.50"
+                  }
+                }
+              ]
+            },
+            "store_info": {},
+            "auction_info": {},
+            "incentive_info": {}
+          },
+          {
+            "transaction_info": {
+              "transaction_id": "<redacted:id>",
+              "paypal_reference_id": "<redacted:id>",
+              "paypal_reference_id_type": "TXN",
+              "transaction_event_code": "T0200",
+              "transaction_initiation_date": "2026-11-06T03:04:17Z",
+              "transaction_updated_date": "2026-11-06T03:04:17Z",
+              "transaction_amount": {
+                "currency_code": "EUR",
+                "value": "-95.50"
+              },
+              "transaction_status": "S",
+              "ending_balance": {
+                "currency_code": "EUR",
+                "value": "0.00"
+              },
+              "available_balance": {
+                "currency_code": "EUR",
+                "value": "0.00"
+              },
+              "protection_eligibility": "02",
+              "instrument_type": "PayPal",
+              "instrument_sub_type": "PayPal Wallet"
+            },
+            "payer_info": {
+              "phone_number": {
+                "country_code": "1",
+                "national_number": "<redacted:pii>"
+              },
+              "address_status": "N",
+              "payer_name": {}
+            },
+            "shipping_info": {},
+            "cart_info": {
+              "item_details": [
+                {
+                  "item_name": "ReckonAI phase-0 fixture (cross-currency)",
+                  "item_description": "ReckonAI phase-0 fixture (cross-currency)",
+                  "item_quantity": "1"
+                }
+              ]
+            },
+            "store_info": {},
+            "auction_info": {},
+            "incentive_info": {}
+          },
+          {
+            "transaction_info": {
+              "transaction_id": "<redacted:id>",
+              "paypal_reference_id": "<redacted:id>",
+              "paypal_reference_id_type": "TXN",
+              "transaction_event_code": "T0200",
+              "transaction_initiation_date": "2026-11-06T03:04:17Z",
+              "transaction_updated_date": "2026-11-06T03:04:17Z",
+              "transaction_amount": {
+                "currency_code": "USD",
+                "value": "104.05"
+              },
+              "transaction_status": "S",
+              "ending_balance": {
+                "currency_code": "USD",
+                "value": "5224.05"
+              },
+              "available_balance": {
+                "currency_code": "USD",
+                "value": "5224.05"
+              },
+              "protection_eligibility": "02",
+              "instrument_type": "PayPal",
+              "instrument_sub_type": "PayPal Wallet"
+            },
+            "payer_info": {
+              "address_status": "N",
+              "payer_name": {}
+            },
+            "shipping_info": {},
+            "cart_info": {
+              "item_details": [
+                {
+                  "item_name": "ReckonAI phase-0 fixture (cross-currency)",
+                  "item_description": "ReckonAI phase-0 fixture (cross-currency)",
+                  "item_quantity": "1"
+                }
+              ]
+            },
+            "store_info": {},
+            "auction_info": {},
+            "incentive_info": {}
+          },
+          {
+            "transaction_info": {
+              "paypal_account_id": "<redacted:id>",
+              "transaction_id": "<redacted:id>",
+              "paypal_reference_id": "<redacted:id>",
+              "paypal_reference_id_type": "TXN",
+              "transaction_event_code": "T1107",
+              "transaction_initiation_date": "2026-11-06T03:04:20Z",
+              "transaction_updated_date": "2026-11-06T03:04:20Z",
+              "transaction_amount": {
+                "currency_code": "USD",
+                "value": "-30.00"
+              },
+              "transaction_status": "S",
+              "transaction_subject": "ReckonAI phase-0 partial refund fixture",
+              "transaction_note": "ReckonAI phase-0 partial refund fixture",
+              "ending_balance": {
+                "currency_code": "USD",
+                "value": "5194.05"
+              },
+              "available_balance": {
+                "currency_code": "USD",
+                "value": "5194.05"
+              },
+              "protection_eligibility": "02",
+              "instrument_type": "PayPal",
+              "instrument_sub_type": "PayPal Wallet"
+            },
+            "payer_info": {
+              "account_id": "<redacted:id>",
+              "email_address": "<redacted:pii>",
+              "phone_number": {
+                "country_code": "1",
+                "national_number": "<redacted:pii>"
+              },
+              "address_status": "N",
+              "payer_status": "N",
+              "payer_name": {
+                "given_name": "<redacted:pii>",
+                "surname": "<redacted:pii>",
+                "alternate_full_name": "Test Buyer"
+              },
+              "country_code": "US"
+            },
+            "shipping_info": {
+              "name": "Test, Buyer"
+            },
+            "cart_info": {
+              "item_details": [
+                {
+                  "item_name": "ReckonAI phase-0 fixture (same-currency)",
+                  "item_description": "ReckonAI phase-0 fixture (same-currency)",
+                  "item_quantity": "1"
+                }
+              ]
+            },
+            "store_info": {},
+            "auction_info": {},
+            "incentive_info": {}
+          },
+          {
+            "transaction_info": {
+              "transaction_id": "<redacted:id>",
+              "transaction_event_code": "T1503",
+              "transaction_initiation_date": "2026-11-06T03:04:38Z",
+              "transaction_updated_date": "2026-11-06T03:04:38Z",
+              "transaction_amount": {
+                "currency_code": "USD",
+                "value": "-66.30"
+              },
+              "transaction_status": "S",
+              "ending_balance": {
+                "currency_code": "USD",
+                "value": "5127.75"
+              },
+              "available_balance": {
+                "currency_code": "USD",
+                "value": "5127.75"
+              },
+              "protection_eligibility": "02",
+              "instrument_type": "PayPal",
+              "instrument_sub_type": "PayPal Wallet"
+            },
+            "payer_info": {
+              "address_status": "N",
+              "payer_name": {}
+            },
+            "shipping_info": {},
+            "cart_info": {},
+            "store_info": {},
+            "auction_info": {},
+            "incentive_info": {}
+          },
+          {
+            "transaction_info": {
+              "transaction_id": "<redacted:id>",
+              "paypal_reference_id": "<redacted:id>",
+              "paypal_reference_id_type": "TXN",
+              "transaction_event_code": "T1105",
+              "transaction_initiation_date": "2026-11-06T03:04:54Z",
+              "transaction_updated_date": "2026-11-06T03:04:54Z",
+              "transaction_amount": {
+                "currency_code": "USD",
+                "value": "66.30"
+              },
+              "transaction_status": "S",
+              "ending_balance": {
+                "currency_code": "USD",
+                "value": "5194.05"
+              },
+              "available_balance": {
+                "currency_code": "USD",
+                "value": "5194.05"
+              },
+              "protection_eligibility": "02",
+              "instrument_type": "PayPal",
+              "instrument_sub_type": "PayPal Wallet"
+            },
+            "payer_info": {
+              "address_status": "N",
+              "payer_name": {}
+            },
+            "shipping_info": {},
+            "cart_info": {},
+            "store_info": {},
+            "auction_info": {},
+            "incentive_info": {}
+          },
+          {
+            "transaction_info": {
+              "transaction_id": "<redacted:id>",
+              "transaction_event_code": "T1503",
+              "transaction_initiation_date": "2026-11-06T03:27:35Z",
+              "transaction_updated_date": "2026-11-06T03:27:35Z",
+              "transaction_amount": {
+                "currency_code": "USD",
+                "value": "-65.50"
+              },
+              "transaction_status": "S",
+              "ending_balance": {
+                "currency_code": "USD",
+                "value": "5128.55"
+              },
+              "available_balance": {
+                "currency_code": "USD",
+                "value": "5128.55"
+              },
+              "protection_eligibility": "02",
+              "instrument_type": "PayPal",
+              "instrument_sub_type": "PayPal Wallet"
+            },
+            "payer_info": {
+              "address_status": "N",
+              "payer_name": {}
+            },
+            "shipping_info": {},
+            "cart_info": {},
+            "store_info": {},
+            "auction_info": {},
+            "incentive_info": {}
+          },
+          {
+            "transaction_info": {
+              "paypal_account_id": "<redacted:id>",
+              "transaction_id": "<redacted:id>",
+              "paypal_reference_id": "<redacted:id>",
+              "paypal_reference_id_type": "TXN",
+              "transaction_event_code": "T0001",
+              "transaction_initiation_date": "2026-11-06T03:27:44Z",
+              "transaction_updated_date": "2026-11-06T03:27:44Z",
+              "transaction_amount": {
+                "currency_code": "USD",
+                "value": "-40.00"
+              },
+              "fee_amount": {
+                "currency_code": "USD",
+                "value": "-0.25"
+              },
+              "transaction_status": "S",
+              "transaction_subject": "ReckonAI phase-0 fixture payout",
+              "transaction_note": "seller settlement 1",
+              "ending_balance": {
+                "currency_code": "USD",
+                "value": "5088.30"
+              },
+              "available_balance": {
+                "currency_code": "USD",
+                "value": "5088.30"
+              },
+              "custom_field": "p2-1",
+              "protection_eligibility": "02",
+              "instrument_type": "PayPal",
+              "instrument_sub_type": "PayPal Wallet"
+            },
+            "payer_info": {
+              "account_id": "<redacted:id>",
+              "email_address": "<redacted:pii>",
+              "phone_number": {
+                "country_code": "1",
+                "national_number": "<redacted:pii>"
+              },
+              "address_status": "N",
+              "payer_status": "Y",
+              "payer_name": {
+                "given_name": "<redacted:pii>",
+                "surname": "<redacted:pii>",
+                "alternate_full_name": "Nancy Amandi"
+              },
+              "country_code": "US",
+              "address": {
+                "line1": "2211 N First St",
+                "city": "San Jose",
+                "state": "CA",
+                "country_code": "US",
+                "postal_code": "<redacted:pii>"
+              }
+            },
+            "shipping_info": {
+              "name": "Chinwe, Amandi"
+            },
+            "cart_info": {},
+            "store_info": {},
+            "auction_info": {},
+            "incentive_info": {}
+          },
+          {
+            "transaction_info": {
+              "transaction_id": "<redacted:id>",
+              "paypal_reference_id": "<redacted:id>",
+              "paypal_reference_id_type": "TXN",
+              "transaction_event_code": "T1105",
+              "transaction_initiation_date": "2026-11-06T03:27:44Z",
+              "transaction_updated_date": "2026-11-06T03:27:44Z",
+              "transaction_amount": {
+                "currency_code": "USD",
+                "value": "40.25"
+              },
+              "transaction_status": "S",
+              "transaction_subject": "ReckonAI phase-0 fixture payout",
+              "transaction_note": "seller settlement 1",
+              "ending_balance": {
+                "currency_code": "USD",
+                "value": "5128.55"
+              },
+              "available_balance": {
+                "currency_code": "USD",
+                "value": "5128.55"
+              },
+              "custom_field": "p2-1",
+              "protection_eligibility": "02",
+              "instrument_type": "PayPal",
+              "instrument_sub_type": "PayPal Wallet"
+            },
+            "payer_info": {
+              "address_status": "N",
+              "payer_name": {},
+              "address": {
+                "line1": "2211 N First St",
+                "city": "San Jose",
+                "state": "CA",
+                "country_code": "US",
+                "postal_code": "<redacted:pii>"
+              }
+            },
+            "shipping_info": {},
+            "cart_info": {},
+            "store_info": {},
+            "auction_info": {},
+            "incentive_info": {}
+          },
+          {
+            "transaction_info": {
+              "paypal_account_id": "<redacted:id>",
+              "transaction_id": "<redacted:id>",
+              "paypal_reference_id": "<redacted:id>",
+              "paypal_reference_id_type": "TXN",
+              "transaction_event_code": "T0001",
+              "transaction_initiation_date": "2026-11-06T03:27:44Z",
+              "transaction_updated_date": "2026-11-06T03:27:44Z",
+              "transaction_amount": {
+                "currency_code": "USD",
+                "value": "-25.00"
+              },
+              "fee_amount": {
+                "currency_code": "USD",
+                "value": "-0.25"
+              },
+              "transaction_status": "S",
+              "transaction_subject": "ReckonAI phase-0 fixture payout",
+              "transaction_note": "seller settlement 2",
+              "ending_balance": {
+                "currency_code": "USD",
+                "value": "5103.30"
+              },
+              "available_balance": {
+                "currency_code": "USD",
+                "value": "5103.30"
+              },
+              "custom_field": "p2-2",
+              "protection_eligibility": "02",
+              "instrument_type": "PayPal",
+              "instrument_sub_type": "PayPal Wallet"
+            },
+            "payer_info": {
+              "account_id": "<redacted:id>",
+              "email_address": "<redacted:pii>",
+              "phone_number": {
+                "country_code": "1",
+                "national_number": "<redacted:pii>"
+              },
+              "address_status": "N",
+              "payer_status": "Y",
+              "payer_name": {
+                "given_name": "<redacted:pii>",
+                "surname": "<redacted:pii>",
+                "alternate_full_name": "Nancy Amandi"
+              },
+              "country_code": "US",
+              "address": {
+                "line1": "2211 N First St",
+                "city": "San Jose",
+                "state": "CA",
+                "country_code": "US",
+                "postal_code": "<redacted:pii>"
+              }
+            },
+            "shipping_info": {
+              "name": "Chinwe, Amandi"
+            },
+            "cart_info": {},
+            "store_info": {},
+            "auction_info": {},
+            "incentive_info": {}
+          },
+          {
+            "transaction_info": {
+              "transaction_id": "<redacted:id>",
+              "paypal_reference_id": "<redacted:id>",
+              "paypal_reference_id_type": "TXN",
+              "transaction_event_code": "T1105",
+              "transaction_initiation_date": "2026-11-06T03:27:44Z",
+              "transaction_updated_date": "2026-11-06T03:27:44Z",
+              "transaction_amount": {
+                "currency_code": "USD",
+                "value": "25.25"
+              },
+              "transaction_status": "S",
+              "transaction_subject": "ReckonAI phase-0 fixture payout",
+              "transaction_note": "seller settlement 2",
+              "ending_balance": {
+                "currency_code": "USD",
+                "value": "5128.55"
+              },
+              "available_balance": {
+                "currency_code": "USD",
+                "value": "5128.55"
+              },
+              "custom_field": "p2-2",
+              "protection_eligibility": "02",
+              "instrument_type": "PayPal",
+              "instrument_sub_type": "PayPal Wallet"
+            },
+            "payer_info": {
+              "address_status": "N",
+              "payer_name": {},
+              "address": {
+                "line1": "2211 N First St",
+                "city": "San Jose",
+                "state": "CA",
+                "country_code": "US",
+                "postal_code": "<redacted:pii>"
+              }
+            },
+            "shipping_info": {},
+            "cart_info": {},
+            "store_info": {},
+            "auction_info": {},
+            "incentive_info": {}
+          }
+        ],
+        "account_number": "<redacted:id>",
+        "start_date": "2026-10-10T02:53:09Z",
+        "end_date": "2026-11-07T00:59:59Z",
+        "last_refreshed_datetime": "2026-11-07T00:59:59Z",
+        "page": 1,
+        "total_items": 13,
+        "total_pages": 1,
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v1/reporting/transactions?start_date=2026-10-10T02%3A53%3A09-0000&end_date=2026-11-07T02%3A53%3A09-0000&fields=all&page_size=100&page=1",
+            "rel": "self",
+            "method": "GET",
+            "encType": "application/json"
+          }
+        ]
+      },
+      "money_values": [
+        {
+          "path": "$transactions.transaction_details[0].transaction_info.transaction_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "5000.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[0].transaction_info.ending_balance",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "5000.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[0].transaction_info.available_balance",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "5000.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[1].transaction_info.transaction_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "120.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[1].transaction_info.ending_balance",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "5120.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[1].transaction_info.available_balance",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "5120.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[1].cart_info.item_details[0].item_unit_price",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "120.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[1].cart_info.item_details[0].item_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "120.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[1].cart_info.item_details[0].total_item_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "120.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[2].transaction_info.transaction_amount",
+          "currency": "EUR",
+          "currency_key": "currency_code",
+          "amount": "95.50",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[2].transaction_info.ending_balance",
+          "currency": "EUR",
+          "currency_key": "currency_code",
+          "amount": "95.50",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[2].transaction_info.available_balance",
+          "currency": "EUR",
+          "currency_key": "currency_code",
+          "amount": "95.50",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[2].cart_info.item_details[0].item_unit_price",
+          "currency": "EUR",
+          "currency_key": "currency_code",
+          "amount": "95.50",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[2].cart_info.item_details[0].item_amount",
+          "currency": "EUR",
+          "currency_key": "currency_code",
+          "amount": "95.50",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[2].cart_info.item_details[0].total_item_amount",
+          "currency": "EUR",
+          "currency_key": "currency_code",
+          "amount": "95.50",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[3].transaction_info.transaction_amount",
+          "currency": "EUR",
+          "currency_key": "currency_code",
+          "amount": "-95.50",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[3].transaction_info.ending_balance",
+          "currency": "EUR",
+          "currency_key": "currency_code",
+          "amount": "0.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[3].transaction_info.available_balance",
+          "currency": "EUR",
+          "currency_key": "currency_code",
+          "amount": "0.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[4].transaction_info.transaction_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "104.05",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[4].transaction_info.ending_balance",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "5224.05",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[4].transaction_info.available_balance",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "5224.05",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[5].transaction_info.transaction_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "-30.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[5].transaction_info.ending_balance",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "5194.05",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[5].transaction_info.available_balance",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "5194.05",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[6].transaction_info.transaction_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "-66.30",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[6].transaction_info.ending_balance",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "5127.75",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[6].transaction_info.available_balance",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "5127.75",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[7].transaction_info.transaction_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "66.30",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[7].transaction_info.ending_balance",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "5194.05",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[7].transaction_info.available_balance",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "5194.05",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[8].transaction_info.transaction_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "-65.50",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[8].transaction_info.ending_balance",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "5128.55",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[8].transaction_info.available_balance",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "5128.55",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[9].transaction_info.transaction_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "-40.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[9].transaction_info.fee_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "-0.25",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[9].transaction_info.ending_balance",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "5088.30",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[9].transaction_info.available_balance",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "5088.30",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[10].transaction_info.transaction_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "40.25",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[10].transaction_info.ending_balance",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "5128.55",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[10].transaction_info.available_balance",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "5128.55",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[11].transaction_info.transaction_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "-25.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[11].transaction_info.fee_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "-0.25",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[11].transaction_info.ending_balance",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "5103.30",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[11].transaction_info.available_balance",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "5103.30",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[12].transaction_info.transaction_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "25.25",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[12].transaction_info.ending_balance",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "5128.55",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$transactions.transaction_details[12].transaction_info.available_balance",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "5128.55",
+          "raw_json_type": "str"
+        }
+      ]
+    }
+  ]
+}

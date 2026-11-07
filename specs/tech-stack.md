@@ -293,11 +293,20 @@ recover anything missed.
 
 ### 8.1 APIMatic Context Plugin — how PayPal knowledge enters the build
 
-The **APIMatic Context Plugin for PayPal** is how the coding agent gets accurate
-PayPal API context — endpoints, request and response shapes, field names — while
-writing the integration, instead of relying on model recall or hand-searching
-the API reference. PayPal is pre-enabled on the plugin, so it needs no separate
-PayPal credentials.
+The **APIMatic Context Plugin for PayPal** is how the coding agent reaches
+accurate PayPal API context while writing the integration, instead of relying on
+model recall or hand-searching the API reference. It needs no PayPal
+credentials.
+
+**Corrected 2026-11-05, after installing it.** The plugin does not itself carry
+endpoints, response shapes or field names. It is 48 skills — eight each for
+csharp, java, php, python, ruby and typescript — teaching how to use the
+APIMatic-*generated* PayPal Server SDK, and no PayPal API resource has a skill.
+What it supplies is the SDK's identity (`paypal-server-sdk`, pinned version,
+source repository) and precise instructions for reading the contract out of the
+generated source. The field names live in the SDK's `doc/models/*.md` and model
+classes, not in the plugin. See
+`specs/2026-11-05-paypal-field-discovery/notes.md`.
 
 It is **development-time context, not a runtime dependency and not a build
 artifact.** Nothing we ship imports it; no generated client is committed from
@@ -306,17 +315,33 @@ its whole function.
 
 Two consequences worth stating, because they are easy to get wrong:
 
-- **The plugin is the *declared* contract. The sandbox is *observed* reality.
-  They are not the same thing, and the gap between them is the point.** The
-  plugin tells us a settlement or FX field exists in the API; only a sandbox
-  call tells us whether it is actually populated for our transactions. Phase 0
-  exists to compare the two, and [[mission]] P3 forbids treating a documented
-  field as evidence that a value was returned.
-- **Money typing stays ours.** Because we hand-write the client from plugin
-  context rather than generating one, we control deserialization: PayPal returns
-  amounts as JSON strings and they are parsed straight into `Decimal`, never
-  through `float` (§2). No generated deserializer gets to make that choice for
-  us.
+- **The generated SDK contract is the *declared* side. The sandbox is *observed*
+  reality. They are not the same thing, and the gap between them is the point.**
+  The contract tells us a settlement or FX field exists in the API; only a
+  sandbox call tells us whether it is actually populated for our transactions.
+  Phase 0 exists to compare the two, and [[mission]] P3 forbids treating a
+  documented field as evidence that a value was returned. (Corrected 2026-11-05:
+  this previously said the plugin *is* the declared contract. It is the route to
+  it, at a pinned SDK tag.)
+- **Money typing stays ours.** Because we hand-write the client rather than
+  generating one, we control deserialization: PayPal returns amounts as JSON
+  strings and they are parsed straight into `Decimal`, never through `float`
+  (§2). No generated deserializer gets to make that choice for us.
+
+  **Confirmed against the real contract, 2026-11-05.** `float` appears zero
+  times across all 373 generated model pages; every monetary field is
+  `Money{currency_code: str, value: str}`. PayPal declares money as strings
+  carrying their own currency, exactly as §2 requires, so this rule needs no
+  amendment to survive contact with the API.
+
+  One consequence worth stating, because it cuts against the sentence above:
+  since the generated deserializer hands over strings and we would parse them to
+  `Decimal` either way, the money-typing argument for hand-writing the client is
+  weaker than it looked when written. It is not void — the SDK covers neither
+  Disputes nor Payouts, so those calls are hand-written regardless. Whether
+  Phase 7 uses the SDK for the three covered record types is an open decision,
+  recorded in `specs/2026-11-05-paypal-field-discovery/notes.md`, and it carries
+  a submission dimension as well as an architectural one.
 
 **Setup is a prerequisite for Phase 0**, not an optional extra — see
 [[roadmap]] Phase 0. The APIMatic resource page covers installation; the

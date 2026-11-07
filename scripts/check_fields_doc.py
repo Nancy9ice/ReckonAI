@@ -86,7 +86,17 @@ REQUIRED_FX_FIELDS = (
     "is_derived",
 )
 
-EMOJI = re.compile("[\U0001f000-\U0001faff☀-➿️⬀-⯿]")
+# Pictograph ranges as integers, deliberately. A character class written with
+# escapes put the literal characters into this file, which made the checker
+# violate the rule it enforces (CLAUDE.md bans pictographs in source) and went
+# unnoticed until this file was first tracked and so first scanned. Integers
+# cannot be mangled by an escape, and this checker has to pass its own check.
+EMOJI_RANGES = (
+    (0x1F000, 0x1FAFF),
+    (0x2600, 0x27BF),
+    (0xFE0F, 0xFE0F),
+    (0x2B00, 0x2BFF),
+)
 EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 # Value-shaped, not name-shaped: a long opaque token, not the word "secret".
 CREDENTIAL = re.compile(
@@ -215,6 +225,16 @@ def populated_set(record: dict[str, Any]) -> dict[str, dict[str, int]]:
         path: {"populated": entry["populated_on"], "of": entry["of"]}
         for path, entry in record["fields"].items()
     }
+
+
+def first_pictograph(line: str) -> str | None:
+    """The first pictograph in a line, or None."""
+    for character in line:
+        codepoint = ord(character)
+        for low, high in EMOJI_RANGES:
+            if low <= codepoint <= high:
+                return character
+    return None
 
 
 def display(path: Path) -> str:
@@ -471,8 +491,11 @@ def check_conventions(doc: Doc, declared: Any, observed: Any) -> list[str]:
             continue
         relative = display(path)
         for number, line in enumerate(text.splitlines(), 1):
-            if EMOJI.search(line):
-                failures.append(f"C9: emoji at {relative}:{number}")
+            pictograph = first_pictograph(line)
+            if pictograph:
+                failures.append(
+                    f"C9: pictograph U+{ord(pictograph):04X} at {relative}:{number}"
+                )
             if CREDENTIAL.search(line):
                 failures.append(f"C9: credential-shaped string at {relative}:{number}")
 

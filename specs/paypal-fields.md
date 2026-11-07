@@ -39,9 +39,9 @@ A cell marked **gated** is not a raw lookup. A few canonical fields are only mea
 
 | Verdict | Canonical fields |
 |---|---|
-| `present` | 51 |
-| `present-but-unreliable` | 12 |
-| `absent` | 6 |
+| `present` | 56 |
+| `present-but-unreliable` | 6 |
+| `absent` | 7 |
 | `unanswered` | 0 |
 | **total** | **69** |
 
@@ -79,9 +79,9 @@ The settlement-side record, and where PayPal puts its conversion evidence. Read 
 | `status` | `captures` `$.status` | Optional, read-only (SDK) | 4/4 | `present` | **Mutable, and it does not mean the seller was paid.** A `DELAYED` capture reads `COMPLETED` while funds are held, and a disputed capture reverts to `PENDING`. |
 | `disbursement_mode` | `captures` `$.disbursement_mode` | Optional (SDK) | 4/4 | `present` | Echoed onto the capture, so the mode is recoverable without the order. |
 | `seller_identity` | `captures` `$.payee.merchant_id` | Optional (SDK) | 4/4 | `present` | - |
-| `gross_amount` | `captures` `$.seller_receivable_breakdown.gross_amount.value` | Required (SDK) | 3/4 | `present-but-unreliable` | **only on capture-delayed-card, capture-instant-balance, capture-cross-currency.** Pre-fee, pre-conversion. |
-| `net_amount` | `captures` `$.seller_receivable_breakdown.net_amount.value` | Required (SDK) | 3/4 | `present-but-unreliable` | **only on capture-delayed-card, capture-instant-balance, capture-cross-currency.** `gross - paypal_fee - platform_fees`, observed exactly on every capture carrying a breakdown. |
-| `paypal_fee` | `captures` `$.seller_receivable_breakdown.paypal_fee.value` | Required (SDK) | 3/4 | `present-but-unreliable` | **only on capture-delayed-card, capture-instant-balance, capture-cross-currency.** **Phase 0 recorded this `absent`; under multiparty it is there.** 3.98 on 100.00, identical across card-in-wallet and balance funding. |
+| `gross_amount` | `captures` `$.seller_receivable_breakdown.gross_amount.value` | Required (SDK) | 4/4 | `present` | Pre-fee, pre-conversion. |
+| `net_amount` | `captures` `$.seller_receivable_breakdown.net_amount.value` | Required (SDK) | 4/4 | `present` | `gross - paypal_fee - platform_fees`, observed exactly on every capture carrying a breakdown. |
+| `paypal_fee` | `captures` `$.seller_receivable_breakdown.paypal_fee.value` | Required (SDK) | 4/4 | `present` | **Phase 0 recorded this `absent`; under multiparty it is there.** 3.98 on 100.00, identical across card-in-wallet and balance funding. **But the whole breakdown disappears while a capture is `PENDING`**, which an open dispute causes - observed, then observed returning once the dispute resolved. Capture these values at ingestion; a later read can return nothing, and that absence is not evidence of no fee. |
 | `settlement_amount` | `captures` `$.seller_receivable_breakdown.receivable_amount.value` | Required (SDK) | 1/4 | `present-but-unreliable` | **only on capture-cross-currency.** Only where a conversion occurred. **Converts the net, not the gross** - see fx_conversion.source_amount. |
 | `settlement_currency` | `balances` `$.balances[].currency` | Required (SDK) | 1/1 | `present` | The balances endpoint answers this unconditionally, which beats inferring it per capture. |
 | `created_at` | `captures` `$.create_time` | Optional (SDK) | 4/4 | `present` | - |
@@ -92,10 +92,10 @@ PayPal's own record of the commission the marketplace took. Under multiparty thi
 
 | Canonical field | PayPal path | Declared | Observed | Verdict | Condition / note |
 |---|---|---|---|---|---|
-| `amount` | `captures` `$.seller_receivable_breakdown.platform_fees[].amount.value` | Required (SDK) | 3/4 | `present-but-unreliable` | **only on capture-delayed-card, capture-instant-balance, capture-cross-currency.** The marketplace's commission, as PayPal actually took it. Independent evidence against the marketplace's own rules. |
-| `currency` | `captures` `$.seller_receivable_breakdown.platform_fees[].amount.currency_code` | Required (SDK) | 3/4 | `present-but-unreliable` | **only on capture-delayed-card, capture-instant-balance, capture-cross-currency.** Must match the transaction currency; PayPal rejects a mismatch. |
-| `payee` | `captures` `$.seller_receivable_breakdown.platform_fees[].payee.merchant_id` | Optional (SDK) | 3/4 | `present-but-unreliable` | **only on capture-delayed-card, capture-instant-balance, capture-cross-currency.** Where the commission was routed. Defaults to the API caller when the order does not name one, and PayPal fills it in explicitly. |
-| `reversal_on_refund` | `refunds` `$.seller_payable_breakdown.platform_fees[].amount.value` | Required (SDK) | 1/1 | `present` | **Reversed automatically and pro rata.** A 30.00 refund of a 100.00 capture returned 3.00 of the 10.00 commission, with no instruction sent. Overriding the amount needs an account enablement we do not have (`PLATFORM_FEE_NOT_ENABLED`). |
+| `amount` | `captures` `$.seller_receivable_breakdown.platform_fees[].amount.value` | Required (SDK) | 4/4 | `present` | The marketplace's commission, as PayPal actually took it. Independent evidence against the marketplace's own rules. |
+| `currency` | `captures` `$.seller_receivable_breakdown.platform_fees[].amount.currency_code` | Required (SDK) | 4/4 | `present` | Must match the transaction currency; PayPal rejects a mismatch. |
+| `payee` | `captures` `$.seller_receivable_breakdown.platform_fees[].payee.merchant_id` | Optional (SDK) | 4/4 | `present` | Where the commission was routed. Defaults to the API caller when the order does not name one, and PayPal fills it in explicitly. |
+| `reversal_on_refund` | `refunds` `$.seller_payable_breakdown.platform_fees[].amount.value` | Required (SDK) | 3/3 | `present` | **Reversed automatically and pro rata**, on an ordinary refund and on a lost dispute alike. A 30.00 refund of a 100.00 capture returned 3.00 of the 10.00 commission; accepting a dispute claim returned the full 10.00. So the marketplace does not keep commission on a reversed transaction, and Phase 10's expected position must assume the reversal. Overriding the amount needs an account enablement we do not have (`PLATFORM_FEE_NOT_ENABLED`). |
 | `settlement_reference` | none | **not declared** | no path | `absent` | Partner fees settle as a next-day consolidated bank payment. No per-transaction settlement reference is exposed, and reconciling the aggregate is deferred (`mission.md` section 7). |
 
 ## 4. Refund
@@ -104,16 +104,16 @@ Read from `GET /v2/payments/refunds/{id}`, except where the order view carries m
 
 | Canonical field | PayPal path | Declared | Observed | Verdict | Condition / note |
 |---|---|---|---|---|---|
-| `refund_id` | `refunds` `$.id` | Optional, read-only (SDK) | 1/1 | `present` | - |
-| `capture_linkage` | `refunds` `$.links[].href` | Required (SDK) | 1/1 | `present` | **Derived, not provider-supplied.** No capture id on a refund; the only link back is `links[rel=up]`, whose href must be parsed. |
-| `amount` | `refunds` `$.amount.value` | Required (SDK) | 1/1 | `present` | - |
-| `currency` | `refunds` `$.amount.currency_code` | Required (SDK) | 1/1 | `present` | - |
-| `gross_amount` | `refunds` `$.seller_payable_breakdown.gross_amount.value` | Required (SDK) | 1/1 | `present` | A refund carries `seller_payable_breakdown`, a capture `seller_receivable_breakdown`. Mapping code cannot share a path. |
-| `net_amount` | `refunds` `$.seller_payable_breakdown.net_amount.value` | Required (SDK) | 1/1 | `present` | The same identity as a capture: 30.00 - 0.00 - 3.00 = 27.00. |
-| `paypal_fee` | `refunds` `$.seller_payable_breakdown.paypal_fee.value` | Required (SDK) | 1/1 | `present` | `0.00` observed: PayPal did not return its own fee on the refund. |
-| `total_refunded_amount` | `refunds` `$.seller_payable_breakdown.total_refunded_amount.value` | Required (SDK) | 1/1 | `present` | What makes partial-refund tracking possible. |
-| `status` | `refunds` `$.status` | Optional, read-only (SDK) | 1/1 | `present` | - |
-| `created_at` | `refunds` `$.create_time` | Optional (SDK) | 1/1 | `present` | - |
+| `refund_id` | `refunds` `$.id` | Optional, read-only (SDK) | 3/3 | `present` | - |
+| `capture_linkage` | `refunds` `$.links[].href` | Required (SDK) | 3/3 | `present` | **Derived, not provider-supplied.** No capture id on a refund; the only link back is `links[rel=up]`, whose href must be parsed. |
+| `amount` | `refunds` `$.amount.value` | Required (SDK) | 3/3 | `present` | - |
+| `currency` | `refunds` `$.amount.currency_code` | Required (SDK) | 3/3 | `present` | - |
+| `gross_amount` | `refunds` `$.seller_payable_breakdown.gross_amount.value` | Required (SDK) | 3/3 | `present` | A refund carries `seller_payable_breakdown`, a capture `seller_receivable_breakdown`. Mapping code cannot share a path. |
+| `net_amount` | `refunds` `$.seller_payable_breakdown.net_amount.value` | Required (SDK) | 3/3 | `present` | The same identity as a capture: 30.00 - 0.00 - 3.00 = 27.00. |
+| `paypal_fee` | `refunds` `$.seller_payable_breakdown.paypal_fee.value` | Required (SDK) | 3/3 | `present` | `0.00` observed: PayPal did not return its own fee on the refund. |
+| `total_refunded_amount` | `refunds` `$.seller_payable_breakdown.total_refunded_amount.value` | Required (SDK) | 3/3 | `present` | What makes partial-refund tracking possible. |
+| `status` | `refunds` `$.status` | Optional, read-only (SDK) | 3/3 | `present` | - |
+| `created_at` | `refunds` `$.create_time` | Optional (SDK) | 3/3 | `present` | - |
 
 ## 5. Dispute
 
@@ -131,7 +131,7 @@ Read from `GET /v2/payments/refunds/{id}`, except where the order view carries m
 | `channel` | `disputes` `$.items[].dispute_channel` | Optional, read-only (OpenAPI) | 1/1 | `present` | `INTERNAL` - raised through PayPal rather than as a card chargeback. |
 | `created_at` | `disputes` `$.items[].create_time` | Optional, read-only (OpenAPI) | 1/1 | `present` | - |
 | `updated_at` | `disputes` `$.items[].update_time` | Optional, read-only (OpenAPI) | 1/1 | `present` | - |
-| `seller_response_due_date` | `disputes` `$.items[].seller_response_due_date` | Optional, read-only (OpenAPI) | 1/1 | `present` | 20 days out. Drives the awaiting-evidence lifecycle state of `mission.md` P4. |
+| `seller_response_due_date` | `disputes` `$.items[].seller_response_due_date` | Optional, read-only (OpenAPI) | 0/1 | `absent` | 20 days out. Drives the awaiting-evidence lifecycle state of `mission.md` P4. |
 | `buyer_identity` | `disputes` `$.items[].disputed_transactions[].buyer.payer_id` | **not declared** | 1/1 | `present` | - |
 | `seller_identity` | `disputes` `$.items[].disputed_transactions[].seller.merchant_id` | **not declared** | 1/1 | `present` | - |
 | `capture_linkage` | `disputes` `$.items[].disputed_transactions[].buyer_transaction_id` | **not declared** | 1/1 | `present` | **Not our capture id.** The buyer's side of the transaction has its own identifier, so matching a dispute to a capture needs a join we have not established. Filtering by `disputed_transaction_id` does accept the capture id. |
@@ -182,18 +182,13 @@ Every `absent` and every `present-but-unreliable` field carries one of four deci
 | `no_action` | The conditional availability is correct for the domain. Nothing is derived and nothing is lost; the entry says why the condition is right. |
 | `connector_metadata` | Not a PayPal field at all, and in this table only because `requirements.md` section 7 lists it. |
 
-18 fields need a decision: 2 `connector_metadata`, 1 `derive`, 10 `limitation`, 5 `no_action`.
+13 fields need a decision: 2 `connector_metadata`, 1 `derive`, 4 `limitation`, 6 `no_action`.
 
 | Field | Verdict | Decision | `is_derived` | Detail |
 |---|---|---|---|---|
-| `capture.gross_amount` | `present-but-unreliable` | `limitation` | no | **A capture loses its entire `seller_receivable_breakdown` while pending, and a dispute puts it there.** The disputed fixture reverted from `COMPLETED` to `PENDING` and the breakdown vanished - fee, net and platform fee with it. The SDK model documents this ("not available for transactions that are in pending state") but it had never been observed. So these values must be captured at ingestion and retained; re-reading later can return nothing, and the absence is not evidence that no fee was charged. |
-| `capture.net_amount` | `present-but-unreliable` | `limitation` | no | **A capture loses its entire `seller_receivable_breakdown` while pending, and a dispute puts it there.** The disputed fixture reverted from `COMPLETED` to `PENDING` and the breakdown vanished - fee, net and platform fee with it. The SDK model documents this ("not available for transactions that are in pending state") but it had never been observed. So these values must be captured at ingestion and retained; re-reading later can return nothing, and the absence is not evidence that no fee was charged. |
-| `capture.paypal_fee` | `present-but-unreliable` | `limitation` | no | **A capture loses its entire `seller_receivable_breakdown` while pending, and a dispute puts it there.** The disputed fixture reverted from `COMPLETED` to `PENDING` and the breakdown vanished - fee, net and platform fee with it. The SDK model documents this ("not available for transactions that are in pending state") but it had never been observed. So these values must be captured at ingestion and retained; re-reading later can return nothing, and the absence is not evidence that no fee was charged. |
 | `capture.settlement_amount` | `present-but-unreliable` | `limitation` | no | **A capture loses its entire `seller_receivable_breakdown` while pending, and a dispute puts it there.** The disputed fixture reverted from `COMPLETED` to `PENDING` and the breakdown vanished - fee, net and platform fee with it. The SDK model documents this ("not available for transactions that are in pending state") but it had never been observed. So these values must be captured at ingestion and retained; re-reading later can return nothing, and the absence is not evidence that no fee was charged. |
-| `platform_fee.amount` | `present-but-unreliable` | `limitation` | no | **A capture loses its entire `seller_receivable_breakdown` while pending, and a dispute puts it there.** The disputed fixture reverted from `COMPLETED` to `PENDING` and the breakdown vanished - fee, net and platform fee with it. The SDK model documents this ("not available for transactions that are in pending state") but it had never been observed. So these values must be captured at ingestion and retained; re-reading later can return nothing, and the absence is not evidence that no fee was charged. |
-| `platform_fee.currency` | `present-but-unreliable` | `limitation` | no | **A capture loses its entire `seller_receivable_breakdown` while pending, and a dispute puts it there.** The disputed fixture reverted from `COMPLETED` to `PENDING` and the breakdown vanished - fee, net and platform fee with it. The SDK model documents this ("not available for transactions that are in pending state") but it had never been observed. So these values must be captured at ingestion and retained; re-reading later can return nothing, and the absence is not evidence that no fee was charged. |
-| `platform_fee.payee` | `present-but-unreliable` | `limitation` | no | **A capture loses its entire `seller_receivable_breakdown` while pending, and a dispute puts it there.** The disputed fixture reverted from `COMPLETED` to `PENDING` and the breakdown vanished - fee, net and platform fee with it. The SDK model documents this ("not available for transactions that are in pending state") but it had never been observed. So these values must be captured at ingestion and retained; re-reading later can return nothing, and the absence is not evidence that no fee was charged. |
 | `platform_fee.settlement_reference` | `absent` | `limitation` | no | Partner fees arrive as a single next-day consolidated bank payment, and no per-transaction settlement reference is exposed. The per-transaction fee comparison is in scope; reconciling the aggregate is settlement-account work, deferred by `mission.md` section 7. A `platform_fee` row should still be able to carry a settlement reference later. |
+| `dispute.seller_response_due_date` | `absent` | `no_action` | no | Present while a seller response is outstanding - observed at `WAITING_FOR_SELLER_RESPONSE` with a date 20 days out - and gone once the seller accepted the claim, because nothing is due any more. The absence is correct, and the field is what `mission.md` P4's awaiting-evidence state keys on while it lasts. Phase 3 must make it nullable and must not read its absence as a missed deadline. |
 | `disbursement.released_at` | `absent` | `limitation` | no | The release record carries no usable timestamp - `time_updated` is the integer `0`. So the moment a seller was paid cannot be read back from the disbursement. Record the time at ingestion, or take it from the reporting ledger once that catches up, and never present an ingestion time as a provider timestamp. |
 | `fx_conversion.source_amount` | `present-but-unreliable` | `no_action` | no | Populated only where a conversion occurred, which is right: a same-currency transaction has no conversion and must carry no `fx_conversion` row at all. Nothing is derived and nothing is lost. |
 | `fx_conversion.source_currency` | `present-but-unreliable` | `no_action` | no | Populated only where a conversion occurred, which is right: a same-currency transaction has no conversion and must carry no `fx_conversion` row at all. Nothing is derived and nothing is lost. |
@@ -224,9 +219,9 @@ Both fixtures need the same thing: **a wallet-funded capture**, which requires a
 
 The highest-value output of this phase (`plan.md` Group 5 step 4): fields PayPal's contract promises that our sandbox never delivered. Each gets a line on what its absence means for the canonical model.
 
-**Scoped deliberately.** The contract declares 1148 paths and we observed 375, so the raw difference runs to hundreds - most of it alternative payment methods and optional reporting blocks nested under objects that never appeared at all. Listing those would bury the findings. This section lists the fields whose **parent object was observed**: PayPal returned the enclosing structure and left this member out. That is the set where an absence is informative. The full difference is derivable from the two artifacts at any time.
+**Scoped deliberately.** The contract declares 1148 paths and we observed 371, so the raw difference runs to hundreds - most of it alternative payment methods and optional reporting blocks nested under objects that never appeared at all. Listing those would bury the findings. This section lists the fields whose **parent object was observed**: PayPal returned the enclosing structure and left this member out. That is the set where an absence is informative. The full difference is derivable from the two artifacts at any time.
 
-Fields whose parent object was observed: **126**, from a raw difference of 717.
+Fields whose parent object was observed: **129**, from a raw difference of 722.
 
 ### balances
 
@@ -244,6 +239,7 @@ Fields whose parent object was observed: **126**, from a raw difference of 717.
 | `$.processor_response` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
 | `$.seller_receivable_breakdown.paypal_fee_in_receivable_currency` | Optional | The capture fee in settlement currency. Would have been the closest thing to an FX-side fee; not populated, and not declared as a conversion fee in any case. |
 | `$.seller_receivable_breakdown.platform_fees[].payee.email_address` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `$.status_details` | Optional | The reason behind a non-terminal status. Absent because every fixture reached a terminal state; it will matter for the PENDING and delayed lifecycle states of mission.md P4. |
 | `$.supplementary_data.related_ids.authorization_id` | Optional | Capture to authorization linkage. Unobserved because our captures had no separate authorization step. |
 | `$.supplementary_data.related_ids.capture_id` | Optional | Present only on records other than the capture itself. |
 
@@ -253,6 +249,7 @@ Fields whose parent object was observed: **126**, from a raw difference of 717.
 |---|---|---|
 | `$.items[].buyer_response_due_date` | Optional, read-only | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
 | `$.items[].dispute_asset` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `$.items[].seller_response_due_date` | Optional, read-only | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
 
 ### orders
 
@@ -309,6 +306,7 @@ Fields whose parent object was observed: **126**, from a raw difference of 717.
 | `$.purchase_units[].payments.captures[].processor_response` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
 | `$.purchase_units[].payments.captures[].seller_receivable_breakdown.paypal_fee_in_receivable_currency` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
 | `$.purchase_units[].payments.captures[].seller_receivable_breakdown.platform_fees[].payee.email_address` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `$.purchase_units[].payments.captures[].status_details` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
 | `$.purchase_units[].payments.refunds[].acquirer_reference_number` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
 | `$.purchase_units[].payments.refunds[].custom_id` | Optional | A caller-supplied external reference, as invoice_id. This is the intended place to carry a marketplace order id into PayPal and have it come back. |
 | `$.purchase_units[].payments.refunds[].invoice_id` | Optional, read-only | A caller-supplied external reference. We did not set one, so its absence says nothing about PayPal. The canonical model may rely on it only if the marketplace sets it at capture time. |
@@ -418,6 +416,7 @@ The reverse gap, and the direction nobody plans for: fields PayPal returned that
 | `disputes` | `$.items[].disputed_transactions[].buyer_transaction_id` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
 | `disputes` | `$.items[].disputed_transactions[].seller` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
 | `disputes` | `$.items[].disputed_transactions[].seller.merchant_id` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `disputes` | `$.items[].outcome` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
 | `orders` | `$.purchase_units[].payee.display_data` | 4/4 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
 | `orders` | `$.purchase_units[].payee.display_data.brand_name` | 4/4 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
 | `transactions` | `$.links[].encType` | 1/1 | Undeclared in both source grades, yet PayPal sends it on every HATEOAS link these APIs return. |

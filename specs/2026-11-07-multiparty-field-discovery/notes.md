@@ -233,11 +233,54 @@ It also carries **no usable timestamp**: `time_updated` is the integer `0`, and
 recorded at ingestion or taken from the reporting ledger, and an ingestion time
 must never be presented as a provider timestamp.
 
+### 4.12 A lost dispute claws back the commission, and costs the seller PayPal's fee
+
+The dispute was resolved by accepting the claim as the seller, which refunds
+the buyer in full. `POST /v1/customer/disputes/{id}/accept-claim` returned
+`200`.
+
+**The capture's breakdown came back.** It had vanished while the capture was
+`PENDING`; once the capture moved to `REFUNDED` the full breakdown returned,
+with its **original** values — gross 100.00, `paypal_fee` 3.98,
+`platform_fees` 10.00, net 86.02. The capture is not adjusted by the reversal;
+the refund records carry it. So the disappearance is tied to the `PENDING`
+state and is recoverable afterwards, but not during.
+
+**PayPal generated two refund records for one logical reversal:**
+
+| Refund | Status | gross | paypal_fee | platform_fees | net |
+|---|---|---|---|---|---|
+| `1GJ79007MD105063Y` | **FAILED** | 86.02 | 0.00 | 0.00 | 86.02 |
+| `56U34857F7216691V` | **COMPLETED** | 100.00 | 0.00 | **10.00** | 90.00 |
+
+Both report `total_refunded_amount` 100.00. **Summing refund records would
+double-count**: 86.02 plus 100.00 against a 100.00 capture. Phase 11 must
+filter on status, and a failed refund attempt is a record that exists and must
+not be treated as money moved.
+
+**The commission is clawed back in full.** `platform_fees` 10.00 on the
+completed refund, so the marketplace does not keep its fee on a reversed
+transaction. Combined with §4.4, the rule is uniform: PayPal reverses
+commission proportionally on an ordinary refund and fully on a full reversal,
+without being asked either time. Phase 10's expected position must assume it.
+
+**The seller bears PayPal's processing fee.** Follow the money on the seller's
+side: credited 86.02 at capture, debited 90.00 on the refund, leaving the
+seller **3.98 down** — exactly the `paypal_fee`, which the refund returns as
+`0.00`. So a lost dispute costs a seller the original processing fee on top of
+the full reversal, and an entitlement calculation that nets a dispute to zero
+is wrong by that fee.
+
+**The dispute did not close.** It moved to `status: UNDER_REVIEW`,
+`dispute_state: UNDER_PAYPAL_REVIEW`, still at lifecycle stage `INQUIRY`, even
+after the seller accepted. So accepting a claim is not a terminal state, and
+the financial effect lands before the dispute record settles — a reconciliation
+keyed on dispute closure would miss money that has already moved.
+
 ## 5. Still unanswered
 
 | Question | Why |
 |---|---|
-| What a dispute does to the platform fee | The dispute is open; no resolution yet |
 | Whether the consolidated daily fee settlement is visible via any API | Only a monthly SFTP partner report is documented |
 | What the `403` list endpoint would give | Not needed: reading an item by id works, and the capture links to it |
 
@@ -246,7 +289,7 @@ No canonical field is left `unanswered`.
 ## 6. Status
 
 `specs/paypal-fields.md` is regenerated from multiparty evidence only: 69
-canonical rows, 51 `present`, 12 `present-but-unreliable`, 6 `absent` and
+canonical rows, 56 `present`, 6 `present-but-unreliable`, 7 `absent` and
 no `unanswered`. `scripts/check_fields_doc.py --all` passes, including C2
 reproducibility against a fresh probe.
 

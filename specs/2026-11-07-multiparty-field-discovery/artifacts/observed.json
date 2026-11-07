@@ -4,7 +4,7 @@
     "task_group": "3",
     "probe": "scripts/probe_paypal.py",
     "generated_by": "scripts/derive_observed.py",
-    "generated_at": "2026-11-07T09:31:14.727413+00:00",
+    "generated_at": "2026-11-07T09:43:27.937249+00:00",
     "api_base": "https://api-m.sandbox.paypal.com",
     "fixtures": "fixtures.md",
     "redacted": true,
@@ -29,8 +29,8 @@
       "witness_record_type": "refunds",
       "witness_field": "$.id",
       "witness_means": "a refund was retrieved",
-      "populated_on": 1,
-      "of": 1
+      "populated_on": 3,
+      "of": 3
     },
     "settlement_and_fx": {
       "status": "observed",
@@ -108,7 +108,7 @@
           "empty_on_labels": [],
           "absent_on_labels": [],
           "json_type": "string",
-          "sample_value": "2026-11-07T07:29:59Z"
+          "sample_value": "2026-11-07T07:59:59Z"
         },
         "$.balances": {
           "populated_on": 1,
@@ -280,7 +280,7 @@
           "empty_on_labels": [],
           "absent_on_labels": [],
           "json_type": "string",
-          "sample_value": "2026-11-07T07:29:59Z"
+          "sample_value": "2026-11-07T07:59:59Z"
         }
       }
     },
@@ -293,7 +293,7 @@
       ],
       "samples": 4,
       "sample_labels": [
-        "capture-instant-card",
+        "capture-instant-card-disputed",
         "capture-delayed-card",
         "capture-instant-balance",
         "capture-cross-currency"
@@ -306,7 +306,7 @@
           "of": 4,
           "occurrences": 4,
           "populated_on_labels": [
-            "capture-instant-card",
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance",
             "capture-cross-currency"
@@ -322,7 +322,7 @@
           "of": 4,
           "occurrences": 4,
           "populated_on_labels": [
-            "capture-instant-card",
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance",
             "capture-cross-currency"
@@ -339,7 +339,7 @@
           "of": 4,
           "occurrences": 4,
           "populated_on_labels": [
-            "capture-instant-card",
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance",
             "capture-cross-currency"
@@ -355,7 +355,7 @@
           "of": 4,
           "occurrences": 4,
           "populated_on_labels": [
-            "capture-instant-card",
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance",
             "capture-cross-currency"
@@ -371,7 +371,7 @@
           "of": 4,
           "occurrences": 4,
           "populated_on_labels": [
-            "capture-instant-card",
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance",
             "capture-cross-currency"
@@ -387,7 +387,7 @@
           "of": 4,
           "occurrences": 4,
           "populated_on_labels": [
-            "capture-instant-card",
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance",
             "capture-cross-currency"
@@ -403,7 +403,7 @@
           "of": 4,
           "occurrences": 4,
           "populated_on_labels": [
-            "capture-instant-card",
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance",
             "capture-cross-currency"
@@ -419,7 +419,7 @@
           "of": 4,
           "occurrences": 4,
           "populated_on_labels": [
-            "capture-instant-card",
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance",
             "capture-cross-currency"
@@ -435,7 +435,7 @@
           "of": 4,
           "occurrences": 4,
           "populated_on_labels": [
-            "capture-instant-card",
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance",
             "capture-cross-currency"
@@ -451,7 +451,7 @@
           "of": 4,
           "occurrences": 12,
           "populated_on_labels": [
-            "capture-instant-card",
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance",
             "capture-cross-currency"
@@ -467,7 +467,7 @@
           "of": 4,
           "occurrences": 12,
           "populated_on_labels": [
-            "capture-instant-card",
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance",
             "capture-cross-currency"
@@ -483,7 +483,7 @@
           "of": 4,
           "occurrences": 12,
           "populated_on_labels": [
-            "capture-instant-card",
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance",
             "capture-cross-currency"
@@ -499,7 +499,7 @@
           "of": 4,
           "occurrences": 12,
           "populated_on_labels": [
-            "capture-instant-card",
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance",
             "capture-cross-currency"
@@ -515,7 +515,7 @@
           "of": 4,
           "occurrences": 4,
           "populated_on_labels": [
-            "capture-instant-card",
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance",
             "capture-cross-currency"
@@ -531,7 +531,7 @@
           "of": 4,
           "occurrences": 4,
           "populated_on_labels": [
-            "capture-instant-card",
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance",
             "capture-cross-currency"
@@ -547,7 +547,7 @@
           "of": 4,
           "occurrences": 4,
           "populated_on_labels": [
-            "capture-instant-card",
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance",
             "capture-cross-currency"
@@ -563,7 +563,7 @@
           "of": 4,
           "occurrences": 4,
           "populated_on_labels": [
-            "capture-instant-card",
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance",
             "capture-cross-currency"
@@ -579,7 +579,7 @@
           "of": 4,
           "occurrences": 4,
           "populated_on_labels": [
-            "capture-instant-card",
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance",
             "capture-cross-currency"
@@ -595,7 +595,7 @@
           "of": 4,
           "occurrences": 8,
           "populated_on_labels": [
-            "capture-instant-card",
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance",
             "capture-cross-currency"
@@ -611,7 +611,7 @@
           "of": 4,
           "occurrences": 4,
           "populated_on_labels": [
-            "capture-instant-card",
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance",
             "capture-cross-currency"
@@ -622,22 +622,20 @@
           "sample_value": "ELIGIBLE"
         },
         "$.seller_receivable_breakdown": {
-          "populated_on": 3,
+          "populated_on": 4,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 3,
+          "occurrences": 4,
           "populated_on_labels": [
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance",
             "capture-cross-currency"
           ],
           "empty_on_labels": [],
-          "absent_on_labels": [
-            "capture-instant-card"
-          ],
+          "absent_on_labels": [],
           "json_type": "object",
-          "sample_value": null,
-          "condition": "populated only on: capture-delayed-card, capture-instant-balance, capture-cross-currency"
+          "sample_value": null
         },
         "$.seller_receivable_breakdown.exchange_rate": {
           "populated_on": 1,
@@ -649,7 +647,7 @@
           ],
           "empty_on_labels": [],
           "absent_on_labels": [
-            "capture-instant-card",
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance"
           ],
@@ -667,7 +665,7 @@
           ],
           "empty_on_labels": [],
           "absent_on_labels": [
-            "capture-instant-card",
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance"
           ],
@@ -685,7 +683,7 @@
           ],
           "empty_on_labels": [],
           "absent_on_labels": [
-            "capture-instant-card",
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance"
           ],
@@ -703,7 +701,7 @@
           ],
           "empty_on_labels": [],
           "absent_on_labels": [
-            "capture-instant-card",
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance"
           ],
@@ -712,296 +710,264 @@
           "condition": "populated only on: capture-cross-currency"
         },
         "$.seller_receivable_breakdown.gross_amount": {
-          "populated_on": 3,
+          "populated_on": 4,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 3,
+          "occurrences": 4,
           "populated_on_labels": [
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance",
             "capture-cross-currency"
           ],
           "empty_on_labels": [],
-          "absent_on_labels": [
-            "capture-instant-card"
-          ],
+          "absent_on_labels": [],
           "json_type": "object",
           "sample_value": null,
-          "money_envelope": "currency_code",
-          "condition": "populated only on: capture-delayed-card, capture-instant-balance, capture-cross-currency"
+          "money_envelope": "currency_code"
         },
         "$.seller_receivable_breakdown.gross_amount.currency_code": {
-          "populated_on": 3,
+          "populated_on": 4,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 3,
+          "occurrences": 4,
           "populated_on_labels": [
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance",
             "capture-cross-currency"
           ],
           "empty_on_labels": [],
-          "absent_on_labels": [
-            "capture-instant-card"
-          ],
+          "absent_on_labels": [],
           "json_type": "string",
-          "sample_value": "USD",
-          "condition": "populated only on: capture-delayed-card, capture-instant-balance, capture-cross-currency"
+          "sample_value": "USD"
         },
         "$.seller_receivable_breakdown.gross_amount.value": {
-          "populated_on": 3,
+          "populated_on": 4,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 3,
+          "occurrences": 4,
           "populated_on_labels": [
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance",
             "capture-cross-currency"
           ],
           "empty_on_labels": [],
-          "absent_on_labels": [
-            "capture-instant-card"
-          ],
+          "absent_on_labels": [],
           "json_type": "string",
-          "sample_value": "100.00",
-          "condition": "populated only on: capture-delayed-card, capture-instant-balance, capture-cross-currency"
+          "sample_value": "100.00"
         },
         "$.seller_receivable_breakdown.net_amount": {
-          "populated_on": 3,
+          "populated_on": 4,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 3,
+          "occurrences": 4,
           "populated_on_labels": [
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance",
             "capture-cross-currency"
           ],
           "empty_on_labels": [],
-          "absent_on_labels": [
-            "capture-instant-card"
-          ],
+          "absent_on_labels": [],
           "json_type": "object",
           "sample_value": null,
-          "money_envelope": "currency_code",
-          "condition": "populated only on: capture-delayed-card, capture-instant-balance, capture-cross-currency"
+          "money_envelope": "currency_code"
         },
         "$.seller_receivable_breakdown.net_amount.currency_code": {
-          "populated_on": 3,
+          "populated_on": 4,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 3,
+          "occurrences": 4,
           "populated_on_labels": [
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance",
             "capture-cross-currency"
           ],
           "empty_on_labels": [],
-          "absent_on_labels": [
-            "capture-instant-card"
-          ],
+          "absent_on_labels": [],
           "json_type": "string",
-          "sample_value": "USD",
-          "condition": "populated only on: capture-delayed-card, capture-instant-balance, capture-cross-currency"
+          "sample_value": "USD"
         },
         "$.seller_receivable_breakdown.net_amount.value": {
-          "populated_on": 3,
+          "populated_on": 4,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 3,
+          "occurrences": 4,
           "populated_on_labels": [
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance",
             "capture-cross-currency"
           ],
           "empty_on_labels": [],
-          "absent_on_labels": [
-            "capture-instant-card"
-          ],
+          "absent_on_labels": [],
           "json_type": "string",
-          "sample_value": "86.02",
-          "condition": "populated only on: capture-delayed-card, capture-instant-balance, capture-cross-currency"
+          "sample_value": "86.02"
         },
         "$.seller_receivable_breakdown.paypal_fee": {
-          "populated_on": 3,
+          "populated_on": 4,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 3,
+          "occurrences": 4,
           "populated_on_labels": [
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance",
             "capture-cross-currency"
           ],
           "empty_on_labels": [],
-          "absent_on_labels": [
-            "capture-instant-card"
-          ],
+          "absent_on_labels": [],
           "json_type": "object",
           "sample_value": null,
-          "money_envelope": "currency_code",
-          "condition": "populated only on: capture-delayed-card, capture-instant-balance, capture-cross-currency"
+          "money_envelope": "currency_code"
         },
         "$.seller_receivable_breakdown.paypal_fee.currency_code": {
-          "populated_on": 3,
+          "populated_on": 4,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 3,
+          "occurrences": 4,
           "populated_on_labels": [
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance",
             "capture-cross-currency"
           ],
           "empty_on_labels": [],
-          "absent_on_labels": [
-            "capture-instant-card"
-          ],
+          "absent_on_labels": [],
           "json_type": "string",
-          "sample_value": "USD",
-          "condition": "populated only on: capture-delayed-card, capture-instant-balance, capture-cross-currency"
+          "sample_value": "USD"
         },
         "$.seller_receivable_breakdown.paypal_fee.value": {
-          "populated_on": 3,
+          "populated_on": 4,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 3,
+          "occurrences": 4,
           "populated_on_labels": [
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance",
             "capture-cross-currency"
           ],
           "empty_on_labels": [],
-          "absent_on_labels": [
-            "capture-instant-card"
-          ],
+          "absent_on_labels": [],
           "json_type": "string",
-          "sample_value": "3.98",
-          "condition": "populated only on: capture-delayed-card, capture-instant-balance, capture-cross-currency"
+          "sample_value": "3.98"
         },
         "$.seller_receivable_breakdown.platform_fees": {
-          "populated_on": 3,
+          "populated_on": 4,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 3,
+          "occurrences": 4,
           "populated_on_labels": [
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance",
             "capture-cross-currency"
           ],
           "empty_on_labels": [],
-          "absent_on_labels": [
-            "capture-instant-card"
-          ],
+          "absent_on_labels": [],
           "json_type": "array",
-          "sample_value": null,
-          "condition": "populated only on: capture-delayed-card, capture-instant-balance, capture-cross-currency"
+          "sample_value": null
         },
         "$.seller_receivable_breakdown.platform_fees[]": {
-          "populated_on": 3,
+          "populated_on": 4,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 3,
+          "occurrences": 4,
           "populated_on_labels": [
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance",
             "capture-cross-currency"
           ],
           "empty_on_labels": [],
-          "absent_on_labels": [
-            "capture-instant-card"
-          ],
+          "absent_on_labels": [],
           "json_type": "object",
-          "sample_value": null,
-          "condition": "populated only on: capture-delayed-card, capture-instant-balance, capture-cross-currency"
+          "sample_value": null
         },
         "$.seller_receivable_breakdown.platform_fees[].amount": {
-          "populated_on": 3,
+          "populated_on": 4,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 3,
+          "occurrences": 4,
           "populated_on_labels": [
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance",
             "capture-cross-currency"
           ],
           "empty_on_labels": [],
-          "absent_on_labels": [
-            "capture-instant-card"
-          ],
+          "absent_on_labels": [],
           "json_type": "object",
           "sample_value": null,
-          "money_envelope": "currency_code",
-          "condition": "populated only on: capture-delayed-card, capture-instant-balance, capture-cross-currency"
+          "money_envelope": "currency_code"
         },
         "$.seller_receivable_breakdown.platform_fees[].amount.currency_code": {
-          "populated_on": 3,
+          "populated_on": 4,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 3,
+          "occurrences": 4,
           "populated_on_labels": [
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance",
             "capture-cross-currency"
           ],
           "empty_on_labels": [],
-          "absent_on_labels": [
-            "capture-instant-card"
-          ],
+          "absent_on_labels": [],
           "json_type": "string",
-          "sample_value": "USD",
-          "condition": "populated only on: capture-delayed-card, capture-instant-balance, capture-cross-currency"
+          "sample_value": "USD"
         },
         "$.seller_receivable_breakdown.platform_fees[].amount.value": {
-          "populated_on": 3,
+          "populated_on": 4,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 3,
+          "occurrences": 4,
           "populated_on_labels": [
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance",
             "capture-cross-currency"
           ],
           "empty_on_labels": [],
-          "absent_on_labels": [
-            "capture-instant-card"
-          ],
+          "absent_on_labels": [],
           "json_type": "string",
-          "sample_value": "10.00",
-          "condition": "populated only on: capture-delayed-card, capture-instant-balance, capture-cross-currency"
+          "sample_value": "10.00"
         },
         "$.seller_receivable_breakdown.platform_fees[].payee": {
-          "populated_on": 3,
+          "populated_on": 4,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 3,
+          "occurrences": 4,
           "populated_on_labels": [
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance",
             "capture-cross-currency"
           ],
           "empty_on_labels": [],
-          "absent_on_labels": [
-            "capture-instant-card"
-          ],
+          "absent_on_labels": [],
           "json_type": "object",
-          "sample_value": null,
-          "condition": "populated only on: capture-delayed-card, capture-instant-balance, capture-cross-currency"
+          "sample_value": null
         },
         "$.seller_receivable_breakdown.platform_fees[].payee.merchant_id": {
-          "populated_on": 3,
+          "populated_on": 4,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 3,
+          "occurrences": 4,
           "populated_on_labels": [
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance",
             "capture-cross-currency"
           ],
           "empty_on_labels": [],
-          "absent_on_labels": [
-            "capture-instant-card"
-          ],
+          "absent_on_labels": [],
           "json_type": "string",
-          "sample_value": "<redacted:id>",
-          "condition": "populated only on: capture-delayed-card, capture-instant-balance, capture-cross-currency"
+          "sample_value": "<redacted:id>"
         },
         "$.seller_receivable_breakdown.receivable_amount": {
           "populated_on": 1,
@@ -1013,7 +979,7 @@
           ],
           "empty_on_labels": [],
           "absent_on_labels": [
-            "capture-instant-card",
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance"
           ],
@@ -1032,7 +998,7 @@
           ],
           "empty_on_labels": [],
           "absent_on_labels": [
-            "capture-instant-card",
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance"
           ],
@@ -1050,7 +1016,7 @@
           ],
           "empty_on_labels": [],
           "absent_on_labels": [
-            "capture-instant-card",
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance"
           ],
@@ -1064,7 +1030,7 @@
           "of": 4,
           "occurrences": 4,
           "populated_on_labels": [
-            "capture-instant-card",
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance",
             "capture-cross-currency"
@@ -1072,43 +1038,7 @@
           "empty_on_labels": [],
           "absent_on_labels": [],
           "json_type": "string",
-          "sample_value": "PENDING"
-        },
-        "$.status_details": {
-          "populated_on": 1,
-          "present_empty_on": 0,
-          "of": 4,
-          "occurrences": 1,
-          "populated_on_labels": [
-            "capture-instant-card"
-          ],
-          "empty_on_labels": [],
-          "absent_on_labels": [
-            "capture-delayed-card",
-            "capture-instant-balance",
-            "capture-cross-currency"
-          ],
-          "json_type": "object",
-          "sample_value": null,
-          "condition": "populated only on: capture-instant-card"
-        },
-        "$.status_details.reason": {
-          "populated_on": 1,
-          "present_empty_on": 0,
-          "of": 4,
-          "occurrences": 1,
-          "populated_on_labels": [
-            "capture-instant-card"
-          ],
-          "empty_on_labels": [],
-          "absent_on_labels": [
-            "capture-delayed-card",
-            "capture-instant-balance",
-            "capture-cross-currency"
-          ],
-          "json_type": "string",
-          "sample_value": "BUYER_COMPLAINT",
-          "condition": "populated only on: capture-instant-card"
+          "sample_value": "REFUNDED"
         },
         "$.supplementary_data": {
           "populated_on": 4,
@@ -1116,7 +1046,7 @@
           "of": 4,
           "occurrences": 4,
           "populated_on_labels": [
-            "capture-instant-card",
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance",
             "capture-cross-currency"
@@ -1132,7 +1062,7 @@
           "of": 4,
           "occurrences": 4,
           "populated_on_labels": [
-            "capture-instant-card",
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance",
             "capture-cross-currency"
@@ -1148,7 +1078,7 @@
           "of": 4,
           "occurrences": 4,
           "populated_on_labels": [
-            "capture-instant-card",
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance",
             "capture-cross-currency"
@@ -1164,7 +1094,7 @@
           "of": 4,
           "occurrences": 4,
           "populated_on_labels": [
-            "capture-instant-card",
+            "capture-instant-card-disputed",
             "capture-delayed-card",
             "capture-instant-balance",
             "capture-cross-currency"
@@ -1172,7 +1102,7 @@
           "empty_on_labels": [],
           "absent_on_labels": [],
           "json_type": "string",
-          "sample_value": "2026-11-07T08:58:33Z"
+          "sample_value": "2026-11-07T09:38:43Z"
         }
       }
     },
@@ -1594,7 +1524,7 @@
           "empty_on_labels": [],
           "absent_on_labels": [],
           "json_type": "string",
-          "sample_value": "REQUIRED_ACTION"
+          "sample_value": "UNDER_PAYPAL_REVIEW"
         },
         "$.items[].disputed_transactions": {
           "populated_on": 1,
@@ -1752,6 +1682,19 @@
           "json_type": "string",
           "sample_value": "self"
         },
+        "$.items[].outcome": {
+          "populated_on": 1,
+          "present_empty_on": 0,
+          "of": 1,
+          "occurrences": 1,
+          "populated_on_labels": [
+            "disputes:list"
+          ],
+          "empty_on_labels": [],
+          "absent_on_labels": [],
+          "json_type": "string",
+          "sample_value": "LOST"
+        },
         "$.items[].reason": {
           "populated_on": 1,
           "present_empty_on": 0,
@@ -1765,19 +1708,6 @@
           "json_type": "string",
           "sample_value": "MERCHANDISE_OR_SERVICE_NOT_RECEIVED"
         },
-        "$.items[].seller_response_due_date": {
-          "populated_on": 1,
-          "present_empty_on": 0,
-          "of": 1,
-          "occurrences": 1,
-          "populated_on_labels": [
-            "disputes:list"
-          ],
-          "empty_on_labels": [],
-          "absent_on_labels": [],
-          "json_type": "string",
-          "sample_value": "2026-11-27T08:55:17.000Z"
-        },
         "$.items[].status": {
           "populated_on": 1,
           "present_empty_on": 0,
@@ -1789,7 +1719,7 @@
           "empty_on_labels": [],
           "absent_on_labels": [],
           "json_type": "string",
-          "sample_value": "WAITING_FOR_SELLER_RESPONSE"
+          "sample_value": "UNDER_REVIEW"
         },
         "$.items[].update_time": {
           "populated_on": 1,
@@ -1802,7 +1732,7 @@
           "empty_on_labels": [],
           "absent_on_labels": [],
           "json_type": "string",
-          "sample_value": "2026-11-07T08:58:43.000Z"
+          "sample_value": "2026-11-07T09:39:34.000Z"
         },
         "$.links": {
           "populated_on": 1,
@@ -2947,22 +2877,20 @@
           "sample_value": "ELIGIBLE"
         },
         "$.purchase_units[].payments.captures[].seller_receivable_breakdown": {
-          "populated_on": 3,
+          "populated_on": 4,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 3,
+          "occurrences": 4,
           "populated_on_labels": [
+            "order-instant-card",
             "order-delayed-card",
             "order-instant-balance",
             "order-cross-currency"
           ],
           "empty_on_labels": [],
-          "absent_on_labels": [
-            "order-instant-card"
-          ],
+          "absent_on_labels": [],
           "json_type": "object",
-          "sample_value": null,
-          "condition": "populated only on: order-delayed-card, order-instant-balance, order-cross-currency"
+          "sample_value": null
         },
         "$.purchase_units[].payments.captures[].seller_receivable_breakdown.exchange_rate": {
           "populated_on": 1,
@@ -3037,296 +2965,264 @@
           "condition": "populated only on: order-cross-currency"
         },
         "$.purchase_units[].payments.captures[].seller_receivable_breakdown.gross_amount": {
-          "populated_on": 3,
+          "populated_on": 4,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 3,
+          "occurrences": 4,
           "populated_on_labels": [
+            "order-instant-card",
             "order-delayed-card",
             "order-instant-balance",
             "order-cross-currency"
           ],
           "empty_on_labels": [],
-          "absent_on_labels": [
-            "order-instant-card"
-          ],
+          "absent_on_labels": [],
           "json_type": "object",
           "sample_value": null,
-          "money_envelope": "currency_code",
-          "condition": "populated only on: order-delayed-card, order-instant-balance, order-cross-currency"
+          "money_envelope": "currency_code"
         },
         "$.purchase_units[].payments.captures[].seller_receivable_breakdown.gross_amount.currency_code": {
-          "populated_on": 3,
+          "populated_on": 4,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 3,
+          "occurrences": 4,
           "populated_on_labels": [
+            "order-instant-card",
             "order-delayed-card",
             "order-instant-balance",
             "order-cross-currency"
           ],
           "empty_on_labels": [],
-          "absent_on_labels": [
-            "order-instant-card"
-          ],
+          "absent_on_labels": [],
           "json_type": "string",
-          "sample_value": "USD",
-          "condition": "populated only on: order-delayed-card, order-instant-balance, order-cross-currency"
+          "sample_value": "USD"
         },
         "$.purchase_units[].payments.captures[].seller_receivable_breakdown.gross_amount.value": {
-          "populated_on": 3,
+          "populated_on": 4,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 3,
+          "occurrences": 4,
           "populated_on_labels": [
+            "order-instant-card",
             "order-delayed-card",
             "order-instant-balance",
             "order-cross-currency"
           ],
           "empty_on_labels": [],
-          "absent_on_labels": [
-            "order-instant-card"
-          ],
+          "absent_on_labels": [],
           "json_type": "string",
-          "sample_value": "100.00",
-          "condition": "populated only on: order-delayed-card, order-instant-balance, order-cross-currency"
+          "sample_value": "100.00"
         },
         "$.purchase_units[].payments.captures[].seller_receivable_breakdown.net_amount": {
-          "populated_on": 3,
+          "populated_on": 4,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 3,
+          "occurrences": 4,
           "populated_on_labels": [
+            "order-instant-card",
             "order-delayed-card",
             "order-instant-balance",
             "order-cross-currency"
           ],
           "empty_on_labels": [],
-          "absent_on_labels": [
-            "order-instant-card"
-          ],
+          "absent_on_labels": [],
           "json_type": "object",
           "sample_value": null,
-          "money_envelope": "currency_code",
-          "condition": "populated only on: order-delayed-card, order-instant-balance, order-cross-currency"
+          "money_envelope": "currency_code"
         },
         "$.purchase_units[].payments.captures[].seller_receivable_breakdown.net_amount.currency_code": {
-          "populated_on": 3,
+          "populated_on": 4,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 3,
+          "occurrences": 4,
           "populated_on_labels": [
+            "order-instant-card",
             "order-delayed-card",
             "order-instant-balance",
             "order-cross-currency"
           ],
           "empty_on_labels": [],
-          "absent_on_labels": [
-            "order-instant-card"
-          ],
+          "absent_on_labels": [],
           "json_type": "string",
-          "sample_value": "USD",
-          "condition": "populated only on: order-delayed-card, order-instant-balance, order-cross-currency"
+          "sample_value": "USD"
         },
         "$.purchase_units[].payments.captures[].seller_receivable_breakdown.net_amount.value": {
-          "populated_on": 3,
+          "populated_on": 4,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 3,
+          "occurrences": 4,
           "populated_on_labels": [
+            "order-instant-card",
             "order-delayed-card",
             "order-instant-balance",
             "order-cross-currency"
           ],
           "empty_on_labels": [],
-          "absent_on_labels": [
-            "order-instant-card"
-          ],
+          "absent_on_labels": [],
           "json_type": "string",
-          "sample_value": "86.02",
-          "condition": "populated only on: order-delayed-card, order-instant-balance, order-cross-currency"
+          "sample_value": "86.02"
         },
         "$.purchase_units[].payments.captures[].seller_receivable_breakdown.paypal_fee": {
-          "populated_on": 3,
+          "populated_on": 4,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 3,
+          "occurrences": 4,
           "populated_on_labels": [
+            "order-instant-card",
             "order-delayed-card",
             "order-instant-balance",
             "order-cross-currency"
           ],
           "empty_on_labels": [],
-          "absent_on_labels": [
-            "order-instant-card"
-          ],
+          "absent_on_labels": [],
           "json_type": "object",
           "sample_value": null,
-          "money_envelope": "currency_code",
-          "condition": "populated only on: order-delayed-card, order-instant-balance, order-cross-currency"
+          "money_envelope": "currency_code"
         },
         "$.purchase_units[].payments.captures[].seller_receivable_breakdown.paypal_fee.currency_code": {
-          "populated_on": 3,
+          "populated_on": 4,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 3,
+          "occurrences": 4,
           "populated_on_labels": [
+            "order-instant-card",
             "order-delayed-card",
             "order-instant-balance",
             "order-cross-currency"
           ],
           "empty_on_labels": [],
-          "absent_on_labels": [
-            "order-instant-card"
-          ],
+          "absent_on_labels": [],
           "json_type": "string",
-          "sample_value": "USD",
-          "condition": "populated only on: order-delayed-card, order-instant-balance, order-cross-currency"
+          "sample_value": "USD"
         },
         "$.purchase_units[].payments.captures[].seller_receivable_breakdown.paypal_fee.value": {
-          "populated_on": 3,
+          "populated_on": 4,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 3,
+          "occurrences": 4,
           "populated_on_labels": [
+            "order-instant-card",
             "order-delayed-card",
             "order-instant-balance",
             "order-cross-currency"
           ],
           "empty_on_labels": [],
-          "absent_on_labels": [
-            "order-instant-card"
-          ],
+          "absent_on_labels": [],
           "json_type": "string",
-          "sample_value": "3.98",
-          "condition": "populated only on: order-delayed-card, order-instant-balance, order-cross-currency"
+          "sample_value": "3.98"
         },
         "$.purchase_units[].payments.captures[].seller_receivable_breakdown.platform_fees": {
-          "populated_on": 3,
+          "populated_on": 4,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 3,
+          "occurrences": 4,
           "populated_on_labels": [
+            "order-instant-card",
             "order-delayed-card",
             "order-instant-balance",
             "order-cross-currency"
           ],
           "empty_on_labels": [],
-          "absent_on_labels": [
-            "order-instant-card"
-          ],
+          "absent_on_labels": [],
           "json_type": "array",
-          "sample_value": null,
-          "condition": "populated only on: order-delayed-card, order-instant-balance, order-cross-currency"
+          "sample_value": null
         },
         "$.purchase_units[].payments.captures[].seller_receivable_breakdown.platform_fees[]": {
-          "populated_on": 3,
+          "populated_on": 4,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 3,
+          "occurrences": 4,
           "populated_on_labels": [
+            "order-instant-card",
             "order-delayed-card",
             "order-instant-balance",
             "order-cross-currency"
           ],
           "empty_on_labels": [],
-          "absent_on_labels": [
-            "order-instant-card"
-          ],
+          "absent_on_labels": [],
           "json_type": "object",
-          "sample_value": null,
-          "condition": "populated only on: order-delayed-card, order-instant-balance, order-cross-currency"
+          "sample_value": null
         },
         "$.purchase_units[].payments.captures[].seller_receivable_breakdown.platform_fees[].amount": {
-          "populated_on": 3,
+          "populated_on": 4,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 3,
+          "occurrences": 4,
           "populated_on_labels": [
+            "order-instant-card",
             "order-delayed-card",
             "order-instant-balance",
             "order-cross-currency"
           ],
           "empty_on_labels": [],
-          "absent_on_labels": [
-            "order-instant-card"
-          ],
+          "absent_on_labels": [],
           "json_type": "object",
           "sample_value": null,
-          "money_envelope": "currency_code",
-          "condition": "populated only on: order-delayed-card, order-instant-balance, order-cross-currency"
+          "money_envelope": "currency_code"
         },
         "$.purchase_units[].payments.captures[].seller_receivable_breakdown.platform_fees[].amount.currency_code": {
-          "populated_on": 3,
+          "populated_on": 4,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 3,
+          "occurrences": 4,
           "populated_on_labels": [
+            "order-instant-card",
             "order-delayed-card",
             "order-instant-balance",
             "order-cross-currency"
           ],
           "empty_on_labels": [],
-          "absent_on_labels": [
-            "order-instant-card"
-          ],
+          "absent_on_labels": [],
           "json_type": "string",
-          "sample_value": "USD",
-          "condition": "populated only on: order-delayed-card, order-instant-balance, order-cross-currency"
+          "sample_value": "USD"
         },
         "$.purchase_units[].payments.captures[].seller_receivable_breakdown.platform_fees[].amount.value": {
-          "populated_on": 3,
+          "populated_on": 4,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 3,
+          "occurrences": 4,
           "populated_on_labels": [
+            "order-instant-card",
             "order-delayed-card",
             "order-instant-balance",
             "order-cross-currency"
           ],
           "empty_on_labels": [],
-          "absent_on_labels": [
-            "order-instant-card"
-          ],
+          "absent_on_labels": [],
           "json_type": "string",
-          "sample_value": "10.00",
-          "condition": "populated only on: order-delayed-card, order-instant-balance, order-cross-currency"
+          "sample_value": "10.00"
         },
         "$.purchase_units[].payments.captures[].seller_receivable_breakdown.platform_fees[].payee": {
-          "populated_on": 3,
+          "populated_on": 4,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 3,
+          "occurrences": 4,
           "populated_on_labels": [
+            "order-instant-card",
             "order-delayed-card",
             "order-instant-balance",
             "order-cross-currency"
           ],
           "empty_on_labels": [],
-          "absent_on_labels": [
-            "order-instant-card"
-          ],
+          "absent_on_labels": [],
           "json_type": "object",
-          "sample_value": null,
-          "condition": "populated only on: order-delayed-card, order-instant-balance, order-cross-currency"
+          "sample_value": null
         },
         "$.purchase_units[].payments.captures[].seller_receivable_breakdown.platform_fees[].payee.merchant_id": {
-          "populated_on": 3,
+          "populated_on": 4,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 3,
+          "occurrences": 4,
           "populated_on_labels": [
+            "order-instant-card",
             "order-delayed-card",
             "order-instant-balance",
             "order-cross-currency"
           ],
           "empty_on_labels": [],
-          "absent_on_labels": [
-            "order-instant-card"
-          ],
+          "absent_on_labels": [],
           "json_type": "string",
-          "sample_value": "<redacted:id>",
-          "condition": "populated only on: order-delayed-card, order-instant-balance, order-cross-currency"
+          "sample_value": "<redacted:id>"
         },
         "$.purchase_units[].payments.captures[].seller_receivable_breakdown.receivable_amount": {
           "populated_on": 1,
@@ -3397,43 +3293,7 @@
           "empty_on_labels": [],
           "absent_on_labels": [],
           "json_type": "string",
-          "sample_value": "PENDING"
-        },
-        "$.purchase_units[].payments.captures[].status_details": {
-          "populated_on": 1,
-          "present_empty_on": 0,
-          "of": 4,
-          "occurrences": 1,
-          "populated_on_labels": [
-            "order-instant-card"
-          ],
-          "empty_on_labels": [],
-          "absent_on_labels": [
-            "order-delayed-card",
-            "order-instant-balance",
-            "order-cross-currency"
-          ],
-          "json_type": "object",
-          "sample_value": null,
-          "condition": "populated only on: order-instant-card"
-        },
-        "$.purchase_units[].payments.captures[].status_details.reason": {
-          "populated_on": 1,
-          "present_empty_on": 0,
-          "of": 4,
-          "occurrences": 1,
-          "populated_on_labels": [
-            "order-instant-card"
-          ],
-          "empty_on_labels": [],
-          "absent_on_labels": [
-            "order-delayed-card",
-            "order-instant-balance",
-            "order-cross-currency"
-          ],
-          "json_type": "string",
-          "sample_value": "BUYER_COMPLAINT",
-          "condition": "populated only on: order-instant-card"
+          "sample_value": "REFUNDED"
         },
         "$.purchase_units[].payments.captures[].update_time": {
           "populated_on": 4,
@@ -3449,7 +3309,7 @@
           "empty_on_labels": [],
           "absent_on_labels": [],
           "json_type": "string",
-          "sample_value": "2026-11-07T08:58:33Z"
+          "sample_value": "2026-11-07T09:38:43Z"
         },
         "$.purchase_units[].payments.refunds": {
           "populated_on": 2,
@@ -3473,7 +3333,7 @@
           "populated_on": 2,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 2,
+          "occurrences": 3,
           "populated_on_labels": [
             "order-instant-card",
             "order-instant-balance"
@@ -3491,7 +3351,7 @@
           "populated_on": 2,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 2,
+          "occurrences": 3,
           "populated_on_labels": [
             "order-instant-card",
             "order-instant-balance"
@@ -3510,7 +3370,7 @@
           "populated_on": 2,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 2,
+          "occurrences": 3,
           "populated_on_labels": [
             "order-instant-card",
             "order-instant-balance"
@@ -3528,7 +3388,7 @@
           "populated_on": 2,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 2,
+          "occurrences": 3,
           "populated_on_labels": [
             "order-instant-card",
             "order-instant-balance"
@@ -3546,7 +3406,7 @@
           "populated_on": 2,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 2,
+          "occurrences": 3,
           "populated_on_labels": [
             "order-instant-card",
             "order-instant-balance"
@@ -3564,7 +3424,7 @@
           "populated_on": 2,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 2,
+          "occurrences": 3,
           "populated_on_labels": [
             "order-instant-card",
             "order-instant-balance"
@@ -3582,7 +3442,7 @@
           "populated_on": 2,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 2,
+          "occurrences": 3,
           "populated_on_labels": [
             "order-instant-card",
             "order-instant-balance"
@@ -3600,7 +3460,7 @@
           "populated_on": 2,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 4,
+          "occurrences": 6,
           "populated_on_labels": [
             "order-instant-card",
             "order-instant-balance"
@@ -3618,7 +3478,7 @@
           "populated_on": 2,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 4,
+          "occurrences": 6,
           "populated_on_labels": [
             "order-instant-card",
             "order-instant-balance"
@@ -3636,7 +3496,7 @@
           "populated_on": 2,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 4,
+          "occurrences": 6,
           "populated_on_labels": [
             "order-instant-card",
             "order-instant-balance"
@@ -3654,7 +3514,7 @@
           "populated_on": 2,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 4,
+          "occurrences": 6,
           "populated_on_labels": [
             "order-instant-card",
             "order-instant-balance"
@@ -3669,28 +3529,28 @@
           "condition": "populated only on: order-instant-card, order-instant-balance"
         },
         "$.purchase_units[].payments.refunds[].note_to_payer": {
-          "populated_on": 1,
+          "populated_on": 2,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 1,
+          "occurrences": 2,
           "populated_on_labels": [
+            "order-instant-card",
             "order-instant-balance"
           ],
           "empty_on_labels": [],
           "absent_on_labels": [
-            "order-instant-card",
             "order-delayed-card",
             "order-cross-currency"
           ],
           "json_type": "string",
-          "sample_value": "ReckonAI phase-0b partial refund fixture",
-          "condition": "populated only on: order-instant-balance"
+          "sample_value": "100.0 USD; 2026-11-07 Credit has been processed and claim is now closed. Please refer Dispute ID PP-R-QKS-10196968. Thank you.",
+          "condition": "populated only on: order-instant-card, order-instant-balance"
         },
         "$.purchase_units[].payments.refunds[].seller_payable_breakdown": {
           "populated_on": 2,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 2,
+          "occurrences": 3,
           "populated_on_labels": [
             "order-instant-card",
             "order-instant-balance"
@@ -3708,7 +3568,7 @@
           "populated_on": 2,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 2,
+          "occurrences": 3,
           "populated_on_labels": [
             "order-instant-card",
             "order-instant-balance"
@@ -3727,7 +3587,7 @@
           "populated_on": 2,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 2,
+          "occurrences": 3,
           "populated_on_labels": [
             "order-instant-card",
             "order-instant-balance"
@@ -3745,7 +3605,7 @@
           "populated_on": 2,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 2,
+          "occurrences": 3,
           "populated_on_labels": [
             "order-instant-card",
             "order-instant-balance"
@@ -3763,7 +3623,7 @@
           "populated_on": 2,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 2,
+          "occurrences": 3,
           "populated_on_labels": [
             "order-instant-card",
             "order-instant-balance"
@@ -3782,7 +3642,7 @@
           "populated_on": 2,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 2,
+          "occurrences": 3,
           "populated_on_labels": [
             "order-instant-card",
             "order-instant-balance"
@@ -3800,7 +3660,7 @@
           "populated_on": 2,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 2,
+          "occurrences": 3,
           "populated_on_labels": [
             "order-instant-card",
             "order-instant-balance"
@@ -3818,7 +3678,7 @@
           "populated_on": 2,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 2,
+          "occurrences": 3,
           "populated_on_labels": [
             "order-instant-card",
             "order-instant-balance"
@@ -3837,7 +3697,7 @@
           "populated_on": 2,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 2,
+          "occurrences": 3,
           "populated_on_labels": [
             "order-instant-card",
             "order-instant-balance"
@@ -3855,7 +3715,7 @@
           "populated_on": 2,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 2,
+          "occurrences": 3,
           "populated_on_labels": [
             "order-instant-card",
             "order-instant-balance"
@@ -3873,7 +3733,7 @@
           "populated_on": 2,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 2,
+          "occurrences": 3,
           "populated_on_labels": [
             "order-instant-card",
             "order-instant-balance"
@@ -3891,7 +3751,7 @@
           "populated_on": 2,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 2,
+          "occurrences": 3,
           "populated_on_labels": [
             "order-instant-card",
             "order-instant-balance"
@@ -3909,7 +3769,7 @@
           "populated_on": 2,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 2,
+          "occurrences": 3,
           "populated_on_labels": [
             "order-instant-card",
             "order-instant-balance"
@@ -3928,7 +3788,7 @@
           "populated_on": 2,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 2,
+          "occurrences": 3,
           "populated_on_labels": [
             "order-instant-card",
             "order-instant-balance"
@@ -3946,7 +3806,7 @@
           "populated_on": 2,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 2,
+          "occurrences": 3,
           "populated_on_labels": [
             "order-instant-card",
             "order-instant-balance"
@@ -3964,7 +3824,7 @@
           "populated_on": 2,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 2,
+          "occurrences": 3,
           "populated_on_labels": [
             "order-instant-card",
             "order-instant-balance"
@@ -3983,7 +3843,7 @@
           "populated_on": 2,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 2,
+          "occurrences": 3,
           "populated_on_labels": [
             "order-instant-card",
             "order-instant-balance"
@@ -4001,7 +3861,7 @@
           "populated_on": 2,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 2,
+          "occurrences": 3,
           "populated_on_labels": [
             "order-instant-card",
             "order-instant-balance"
@@ -4012,14 +3872,14 @@
             "order-cross-currency"
           ],
           "json_type": "string",
-          "sample_value": "0.00",
+          "sample_value": "100.00",
           "condition": "populated only on: order-instant-card, order-instant-balance"
         },
         "$.purchase_units[].payments.refunds[].status": {
           "populated_on": 2,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 2,
+          "occurrences": 3,
           "populated_on_labels": [
             "order-instant-card",
             "order-instant-balance"
@@ -4030,14 +3890,14 @@
             "order-cross-currency"
           ],
           "json_type": "string",
-          "sample_value": "PENDING",
+          "sample_value": "FAILED",
           "condition": "populated only on: order-instant-card, order-instant-balance"
         },
         "$.purchase_units[].payments.refunds[].update_time": {
           "populated_on": 2,
           "present_empty_on": 0,
           "of": 4,
-          "occurrences": 2,
+          "occurrences": 3,
           "populated_on_labels": [
             "order-instant-card",
             "order-instant-balance"
@@ -4048,7 +3908,7 @@
             "order-cross-currency"
           ],
           "json_type": "string",
-          "sample_value": "2026-11-07T00:58:33-08:00",
+          "sample_value": "2026-11-07T01:38:43-08:00",
           "condition": "populated only on: order-instant-card, order-instant-balance"
         },
         "$.purchase_units[].reference_id": {
@@ -4257,7 +4117,7 @@
           "empty_on_labels": [],
           "absent_on_labels": [],
           "json_type": "string",
-          "sample_value": "2026-11-07T08:58:33Z"
+          "sample_value": "2026-11-07T09:38:43Z"
         }
       }
     },
@@ -4268,19 +4128,23 @@
       "http_statuses": [
         200
       ],
-      "samples": 1,
+      "samples": 3,
       "sample_labels": [
-        "refund-partial"
+        "refund-partial",
+        "refund-dispute-completed",
+        "refund-dispute-failed"
       ],
       "raw": "raw/refunds.json",
       "fields": {
         "$": {
-          "populated_on": 1,
+          "populated_on": 3,
           "present_empty_on": 0,
-          "of": 1,
-          "occurrences": 1,
+          "of": 3,
+          "occurrences": 3,
           "populated_on_labels": [
-            "refund-partial"
+            "refund-partial",
+            "refund-dispute-completed",
+            "refund-dispute-failed"
           ],
           "empty_on_labels": [],
           "absent_on_labels": [],
@@ -4288,12 +4152,14 @@
           "sample_value": null
         },
         "$.amount": {
-          "populated_on": 1,
+          "populated_on": 3,
           "present_empty_on": 0,
-          "of": 1,
-          "occurrences": 1,
+          "of": 3,
+          "occurrences": 3,
           "populated_on_labels": [
-            "refund-partial"
+            "refund-partial",
+            "refund-dispute-completed",
+            "refund-dispute-failed"
           ],
           "empty_on_labels": [],
           "absent_on_labels": [],
@@ -4302,12 +4168,14 @@
           "money_envelope": "currency_code"
         },
         "$.amount.currency_code": {
-          "populated_on": 1,
+          "populated_on": 3,
           "present_empty_on": 0,
-          "of": 1,
-          "occurrences": 1,
+          "of": 3,
+          "occurrences": 3,
           "populated_on_labels": [
-            "refund-partial"
+            "refund-partial",
+            "refund-dispute-completed",
+            "refund-dispute-failed"
           ],
           "empty_on_labels": [],
           "absent_on_labels": [],
@@ -4315,12 +4183,14 @@
           "sample_value": "USD"
         },
         "$.amount.value": {
-          "populated_on": 1,
+          "populated_on": 3,
           "present_empty_on": 0,
-          "of": 1,
-          "occurrences": 1,
+          "of": 3,
+          "occurrences": 3,
           "populated_on_labels": [
-            "refund-partial"
+            "refund-partial",
+            "refund-dispute-completed",
+            "refund-dispute-failed"
           ],
           "empty_on_labels": [],
           "absent_on_labels": [],
@@ -4328,12 +4198,14 @@
           "sample_value": "30.00"
         },
         "$.create_time": {
-          "populated_on": 1,
+          "populated_on": 3,
           "present_empty_on": 0,
-          "of": 1,
-          "occurrences": 1,
+          "of": 3,
+          "occurrences": 3,
           "populated_on_labels": [
-            "refund-partial"
+            "refund-partial",
+            "refund-dispute-completed",
+            "refund-dispute-failed"
           ],
           "empty_on_labels": [],
           "absent_on_labels": [],
@@ -4341,12 +4213,14 @@
           "sample_value": "2026-11-07T00:42:43-08:00"
         },
         "$.id": {
-          "populated_on": 1,
+          "populated_on": 3,
           "present_empty_on": 0,
-          "of": 1,
-          "occurrences": 1,
+          "of": 3,
+          "occurrences": 3,
           "populated_on_labels": [
-            "refund-partial"
+            "refund-partial",
+            "refund-dispute-completed",
+            "refund-dispute-failed"
           ],
           "empty_on_labels": [],
           "absent_on_labels": [],
@@ -4354,12 +4228,14 @@
           "sample_value": "<redacted:id>"
         },
         "$.links": {
-          "populated_on": 1,
+          "populated_on": 3,
           "present_empty_on": 0,
-          "of": 1,
-          "occurrences": 1,
+          "of": 3,
+          "occurrences": 3,
           "populated_on_labels": [
-            "refund-partial"
+            "refund-partial",
+            "refund-dispute-completed",
+            "refund-dispute-failed"
           ],
           "empty_on_labels": [],
           "absent_on_labels": [],
@@ -4367,12 +4243,14 @@
           "sample_value": null
         },
         "$.links[]": {
-          "populated_on": 1,
+          "populated_on": 3,
           "present_empty_on": 0,
-          "of": 1,
-          "occurrences": 2,
+          "of": 3,
+          "occurrences": 6,
           "populated_on_labels": [
-            "refund-partial"
+            "refund-partial",
+            "refund-dispute-completed",
+            "refund-dispute-failed"
           ],
           "empty_on_labels": [],
           "absent_on_labels": [],
@@ -4380,12 +4258,14 @@
           "sample_value": null
         },
         "$.links[].href": {
-          "populated_on": 1,
+          "populated_on": 3,
           "present_empty_on": 0,
-          "of": 1,
-          "occurrences": 2,
+          "of": 3,
+          "occurrences": 6,
           "populated_on_labels": [
-            "refund-partial"
+            "refund-partial",
+            "refund-dispute-completed",
+            "refund-dispute-failed"
           ],
           "empty_on_labels": [],
           "absent_on_labels": [],
@@ -4393,12 +4273,14 @@
           "sample_value": "https://api.sandbox.paypal.com/v2/payments/refunds/{id}"
         },
         "$.links[].method": {
-          "populated_on": 1,
+          "populated_on": 3,
           "present_empty_on": 0,
-          "of": 1,
-          "occurrences": 2,
+          "of": 3,
+          "occurrences": 6,
           "populated_on_labels": [
-            "refund-partial"
+            "refund-partial",
+            "refund-dispute-completed",
+            "refund-dispute-failed"
           ],
           "empty_on_labels": [],
           "absent_on_labels": [],
@@ -4406,12 +4288,14 @@
           "sample_value": "GET"
         },
         "$.links[].rel": {
-          "populated_on": 1,
+          "populated_on": 3,
           "present_empty_on": 0,
-          "of": 1,
-          "occurrences": 2,
+          "of": 3,
+          "occurrences": 6,
           "populated_on_labels": [
-            "refund-partial"
+            "refund-partial",
+            "refund-dispute-completed",
+            "refund-dispute-failed"
           ],
           "empty_on_labels": [],
           "absent_on_labels": [],
@@ -4419,25 +4303,31 @@
           "sample_value": "self"
         },
         "$.note_to_payer": {
-          "populated_on": 1,
+          "populated_on": 2,
           "present_empty_on": 0,
-          "of": 1,
-          "occurrences": 1,
+          "of": 3,
+          "occurrences": 2,
           "populated_on_labels": [
-            "refund-partial"
+            "refund-partial",
+            "refund-dispute-completed"
           ],
           "empty_on_labels": [],
-          "absent_on_labels": [],
+          "absent_on_labels": [
+            "refund-dispute-failed"
+          ],
           "json_type": "string",
-          "sample_value": "ReckonAI phase-0b partial refund fixture"
+          "sample_value": "ReckonAI phase-0b partial refund fixture",
+          "condition": "populated only on: refund-partial, refund-dispute-completed"
         },
         "$.payer": {
-          "populated_on": 1,
+          "populated_on": 3,
           "present_empty_on": 0,
-          "of": 1,
-          "occurrences": 1,
+          "of": 3,
+          "occurrences": 3,
           "populated_on_labels": [
-            "refund-partial"
+            "refund-partial",
+            "refund-dispute-completed",
+            "refund-dispute-failed"
           ],
           "empty_on_labels": [],
           "absent_on_labels": [],
@@ -4445,12 +4335,14 @@
           "sample_value": null
         },
         "$.payer.email_address": {
-          "populated_on": 1,
+          "populated_on": 3,
           "present_empty_on": 0,
-          "of": 1,
-          "occurrences": 1,
+          "of": 3,
+          "occurrences": 3,
           "populated_on_labels": [
-            "refund-partial"
+            "refund-partial",
+            "refund-dispute-completed",
+            "refund-dispute-failed"
           ],
           "empty_on_labels": [],
           "absent_on_labels": [],
@@ -4458,12 +4350,14 @@
           "sample_value": "<redacted:pii>"
         },
         "$.payer.merchant_id": {
-          "populated_on": 1,
+          "populated_on": 3,
           "present_empty_on": 0,
-          "of": 1,
-          "occurrences": 1,
+          "of": 3,
+          "occurrences": 3,
           "populated_on_labels": [
-            "refund-partial"
+            "refund-partial",
+            "refund-dispute-completed",
+            "refund-dispute-failed"
           ],
           "empty_on_labels": [],
           "absent_on_labels": [],
@@ -4471,12 +4365,14 @@
           "sample_value": "<redacted:id>"
         },
         "$.seller_payable_breakdown": {
-          "populated_on": 1,
+          "populated_on": 3,
           "present_empty_on": 0,
-          "of": 1,
-          "occurrences": 1,
+          "of": 3,
+          "occurrences": 3,
           "populated_on_labels": [
-            "refund-partial"
+            "refund-partial",
+            "refund-dispute-completed",
+            "refund-dispute-failed"
           ],
           "empty_on_labels": [],
           "absent_on_labels": [],
@@ -4484,12 +4380,14 @@
           "sample_value": null
         },
         "$.seller_payable_breakdown.gross_amount": {
-          "populated_on": 1,
+          "populated_on": 3,
           "present_empty_on": 0,
-          "of": 1,
-          "occurrences": 1,
+          "of": 3,
+          "occurrences": 3,
           "populated_on_labels": [
-            "refund-partial"
+            "refund-partial",
+            "refund-dispute-completed",
+            "refund-dispute-failed"
           ],
           "empty_on_labels": [],
           "absent_on_labels": [],
@@ -4498,12 +4396,14 @@
           "money_envelope": "currency_code"
         },
         "$.seller_payable_breakdown.gross_amount.currency_code": {
-          "populated_on": 1,
+          "populated_on": 3,
           "present_empty_on": 0,
-          "of": 1,
-          "occurrences": 1,
+          "of": 3,
+          "occurrences": 3,
           "populated_on_labels": [
-            "refund-partial"
+            "refund-partial",
+            "refund-dispute-completed",
+            "refund-dispute-failed"
           ],
           "empty_on_labels": [],
           "absent_on_labels": [],
@@ -4511,12 +4411,14 @@
           "sample_value": "USD"
         },
         "$.seller_payable_breakdown.gross_amount.value": {
-          "populated_on": 1,
+          "populated_on": 3,
           "present_empty_on": 0,
-          "of": 1,
-          "occurrences": 1,
+          "of": 3,
+          "occurrences": 3,
           "populated_on_labels": [
-            "refund-partial"
+            "refund-partial",
+            "refund-dispute-completed",
+            "refund-dispute-failed"
           ],
           "empty_on_labels": [],
           "absent_on_labels": [],
@@ -4524,12 +4426,14 @@
           "sample_value": "30.00"
         },
         "$.seller_payable_breakdown.net_amount": {
-          "populated_on": 1,
+          "populated_on": 3,
           "present_empty_on": 0,
-          "of": 1,
-          "occurrences": 1,
+          "of": 3,
+          "occurrences": 3,
           "populated_on_labels": [
-            "refund-partial"
+            "refund-partial",
+            "refund-dispute-completed",
+            "refund-dispute-failed"
           ],
           "empty_on_labels": [],
           "absent_on_labels": [],
@@ -4538,12 +4442,14 @@
           "money_envelope": "currency_code"
         },
         "$.seller_payable_breakdown.net_amount.currency_code": {
-          "populated_on": 1,
+          "populated_on": 3,
           "present_empty_on": 0,
-          "of": 1,
-          "occurrences": 1,
+          "of": 3,
+          "occurrences": 3,
           "populated_on_labels": [
-            "refund-partial"
+            "refund-partial",
+            "refund-dispute-completed",
+            "refund-dispute-failed"
           ],
           "empty_on_labels": [],
           "absent_on_labels": [],
@@ -4551,12 +4457,14 @@
           "sample_value": "USD"
         },
         "$.seller_payable_breakdown.net_amount.value": {
-          "populated_on": 1,
+          "populated_on": 3,
           "present_empty_on": 0,
-          "of": 1,
-          "occurrences": 1,
+          "of": 3,
+          "occurrences": 3,
           "populated_on_labels": [
-            "refund-partial"
+            "refund-partial",
+            "refund-dispute-completed",
+            "refund-dispute-failed"
           ],
           "empty_on_labels": [],
           "absent_on_labels": [],
@@ -4564,12 +4472,14 @@
           "sample_value": "27.00"
         },
         "$.seller_payable_breakdown.paypal_fee": {
-          "populated_on": 1,
+          "populated_on": 3,
           "present_empty_on": 0,
-          "of": 1,
-          "occurrences": 1,
+          "of": 3,
+          "occurrences": 3,
           "populated_on_labels": [
-            "refund-partial"
+            "refund-partial",
+            "refund-dispute-completed",
+            "refund-dispute-failed"
           ],
           "empty_on_labels": [],
           "absent_on_labels": [],
@@ -4578,12 +4488,14 @@
           "money_envelope": "currency_code"
         },
         "$.seller_payable_breakdown.paypal_fee.currency_code": {
-          "populated_on": 1,
+          "populated_on": 3,
           "present_empty_on": 0,
-          "of": 1,
-          "occurrences": 1,
+          "of": 3,
+          "occurrences": 3,
           "populated_on_labels": [
-            "refund-partial"
+            "refund-partial",
+            "refund-dispute-completed",
+            "refund-dispute-failed"
           ],
           "empty_on_labels": [],
           "absent_on_labels": [],
@@ -4591,12 +4503,14 @@
           "sample_value": "USD"
         },
         "$.seller_payable_breakdown.paypal_fee.value": {
-          "populated_on": 1,
+          "populated_on": 3,
           "present_empty_on": 0,
-          "of": 1,
-          "occurrences": 1,
+          "of": 3,
+          "occurrences": 3,
           "populated_on_labels": [
-            "refund-partial"
+            "refund-partial",
+            "refund-dispute-completed",
+            "refund-dispute-failed"
           ],
           "empty_on_labels": [],
           "absent_on_labels": [],
@@ -4604,12 +4518,14 @@
           "sample_value": "0.00"
         },
         "$.seller_payable_breakdown.platform_fees": {
-          "populated_on": 1,
+          "populated_on": 3,
           "present_empty_on": 0,
-          "of": 1,
-          "occurrences": 1,
+          "of": 3,
+          "occurrences": 3,
           "populated_on_labels": [
-            "refund-partial"
+            "refund-partial",
+            "refund-dispute-completed",
+            "refund-dispute-failed"
           ],
           "empty_on_labels": [],
           "absent_on_labels": [],
@@ -4617,12 +4533,14 @@
           "sample_value": null
         },
         "$.seller_payable_breakdown.platform_fees[]": {
-          "populated_on": 1,
+          "populated_on": 3,
           "present_empty_on": 0,
-          "of": 1,
-          "occurrences": 1,
+          "of": 3,
+          "occurrences": 3,
           "populated_on_labels": [
-            "refund-partial"
+            "refund-partial",
+            "refund-dispute-completed",
+            "refund-dispute-failed"
           ],
           "empty_on_labels": [],
           "absent_on_labels": [],
@@ -4630,12 +4548,14 @@
           "sample_value": null
         },
         "$.seller_payable_breakdown.platform_fees[].amount": {
-          "populated_on": 1,
+          "populated_on": 3,
           "present_empty_on": 0,
-          "of": 1,
-          "occurrences": 1,
+          "of": 3,
+          "occurrences": 3,
           "populated_on_labels": [
-            "refund-partial"
+            "refund-partial",
+            "refund-dispute-completed",
+            "refund-dispute-failed"
           ],
           "empty_on_labels": [],
           "absent_on_labels": [],
@@ -4644,12 +4564,14 @@
           "money_envelope": "currency_code"
         },
         "$.seller_payable_breakdown.platform_fees[].amount.currency_code": {
-          "populated_on": 1,
+          "populated_on": 3,
           "present_empty_on": 0,
-          "of": 1,
-          "occurrences": 1,
+          "of": 3,
+          "occurrences": 3,
           "populated_on_labels": [
-            "refund-partial"
+            "refund-partial",
+            "refund-dispute-completed",
+            "refund-dispute-failed"
           ],
           "empty_on_labels": [],
           "absent_on_labels": [],
@@ -4657,12 +4579,14 @@
           "sample_value": "USD"
         },
         "$.seller_payable_breakdown.platform_fees[].amount.value": {
-          "populated_on": 1,
+          "populated_on": 3,
           "present_empty_on": 0,
-          "of": 1,
-          "occurrences": 1,
+          "of": 3,
+          "occurrences": 3,
           "populated_on_labels": [
-            "refund-partial"
+            "refund-partial",
+            "refund-dispute-completed",
+            "refund-dispute-failed"
           ],
           "empty_on_labels": [],
           "absent_on_labels": [],
@@ -4670,12 +4594,14 @@
           "sample_value": "3.00"
         },
         "$.seller_payable_breakdown.total_refunded_amount": {
-          "populated_on": 1,
+          "populated_on": 3,
           "present_empty_on": 0,
-          "of": 1,
-          "occurrences": 1,
+          "of": 3,
+          "occurrences": 3,
           "populated_on_labels": [
-            "refund-partial"
+            "refund-partial",
+            "refund-dispute-completed",
+            "refund-dispute-failed"
           ],
           "empty_on_labels": [],
           "absent_on_labels": [],
@@ -4684,12 +4610,14 @@
           "money_envelope": "currency_code"
         },
         "$.seller_payable_breakdown.total_refunded_amount.currency_code": {
-          "populated_on": 1,
+          "populated_on": 3,
           "present_empty_on": 0,
-          "of": 1,
-          "occurrences": 1,
+          "of": 3,
+          "occurrences": 3,
           "populated_on_labels": [
-            "refund-partial"
+            "refund-partial",
+            "refund-dispute-completed",
+            "refund-dispute-failed"
           ],
           "empty_on_labels": [],
           "absent_on_labels": [],
@@ -4697,12 +4625,14 @@
           "sample_value": "USD"
         },
         "$.seller_payable_breakdown.total_refunded_amount.value": {
-          "populated_on": 1,
+          "populated_on": 3,
           "present_empty_on": 0,
-          "of": 1,
-          "occurrences": 1,
+          "of": 3,
+          "occurrences": 3,
           "populated_on_labels": [
-            "refund-partial"
+            "refund-partial",
+            "refund-dispute-completed",
+            "refund-dispute-failed"
           ],
           "empty_on_labels": [],
           "absent_on_labels": [],
@@ -4710,12 +4640,14 @@
           "sample_value": "30.00"
         },
         "$.status": {
-          "populated_on": 1,
+          "populated_on": 3,
           "present_empty_on": 0,
-          "of": 1,
-          "occurrences": 1,
+          "of": 3,
+          "occurrences": 3,
           "populated_on_labels": [
-            "refund-partial"
+            "refund-partial",
+            "refund-dispute-completed",
+            "refund-dispute-failed"
           ],
           "empty_on_labels": [],
           "absent_on_labels": [],
@@ -4723,12 +4655,14 @@
           "sample_value": "COMPLETED"
         },
         "$.update_time": {
-          "populated_on": 1,
+          "populated_on": 3,
           "present_empty_on": 0,
-          "of": 1,
-          "occurrences": 1,
+          "of": 3,
+          "occurrences": 3,
           "populated_on_labels": [
-            "refund-partial"
+            "refund-partial",
+            "refund-dispute-completed",
+            "refund-dispute-failed"
           ],
           "empty_on_labels": [],
           "absent_on_labels": [],
@@ -4787,7 +4721,7 @@
           "empty_on_labels": [],
           "absent_on_labels": [],
           "json_type": "string",
-          "sample_value": "2026-11-07T07:29:59Z"
+          "sample_value": "2026-11-07T07:59:59Z"
         },
         "$.last_refreshed_datetime": {
           "populated_on": 1,
@@ -4800,7 +4734,7 @@
           "empty_on_labels": [],
           "absent_on_labels": [],
           "json_type": "string",
-          "sample_value": "2026-11-07T07:29:59Z"
+          "sample_value": "2026-11-07T07:59:59Z"
         },
         "$.links": {
           "populated_on": 1,
@@ -4852,7 +4786,7 @@
           "empty_on_labels": [],
           "absent_on_labels": [],
           "json_type": "string",
-          "sample_value": "https://api.sandbox.paypal.com/v1/reporting/transactions?fields=all&end_date=2026-11-07T09%3A02%3A11-0000&start_date=2026-10-10T09%3A02%3A11-0000&page_size=100&page=1"
+          "sample_value": "https://api.sandbox.paypal.com/v1/reporting/transactions?start_date=2026-10-10T09%3A40%3A17-0000&end_date=2026-11-07T09%3A40%3A17-0000&fields=all&page_size=100&page=1"
         },
         "$.links[].method": {
           "populated_on": 1,
@@ -4904,7 +4838,7 @@
           "empty_on_labels": [],
           "absent_on_labels": [],
           "json_type": "string",
-          "sample_value": "2026-10-10T09:02:11Z"
+          "sample_value": "2026-10-10T09:40:17Z"
         },
         "$.total_items": {
           "populated_on": 1,

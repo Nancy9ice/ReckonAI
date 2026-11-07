@@ -6,7 +6,9 @@
     "redacted": true,
     "api_base": "https://api-m.sandbox.paypal.com",
     "sample_labels": [
-      "refund-partial"
+      "refund-partial",
+      "refund-dispute-completed",
+      "refund-dispute-failed"
     ],
     "redaction_note": "Identifiers and buyer PII replaced with <redacted:id> and <redacted:pii>. Amounts, currencies, rates, fees, timestamps, statuses and error codes are kept: they are the evidence (plan.md group 3 step 3). Unredacted fixture ids are in fixtures.md."
   },
@@ -16,7 +18,7 @@
       "note": "refund linkage and partial shape",
       "request_path": "/v2/payments/refunds/{id}",
       "http_status": 200,
-      "fetched_at": "2026-11-07T09:02:10.385758+00:00",
+      "fetched_at": "2026-11-07T09:40:14.616475+00:00",
       "read_as": "seller:C24NAWELTTHXJ",
       "status": "ok",
       "body": {
@@ -113,6 +115,217 @@
           "currency": "USD",
           "currency_key": "currency_code",
           "amount": "30.00",
+          "raw_json_type": "str"
+        }
+      ]
+    },
+    {
+      "record_type": "refunds",
+      "note": "refund linkage and partial shape",
+      "request_path": "/v2/payments/refunds/{id}",
+      "http_status": 200,
+      "fetched_at": "2026-11-07T09:40:15.228411+00:00",
+      "read_as": "seller:C24NAWELTTHXJ",
+      "status": "ok",
+      "body": {
+        "id": "<redacted:id>",
+        "amount": {
+          "currency_code": "USD",
+          "value": "100.00"
+        },
+        "note_to_payer": "100.0 USD; 2026-11-07 Credit has been processed and claim is now closed. Please refer Dispute ID PP-R-QKS-10196968. Thank you.",
+        "seller_payable_breakdown": {
+          "gross_amount": {
+            "currency_code": "USD",
+            "value": "100.00"
+          },
+          "paypal_fee": {
+            "currency_code": "USD",
+            "value": "0.00"
+          },
+          "platform_fees": [
+            {
+              "amount": {
+                "currency_code": "USD",
+                "value": "10.00"
+              }
+            }
+          ],
+          "net_amount": {
+            "currency_code": "USD",
+            "value": "90.00"
+          },
+          "total_refunded_amount": {
+            "currency_code": "USD",
+            "value": "100.00"
+          }
+        },
+        "status": "COMPLETED",
+        "create_time": "2026-11-07T01:38:43-08:00",
+        "update_time": "2026-11-07T01:38:43-08:00",
+        "payer": {
+          "email_address": "<redacted:pii>",
+          "merchant_id": "<redacted:id>"
+        },
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/refunds/{id}",
+            "rel": "self",
+            "method": "GET"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/captures/{id}",
+            "rel": "up",
+            "method": "GET"
+          }
+        ]
+      },
+      "money_values": [
+        {
+          "path": "$refunds.amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "100.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$refunds.seller_payable_breakdown.gross_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "100.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$refunds.seller_payable_breakdown.paypal_fee",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "0.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$refunds.seller_payable_breakdown.platform_fees[0].amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "10.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$refunds.seller_payable_breakdown.net_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "90.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$refunds.seller_payable_breakdown.total_refunded_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "100.00",
+          "raw_json_type": "str"
+        }
+      ]
+    },
+    {
+      "record_type": "refunds",
+      "note": "refund linkage and partial shape",
+      "request_path": "/v2/payments/refunds/{id}",
+      "http_status": 200,
+      "fetched_at": "2026-11-07T09:40:15.837502+00:00",
+      "read_as": "seller:C24NAWELTTHXJ",
+      "status": "ok",
+      "body": {
+        "id": "<redacted:id>",
+        "amount": {
+          "currency_code": "USD",
+          "value": "86.02"
+        },
+        "seller_payable_breakdown": {
+          "gross_amount": {
+            "currency_code": "USD",
+            "value": "86.02"
+          },
+          "paypal_fee": {
+            "currency_code": "USD",
+            "value": "0.00"
+          },
+          "platform_fees": [
+            {
+              "amount": {
+                "currency_code": "USD",
+                "value": "0.00"
+              }
+            }
+          ],
+          "net_amount": {
+            "currency_code": "USD",
+            "value": "86.02"
+          },
+          "total_refunded_amount": {
+            "currency_code": "USD",
+            "value": "100.00"
+          }
+        },
+        "status": "FAILED",
+        "create_time": "2026-11-07T00:58:33-08:00",
+        "update_time": "2026-11-07T01:38:43-08:00",
+        "payer": {
+          "email_address": "<redacted:pii>",
+          "merchant_id": "<redacted:id>"
+        },
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/refunds/{id}",
+            "rel": "self",
+            "method": "GET"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/captures/{id}",
+            "rel": "up",
+            "method": "GET"
+          }
+        ]
+      },
+      "money_values": [
+        {
+          "path": "$refunds.amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "86.02",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$refunds.seller_payable_breakdown.gross_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "86.02",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$refunds.seller_payable_breakdown.paypal_fee",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "0.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$refunds.seller_payable_breakdown.platform_fees[0].amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "0.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$refunds.seller_payable_breakdown.net_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "86.02",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$refunds.seller_payable_breakdown.total_refunded_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "100.00",
           "raw_json_type": "str"
         }
       ]

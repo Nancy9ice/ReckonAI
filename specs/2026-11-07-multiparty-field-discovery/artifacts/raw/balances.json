@@ -16,7 +16,7 @@
       "note": "settlement currency and balances",
       "request_path": "/v1/reporting/balances",
       "http_status": 200,
-      "fetched_at": "2026-11-07T09:02:13.056540+00:00",
+      "fetched_at": "2026-11-07T09:40:18.718383+00:00",
       "read_as": "self",
       "status": "ok",
       "body": {
@@ -53,8 +53,8 @@
           }
         ],
         "account_id": "<redacted:id>",
-        "as_of_time": "2026-11-07T07:29:59Z",
-        "last_refresh_time": "2026-11-07T07:29:59Z"
+        "as_of_time": "2026-11-07T07:59:59Z",
+        "last_refresh_time": "2026-11-07T07:59:59Z"
       },
       "money_values": [
         {

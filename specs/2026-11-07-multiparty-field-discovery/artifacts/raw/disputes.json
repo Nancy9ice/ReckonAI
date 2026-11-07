@@ -16,7 +16,7 @@
       "note": "dispute list, lifecycle states",
       "request_path": "/v1/customer/disputes",
       "http_status": 200,
-      "fetched_at": "2026-11-07T09:02:11.950336+00:00",
+      "fetched_at": "2026-11-07T09:40:17.747329+00:00",
       "read_as": "self",
       "status": "ok",
       "body": {
@@ -24,7 +24,7 @@
           {
             "dispute_id": "<redacted:id>",
             "create_time": "2026-11-07T08:55:17.000Z",
-            "update_time": "2026-11-07T08:58:43.000Z",
+            "update_time": "2026-11-07T09:39:34.000Z",
             "disputed_transactions": [
               {
                 "buyer_transaction_id": "<redacted:id>",
@@ -37,15 +37,15 @@
               }
             ],
             "reason": "MERCHANDISE_OR_SERVICE_NOT_RECEIVED",
-            "status": "WAITING_FOR_SELLER_RESPONSE",
-            "dispute_state": "REQUIRED_ACTION",
+            "status": "UNDER_REVIEW",
+            "dispute_state": "UNDER_PAYPAL_REVIEW",
             "dispute_amount": {
               "currency_code": "USD",
               "value": "100.00"
             },
             "dispute_life_cycle_stage": "INQUIRY",
             "dispute_channel": "INTERNAL",
-            "seller_response_due_date": "2026-11-27T08:55:17.000Z",
+            "outcome": "LOST",
             "links": [
               {
                 "href": "https://api-m.sandbox.paypal.com/v1/customer/disputes/PP-R-QKS-10196968",

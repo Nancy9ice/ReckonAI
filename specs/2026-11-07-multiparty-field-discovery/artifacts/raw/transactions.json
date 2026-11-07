@@ -16,7 +16,7 @@
       "note": "transaction search, fee breakdown",
       "request_path": "/v1/reporting/transactions",
       "http_status": 200,
-      "fetched_at": "2026-11-07T09:02:12.486688+00:00",
+      "fetched_at": "2026-11-07T09:40:18.248176+00:00",
       "read_as": "self",
       "status": "ok",
       "body": {
@@ -658,15 +658,15 @@
           }
         ],
         "account_number": "<redacted:id>",
-        "start_date": "2026-10-10T09:02:11Z",
-        "end_date": "2026-11-07T07:29:59Z",
-        "last_refreshed_datetime": "2026-11-07T07:29:59Z",
+        "start_date": "2026-10-10T09:40:17Z",
+        "end_date": "2026-11-07T07:59:59Z",
+        "last_refreshed_datetime": "2026-11-07T07:59:59Z",
         "page": 1,
         "total_items": 13,
         "total_pages": 1,
         "links": [
           {
-            "href": "https://api.sandbox.paypal.com/v1/reporting/transactions?fields=all&end_date=2026-11-07T09%3A02%3A11-0000&start_date=2026-10-10T09%3A02%3A11-0000&page_size=100&page=1",
+            "href": "https://api.sandbox.paypal.com/v1/reporting/transactions?start_date=2026-10-10T09%3A40%3A17-0000&end_date=2026-11-07T09%3A40%3A17-0000&fields=all&page_size=100&page=1",
             "rel": "self",
             "method": "GET",
             "encType": "application/json"

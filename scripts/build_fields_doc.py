@@ -144,7 +144,11 @@ CANONICAL: list[dict[str, Any]] = [
     {"entity": "capture", "field": "paypal_fee",
      "sources": [("captures", "$.seller_receivable_breakdown.paypal_fee.value")],
      "note": "**Phase 0 recorded this `absent`; under multiparty it is there.** "
-     "3.98 on 100.00, identical across card-in-wallet and balance funding."},
+     "3.98 on 100.00, identical across card-in-wallet and balance funding. "
+     "**But the whole breakdown disappears while a capture is `PENDING`**, which "
+     "an open dispute causes - observed, then observed returning once the "
+     "dispute resolved. Capture these values at ingestion; a later read can "
+     "return nothing, and that absence is not evidence of no fee."},
     {"entity": "capture", "field": "settlement_amount",
      "sources": [("captures", "$.seller_receivable_breakdown.receivable_amount.value")],
      "note": "Only where a conversion occurred. **Converts the net, not the "
@@ -173,9 +177,12 @@ CANONICAL: list[dict[str, Any]] = [
      "the order does not name one, and PayPal fills it in explicitly."},
     {"entity": "platform_fee", "field": "reversal_on_refund",
      "sources": [("refunds", "$.seller_payable_breakdown.platform_fees[].amount.value")],
-     "note": "**Reversed automatically and pro rata.** A 30.00 refund of a "
-     "100.00 capture returned 3.00 of the 10.00 commission, with no instruction "
-     "sent. Overriding the amount needs an account enablement we do not have "
+     "note": "**Reversed automatically and pro rata**, on an ordinary refund and "
+     "on a lost dispute alike. A 30.00 refund of a 100.00 capture returned 3.00 "
+     "of the 10.00 commission; accepting a dispute claim returned the full "
+     "10.00. So the marketplace does not keep commission on a reversed "
+     "transaction, and Phase 10's expected position must assume the reversal. "
+     "Overriding the amount needs an account enablement we do not have "
      "(`PLATFORM_FEE_NOT_ENABLED`)."},
     {"entity": "platform_fee", "field": "settlement_reference", "sources": [],
      "note": "Partner fees settle as a next-day consolidated bank payment. No "
@@ -343,6 +350,15 @@ DECISIONS: dict[tuple[str, str], dict[str, Any]] = {
     ("fx_conversion", "is_derived"): {
         "kind": "connector_metadata", "is_derived": False,
         "text": "Our own provenance flag; the mechanism the decisions above rely on.",
+    },
+    ("dispute", "seller_response_due_date"): {
+        "kind": "no_action", "is_derived": False,
+        "text": "Present while a seller response is outstanding - observed at "
+        "`WAITING_FOR_SELLER_RESPONSE` with a date 20 days out - and gone once "
+        "the seller accepted the claim, because nothing is due any more. The "
+        "absence is correct, and the field is what `mission.md` P4's "
+        "awaiting-evidence state keys on while it lasts. Phase 3 must make it "
+        "nullable and must not read its absence as a missed deadline.",
     },
     ("platform_fee", "settlement_reference"): {
         "kind": "limitation", "is_derived": False,

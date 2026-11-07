@@ -1736,3 +1736,136 @@ Phases 2 and 3 built on it.
 Everything in Groups 1 to 6 still stands; the declared column is
 architecture-independent and so are most of the observed findings. What needs
 re-observation is listed in `multiparty-direction.md` §9.
+
+---
+
+## Group 7 — validation checks, 2026-11-07
+
+### What was produced
+
+`scripts/check_fields_doc.py`, implementing C2 through C9 of `validation.md`.
+All pass, including C1 (`probe_paypal.py --help` with no `pyproject.toml`).
+
+```bash
+uv run scripts/check_fields_doc.py --all
+uv run scripts/check_fields_doc.py --reproduce /path/to/recheck.json
+```
+
+**Each check was verified able to fail.** A gate that cannot fail certifies
+nothing, so twelve fault classes were injected into copies of the document and
+artifacts, and every one was detected: a stripped column (C3), a deleted
+canonical row (C4), an unreliable row with its condition removed and an
+`unanswered` row with its pending entry removed (C5), a verdict upgraded past
+its evidence and a tampered observed count (C6), a deleted gap row (C7), a
+missing decision and a `derive` decision not flagged `is_derived` (C8), a
+removed provenance block and a field keyed on the Python attribute name (C8a),
+and an unredacted email plus a JSON float (C9).
+
+One miss on the first run turned out to be a bug in the test, not the checker —
+the mutation regex omitted the entity prefix the pending table uses, so it
+silently changed nothing. Fixed by asserting that every mutation actually
+applies, which is the lesson: a negative test that does not verify its own
+premise is worth nothing either.
+
+Presence parsing in the checker is a deliberate second implementation rather
+than an import of `derive_observed.py`, so a bug in the deriver cannot hide
+behind the checker agreeing with it.
+
+### C2 found that PayPal's responses change over time
+
+The first run of C2 failed, and it was right to. Re-probing the same fixtures a
+day later gave different presence in **both** directions:
+
+| Record type | Path | 2026-11-06 | 2026-11-07 |
+|---|---|---|---|
+| captures | `$.network_transaction_reference.*` | populated | **gone** |
+| orders | `$.purchase_units[].supplementary_data.risk.risk_level_indicator` | populated | **gone** |
+| transactions | `cart_info`, `shipping_info`, `payer_info.payer_name`, and 39 more | absent | **populated** |
+
+**Two fields that were observed are no longer returned for the same records.**
+One of them, `risk_level_indicator`, was the headline of G1 — a field PayPal
+returns that neither of its published contracts declares. It is now also a field
+that PayPal stops returning. A single observation establishes that a field *can*
+arrive, never that it will.
+
+`observed.json` now aggregates **both sessions**, with sample labels carrying an
+`@date` suffix, so those fields read `1/4` and `2/4` with the condition naming
+the session that saw them. That is the honest verdict for a field that comes and
+goes, and it preserves the day-one evidence instead of overwriting it.
+
+C2 itself was refined, because with multi-session evidence a field the artifact
+already records as varying will differ in any single re-probe by definition. It
+now fails only on a real regression — a path recorded populated on *every*
+sample that is now absent, or one recorded never populated that is now
+populated — and reports the varying paths rather than flagging them. See the
+`validation.md` C2 refinement.
+
+### Transaction Search caught up, and it carries a ledger view the v2 endpoints do not
+
+The reporting snapshot moved from `2026-11-06T01:29:59Z` to
+`2026-11-07T00:59:59Z` and from 1 transaction to 13. So the lag recorded in F4
+is real but bounded: **roughly a day, not unbounded.** Phase 8's backfill and
+Phase 9's event ingestion can treat reporting as eventually consistent with a
+day-scale horizon, and the v2 resource endpoints as authoritative for anything
+recent.
+
+What it revealed is more valuable than the timing.
+
+**1. A currency conversion is a pair of provider ledger events.** The
+cross-currency capture produced two `T0200` entries, linked to it by
+`paypal_reference_id`:
+
+| Event | Amount | `transaction_initiation_date` |
+|---|---|---|
+| `T0200` | EUR `-95.50` | `2026-11-06T03:04:17Z` |
+| `T0200` | USD `104.05` | `2026-11-06T03:04:17Z` |
+
+Double-entry, with the source debited and the target credited, and **each
+carries its own timestamp**.
+
+**This reopens `fx_conversion.timestamp`.** G3 established that no conversion
+*structure* in PayPal's contract declares a temporal field, and that remains
+true of every v2 resource endpoint. But the reporting ledger stamps the
+conversion *event*, which is provider evidence rather than a derivation. The
+decision changes from "derive from the capture's `create_time`" to "read the
+`T0200` event's `transaction_initiation_date`, falling back to a derived value
+flagged `is_derived` where reporting has not caught up". The canonical field
+will carry a provider value sometimes and a derived one otherwise — which is
+precisely the distinction `is_derived` exists to record.
+
+One honest caveat: on this fixture the `T0200` date is `03:04:17Z`, identical to
+the capture's `create_time`. So we cannot yet show the two ever differ, only
+that one is stamped on the conversion and the other is borrowed from the
+capture. Under [[mission]] P3 that distinction is the whole point.
+
+**2. The fee questions are now independently corroborated.** Transaction Search
+reports `fee_amount` where a fee exists and omits it where none was charged, and
+it does both within one response:
+
+| Event | What it is | `fee_amount` |
+|---|---|---|
+| `T0005` | the two captures | `null` |
+| `T0200` | the two conversion legs | `null` |
+| `T0001` | the two payout items | `-0.25` each |
+
+So the reporting API demonstrably reports fees, and reported none for the
+captures or the conversion. That makes "no fee was assessed in this sandbox" far
+more likely than "PayPal withholds capture fees", and it turns
+`fx_conversion.fee` from "not declared anywhere" into "not declared **and**
+not charged". Both decisions were updated to cite it. Neither verdict changed,
+and both remain sandbox-only.
+
+**3. Reporting links back to the v2 resources.** The `T0005` event's
+`transaction_id` **is** the capture id, and the `T0200` events carry the capture
+id as `paypal_reference_id` with `paypal_reference_id_type: TXN`. So the ledger
+view and the resource view are joinable on provider-supplied identifiers, which
+Phase 7 needs and which no amount of reading the contract would have shown.
+
+### For Phase 0b and Phase 3
+
+The reporting ledger deserves canonical modelling in its own right. It is the
+only source observed to carry a conversion timestamp, a conversion as discrete
+signed entries, and a per-event fee — and under the multiparty direction it is
+also the most likely place to find platform fee and disbursement events. It was
+treated in Groups 1 to 6 as a secondary, stale source; that was correct at the
+time and is no longer.

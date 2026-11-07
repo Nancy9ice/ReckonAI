@@ -644,18 +644,32 @@ DECISIONS: dict[tuple[str, str], dict[str, Any]] = {
         "**Re-verify against production before Phase 10 treats this as "
         "settled** - the migration guide claims v2 gives \"full fee transparency "
         "on every capture\", which makes this omission anomalous rather than "
-        "expected.",
+        "expected. **Corroborated 2026-11-07:** once Transaction Search caught "
+        "up, the `T0005` capture events carried `fee_amount: null` while the "
+        "`T0001` payout items in the same response carried `-0.25`. The "
+        "reporting API reports fees where they exist and reported none for "
+        "these captures, which makes \"no fee was assessed in this sandbox\" far "
+        "more likely than \"PayPal withholds capture fees\" - but it is still "
+        "sandbox-only.",
     },
     ("fx_conversion", "timestamp"): {
         "kind": "derive",
         "is_derived": True,
-        "text": "Derive from the conversion-bearing capture's `create_time` and "
-        "write it with **`is_derived` true**. It may never be presented as a "
-        "PayPal-supplied conversion time: PayPal declares no temporal field on "
-        "any of its four conversion structures, so we cannot show the rate was "
-        "struck at that instant - only that the capture carrying it was created "
-        "then. Any agent explanation citing a conversion time must cite it as "
-        "derived (`mission.md` P3).",
+        "text": "**A provider source exists after all, found 2026-11-07 once "
+        "Transaction Search caught up.** The reporting ledger records a "
+        "conversion as a pair of `T0200` events - one debiting the source "
+        "currency, one crediting the target - linked to the capture by "
+        "`paypal_reference_id`, each carrying its own "
+        "`transaction_initiation_date`. That is a PayPal-stamped time on the "
+        "conversion event itself, so **prefer it**. It is late and conditional: "
+        "it needs the reporting API, a filter on the `T0200` event code, and "
+        "the reporting lag to have elapsed - over 21 hours on our fixtures. "
+        "Where reporting has not caught up, fall back to the capture's "
+        "`create_time` with **`is_derived` true**. The canonical field will "
+        "therefore carry a provider value sometimes and a derived one "
+        "otherwise, which is exactly the distinction `is_derived` exists to "
+        "record. No v2 resource endpoint carries it, which is why the verdict "
+        "above remains `absent`.",
     },
     ("fx_conversion", "fee"): {
         "kind": "limitation",
@@ -667,9 +681,13 @@ DECISIONS: dict[tuple[str, str], dict[str, Any]] = {
         "arithmetic residue a fee**: gross times rate minus `receivable_amount` "
         "came to `-0.00492989235221950` on our fixture, which is PayPal rounding "
         "the settlement to the cent. Recording that as a conversion fee would be "
-        "fabricating a financial value. Consequence: readme section 13 "
-        "Scenario 3 narrows to an incorrect conversion **value** and cannot "
-        "cover an incorrect conversion **fee**.",
+        "fabricating a financial value. **Independently corroborated "
+        "2026-11-07:** Transaction Search reports `fee_amount` where a fee "
+        "exists - `-0.25` on each payout item - and reports none on either "
+        "`T0200` conversion event, so the absence is now evidence that no "
+        "conversion fee was charged rather than merely that none is declared. "
+        "Consequence: readme section 13 Scenario 3 narrows to an incorrect "
+        "conversion **value** and cannot cover an incorrect conversion **fee**.",
     },
     ("fx_conversion", "provider"): {
         "kind": "connector_metadata",

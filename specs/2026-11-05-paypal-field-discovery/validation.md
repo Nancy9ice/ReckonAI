@@ -50,6 +50,28 @@ the committed `artifacts/observed.json`. Sample values and timestamps may
 differ; **presence must not**. This is what makes the observed column evidence
 rather than a claim (`requirements.md` D3).
 
+**Refined 2026-11-07, after the check first ran.** It found that PayPal's
+responses change over time: `network_transaction_reference` and
+`supplementary_data.risk.risk_level_indicator` were populated on 2026-11-06 and
+gone on 2026-11-07, and Transaction Search had caught up and now returned data
+it had not before. `observed.json` therefore aggregates more than one probe
+session, and a field it already records as varying between samples will differ
+in any single re-probe by definition.
+
+So the comparison is now specific about what counts as a regression:
+
+- A path recorded **populated on every sample** that is now absent **fails** —
+  that is the case which would invalidate a `present` verdict.
+- A path recorded **never populated** that is now populated **fails** — the
+  evidence has moved and the table understates PayPal.
+- A path already recorded as varying (`0 < populated_on < of`) is **not
+  compared**, and the count of such paths is reported. The document already
+  marks these `present-but-unreliable` and names the condition.
+
+A re-probe that legitimately finds new data is not a failed check — it is a
+reason to re-derive the artifacts and regenerate the table, which is what
+happened on 2026-11-07.
+
 ### C3 — Table structure
 
 ```bash
@@ -105,9 +127,20 @@ delivered one.
 uv run scripts/check_fields_doc.py --gap-section
 ```
 
-A declared-but-not-observed section exists. Every field in
-`declared.json` but absent from `observed.json` appears in it. If the set is
-genuinely empty, the section says so explicitly rather than being omitted.
+A declared-but-not-observed section exists. If the set is genuinely empty, the
+section says so explicitly rather than being omitted.
+
+**Scoped 2026-11-06, during Group 5.** This originally required *every* field in
+`declared.json` but absent from `observed.json`. The contract declares 1148
+paths against 300 observed, and the bulk of the difference is alternative
+payment methods and optional reporting blocks nested under objects that never
+appeared at all — listing them would bury the findings in noise.
+
+The check now requires every field **whose parent object was observed**: PayPal
+returned the enclosing structure and left this member out, which is the set
+where an absence carries information. The document must state the scoping
+explicitly so a reviewer can reject it, and the full difference stays derivable
+from the two artifacts.
 
 ### C8 — Absent fields carry decisions
 

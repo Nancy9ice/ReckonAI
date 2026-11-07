@@ -6,8 +6,10 @@
     "redacted": true,
     "api_base": "https://api-m.sandbox.paypal.com",
     "sample_labels": [
-      "order-same-currency",
-      "order-cross-currency"
+      "order-same-currency@2026-11-06",
+      "order-cross-currency@2026-11-06",
+      "order-same-currency@2026-11-07",
+      "order-cross-currency@2026-11-07"
     ],
     "redaction_note": "Identifiers and buyer PII replaced with <redacted:id> and <redacted:pii>. Amounts, currencies, rates, fees, timestamps, statuses and error codes are kept: they are the evidence (plan.md group 3 step 3). Unredacted fixture ids are in fixtures.md."
   },
@@ -347,6 +349,377 @@
         ],
         "create_time": "2026-11-06T03:04:17Z",
         "update_time": "2026-11-06T03:04:17Z",
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/checkout/orders/{id}",
+            "rel": "self",
+            "method": "GET"
+          }
+        ]
+      },
+      "money_values": [
+        {
+          "path": "$orders.purchase_units[0].amount",
+          "currency": "EUR",
+          "currency_key": "currency_code",
+          "amount": "95.50",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payments.captures[0].amount",
+          "currency": "EUR",
+          "currency_key": "currency_code",
+          "amount": "95.50",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payments.captures[0].seller_receivable_breakdown.gross_amount",
+          "currency": "EUR",
+          "currency_key": "currency_code",
+          "amount": "95.50",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payments.captures[0].seller_receivable_breakdown.net_amount",
+          "currency": "EUR",
+          "currency_key": "currency_code",
+          "amount": "95.50",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payments.captures[0].seller_receivable_breakdown.receivable_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "104.05",
+          "raw_json_type": "str"
+        }
+      ]
+    },
+    {
+      "record_type": "orders",
+      "note": "purchase units, payer, links",
+      "request_path": "/v2/checkout/orders/{id}",
+      "http_status": 200,
+      "fetched_at": "2026-11-07T02:53:07.603535+00:00",
+      "status": "ok",
+      "body": {
+        "id": "<redacted:id>",
+        "intent": "CAPTURE",
+        "status": "COMPLETED",
+        "payment_source": {
+          "card": {
+            "name": "<redacted:pii>",
+            "last_digits": "<redacted:pii>",
+            "expiry": "<redacted:pii>",
+            "brand": "VISA",
+            "type": "CREDIT",
+            "bin_details": {}
+          }
+        },
+        "purchase_units": [
+          {
+            "reference_id": "<redacted:id>",
+            "amount": {
+              "currency_code": "USD",
+              "value": "120.00"
+            },
+            "payee": {
+              "email_address": "<redacted:pii>",
+              "merchant_id": "<redacted:id>"
+            },
+            "description": "ReckonAI phase-0 fixture (same-currency)",
+            "soft_descriptor": "TEST STORE",
+            "supplementary_data": {},
+            "payments": {
+              "captures": [
+                {
+                  "id": "<redacted:id>",
+                  "status": "PARTIALLY_REFUNDED",
+                  "amount": {
+                    "currency_code": "USD",
+                    "value": "120.00"
+                  },
+                  "final_capture": true,
+                  "seller_protection": {
+                    "status": "NOT_ELIGIBLE"
+                  },
+                  "seller_receivable_breakdown": {
+                    "gross_amount": {
+                      "currency_code": "USD",
+                      "value": "120.00"
+                    },
+                    "net_amount": {
+                      "currency_code": "USD",
+                      "value": "120.00"
+                    }
+                  },
+                  "links": [
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/captures/{id}",
+                      "rel": "self",
+                      "method": "GET"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/captures/{id}/refund",
+                      "rel": "refund",
+                      "method": "POST"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/checkout/orders/{id}",
+                      "rel": "up",
+                      "method": "GET"
+                    }
+                  ],
+                  "create_time": "2026-11-06T03:04:12Z",
+                  "update_time": "2026-11-06T03:04:20Z",
+                  "network_transaction_reference": {
+                    "id": "<redacted:id>",
+                    "network": "VISA"
+                  },
+                  "processor_response": {
+                    "cvv_code": "M",
+                    "response_code": "0000"
+                  }
+                }
+              ],
+              "refunds": [
+                {
+                  "id": "<redacted:id>",
+                  "amount": {
+                    "currency_code": "USD",
+                    "value": "30.00"
+                  },
+                  "note_to_payer": "ReckonAI phase-0 partial refund fixture",
+                  "seller_payable_breakdown": {
+                    "gross_amount": {
+                      "currency_code": "USD",
+                      "value": "30.00"
+                    },
+                    "paypal_fee": {
+                      "currency_code": "USD",
+                      "value": "0.00"
+                    },
+                    "platform_fees": [
+                      {
+                        "amount": {
+                          "currency_code": "USD",
+                          "value": "0.00"
+                        }
+                      }
+                    ],
+                    "net_amount": {
+                      "currency_code": "USD",
+                      "value": "30.00"
+                    },
+                    "total_refunded_amount": {
+                      "currency_code": "USD",
+                      "value": "30.00"
+                    }
+                  },
+                  "status": "COMPLETED",
+                  "links": [
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/refunds/{id}",
+                      "rel": "self",
+                      "method": "GET"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/captures/{id}",
+                      "rel": "up",
+                      "method": "GET"
+                    }
+                  ],
+                  "create_time": "2026-11-05T19:04:20-08:00",
+                  "update_time": "2026-11-05T19:04:20-08:00"
+                }
+              ]
+            }
+          }
+        ],
+        "create_time": "2026-11-06T03:04:14Z",
+        "update_time": "2026-11-06T03:04:14Z",
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/checkout/orders/{id}",
+            "rel": "self",
+            "method": "GET"
+          }
+        ]
+      },
+      "money_values": [
+        {
+          "path": "$orders.purchase_units[0].amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "120.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payments.captures[0].amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "120.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payments.captures[0].seller_receivable_breakdown.gross_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "120.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payments.captures[0].seller_receivable_breakdown.net_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "120.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payments.refunds[0].amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "30.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payments.refunds[0].seller_payable_breakdown.gross_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "30.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payments.refunds[0].seller_payable_breakdown.paypal_fee",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "0.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payments.refunds[0].seller_payable_breakdown.platform_fees[0].amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "0.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payments.refunds[0].seller_payable_breakdown.net_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "30.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payments.refunds[0].seller_payable_breakdown.total_refunded_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "30.00",
+          "raw_json_type": "str"
+        }
+      ]
+    },
+    {
+      "record_type": "orders",
+      "note": "purchase units, payer, links",
+      "request_path": "/v2/checkout/orders/{id}",
+      "http_status": 200,
+      "fetched_at": "2026-11-07T02:53:08.446887+00:00",
+      "status": "ok",
+      "body": {
+        "id": "<redacted:id>",
+        "intent": "CAPTURE",
+        "status": "COMPLETED",
+        "payment_source": {
+          "card": {
+            "name": "<redacted:pii>",
+            "last_digits": "<redacted:pii>",
+            "expiry": "<redacted:pii>",
+            "brand": "VISA",
+            "type": "CREDIT",
+            "bin_details": {}
+          }
+        },
+        "purchase_units": [
+          {
+            "reference_id": "<redacted:id>",
+            "amount": {
+              "currency_code": "EUR",
+              "value": "95.50"
+            },
+            "payee": {
+              "email_address": "<redacted:pii>",
+              "merchant_id": "<redacted:id>"
+            },
+            "description": "ReckonAI phase-0 fixture (cross-currency)",
+            "soft_descriptor": "TEST STORE",
+            "supplementary_data": {},
+            "payments": {
+              "captures": [
+                {
+                  "id": "<redacted:id>",
+                  "status": "COMPLETED",
+                  "amount": {
+                    "currency_code": "EUR",
+                    "value": "95.50"
+                  },
+                  "final_capture": true,
+                  "seller_protection": {
+                    "status": "NOT_ELIGIBLE"
+                  },
+                  "seller_receivable_breakdown": {
+                    "gross_amount": {
+                      "currency_code": "EUR",
+                      "value": "95.50"
+                    },
+                    "net_amount": {
+                      "currency_code": "EUR",
+                      "value": "95.50"
+                    },
+                    "receivable_amount": {
+                      "currency_code": "USD",
+                      "value": "104.05"
+                    },
+                    "exchange_rate": {
+                      "source_currency": "EUR",
+                      "target_currency": "USD",
+                      "value": "1.089477173902071"
+                    }
+                  },
+                  "links": [
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/captures/{id}",
+                      "rel": "self",
+                      "method": "GET"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/captures/{id}/refund",
+                      "rel": "refund",
+                      "method": "POST"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/checkout/orders/{id}",
+                      "rel": "up",
+                      "method": "GET"
+                    }
+                  ],
+                  "create_time": "2026-11-06T03:04:17Z",
+                  "update_time": "2026-11-06T03:04:17Z",
+                  "network_transaction_reference": {
+                    "id": "<redacted:id>",
+                    "network": "VISA"
+                  },
+                  "processor_response": {
+                    "cvv_code": "M",
+                    "response_code": "0000"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "create_time": "2026-11-06T03:04:18Z",
+        "update_time": "2026-11-06T03:04:18Z",
         "links": [
           {
             "href": "https://api.sandbox.paypal.com/v2/checkout/orders/{id}",

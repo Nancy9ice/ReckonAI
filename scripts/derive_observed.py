@@ -362,12 +362,24 @@ def parse_pairs(raw: list[str], flag: str) -> dict[str, str]:
     return pairs
 
 
-def label_for(result: dict[str, Any], labels: dict[str, str]) -> str:
+def label_for(
+    result: dict[str, Any], labels: dict[str, str], session: str | None = None
+) -> str:
     path = result.get("request_path", "")
+    base = f"{result['record_type']}:list"
     for identifier, label in labels.items():
         if identifier in path:
-            return label
-    return f"{result['record_type']}:list"
+            base = label
+            break
+    # When artifacts from more than one probe session are combined, the same
+    # fixture appears twice and the labels must distinguish them - otherwise a
+    # field present in one session and not the other reports a condition that
+    # names the same label twice and says nothing.
+    return f"{base}@{session}" if session else base
+
+
+def session_of(artifact: dict[str, Any]) -> str:
+    return (artifact.get("probe", {}).get("run_at") or "")[:10]
 
 
 def main() -> int:
@@ -426,15 +438,23 @@ def main() -> int:
     if len(api_bases) != 1:
         sys.exit(f"error: raw artifacts disagree on api_base: {sorted(api_bases)}")
 
-    by_type: dict[str, list[dict[str, Any]]] = {}
+    sessions = sorted({session_of(a) for a in artifacts if session_of(a)})
+    tag_sessions = len(sessions) > 1
+
+    by_type: dict[str, list[tuple[dict[str, Any], str | None]]] = {}
     for artifact in artifacts:
+        session = session_of(artifact) if tag_sessions else None
         for result in artifact["results"]:
-            by_type.setdefault(result["record_type"], []).append(result)
+            by_type.setdefault(result["record_type"], []).append((result, session))
 
     record_types: dict[str, Any] = {}
-    for record_type, results in sorted(by_type.items()):
-        usable = [r for r in results if r.get("status") == "ok" and "body" in r]
-        samples = [(label_for(r, labels), r["body"]) for r in usable]
+    for record_type, entries in sorted(by_type.items()):
+        results = [r for r, _s in entries]
+        samples = [
+            (label_for(r, labels, s), r["body"])
+            for r, s in entries
+            if r.get("status") == "ok" and "body" in r
+        ]
 
         redacted_results = [redact(r) for r in results]
         write_json(
@@ -483,6 +503,15 @@ def main() -> int:
             "api_base": sorted(api_bases)[0],
             "fixtures": "fixtures.md",
             "redacted": True,
+            "probe_sessions": sessions,
+            "sessions_note": (
+                "More than one session means the same fixtures were probed on "
+                "different days and sample labels carry an @date suffix. A "
+                "field populated in one session and not another is genuinely "
+                "unreliable, and the condition names which session saw it."
+            )
+            if tag_sessions
+            else "Single probe session.",
             "reading_this_file": (
                 "Field paths use $ for the record root and [] for an array, so "
                 "one path covers every element. populated_on counts sampled "

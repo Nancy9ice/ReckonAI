@@ -6,7 +6,8 @@
     "redacted": true,
     "api_base": "https://api-m.sandbox.paypal.com",
     "sample_labels": [
-      "refund-partial"
+      "refund-partial@2026-11-06",
+      "refund-partial@2026-11-07"
     ],
     "redaction_note": "Identifiers and buyer PII replaced with <redacted:id> and <redacted:pii>. Amounts, currencies, rates, fees, timestamps, statuses and error codes are kept: they are the evidence (plan.md group 3 step 3). Unredacted fixture ids are in fixtures.md."
   },
@@ -17,6 +18,96 @@
       "request_path": "/v2/payments/refunds/{id}",
       "http_status": 200,
       "fetched_at": "2026-11-06T03:34:17.821166+00:00",
+      "status": "ok",
+      "body": {
+        "id": "<redacted:id>",
+        "amount": {
+          "currency_code": "USD",
+          "value": "30.00"
+        },
+        "note_to_payer": "ReckonAI phase-0 partial refund fixture",
+        "seller_payable_breakdown": {
+          "gross_amount": {
+            "currency_code": "USD",
+            "value": "30.00"
+          },
+          "paypal_fee": {
+            "currency_code": "USD",
+            "value": "0.00"
+          },
+          "net_amount": {
+            "currency_code": "USD",
+            "value": "30.00"
+          },
+          "total_refunded_amount": {
+            "currency_code": "USD",
+            "value": "30.00"
+          }
+        },
+        "status": "COMPLETED",
+        "create_time": "2026-11-05T19:04:20-08:00",
+        "update_time": "2026-11-05T19:04:20-08:00",
+        "payer": {
+          "email_address": "<redacted:pii>",
+          "merchant_id": "<redacted:id>"
+        },
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/refunds/{id}",
+            "rel": "self",
+            "method": "GET"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/captures/{id}",
+            "rel": "up",
+            "method": "GET"
+          }
+        ]
+      },
+      "money_values": [
+        {
+          "path": "$refunds.amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "30.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$refunds.seller_payable_breakdown.gross_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "30.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$refunds.seller_payable_breakdown.paypal_fee",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "0.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$refunds.seller_payable_breakdown.net_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "30.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$refunds.seller_payable_breakdown.total_refunded_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "30.00",
+          "raw_json_type": "str"
+        }
+      ]
+    },
+    {
+      "record_type": "refunds",
+      "note": "refund linkage and partial shape",
+      "request_path": "/v2/payments/refunds/{id}",
+      "http_status": 200,
+      "fetched_at": "2026-11-07T02:53:06.669838+00:00",
       "status": "ok",
       "body": {
         "id": "<redacted:id>",

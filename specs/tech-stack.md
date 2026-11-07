@@ -576,17 +576,41 @@ is **Hobby**, Render's free tier, where:
   a minute to wake — which would both break an in-process worker and open a
   judged demo on a blank page.
 
-**Resolved by $50 of Render credits**, which cover roughly two and a half months
-of the topology above: a Starter web service, a Starter worker and a Basic
-Postgres, about $20 a month. **So §11 stands as written** — separate web
-service and worker, a Postgres that does not expire, and the three-component
-connection budget above is the real one.
+**Resolved by $50 of Render credits.** **So §11 stands as written** — separate
+web service and worker, a Postgres that does not expire, and the
+three-component connection budget above is the real one.
+
+**Costs amended 2026-11-07**, in [[roadmap]] Phase 1 Group 0, once the Postgres
+tier was actually chosen. The topology is a Starter web service, a Starter
+worker and a **Basic-1gb** Postgres (plan id `0.5c-1g`) — about **$33 a month**,
+so the credits cover roughly **1.5 months**. That is far beyond the project's
+life. This paragraph previously said about $20 a month and two and a half
+months, which assumed Basic-256mb; 256MB is cramped once the connection budget
+above is open, and the extra memory was judged worth the shorter runway.
+
+Three provisioning facts worth carrying here, because two of them cannot be
+changed after the database is created and all three are easy to get wrong:
+
+- **Region is `frankfurt`** for all three components, chosen for the operator's
+  latency rather than the PayPal sandbox's.
+- **`postgresMajorVersion: "16"` is set explicitly.** Render otherwise
+  provisions the latest major version, which would break parity with local
+  compose and CI — and could not be corrected without destroying the database.
+- **`ipAllowList: []`** — internal Render traffic only. An absent `ipAllowList`
+  means *allow every IP* on a new database, and this repository becomes public
+  at submission. Connection limits are flat at **100 across every Basic tier**
+  (less 10 Render reserves), so the budget above has ample headroom.
+
+Details and rationale: `specs/2026-11-07-repo-deployment-skeleton/notes.md`.
 
 **Provisioning is declared in `render.yaml`**, a Render Blueprint committed to
 the repository, rather than configured by hand in the dashboard. The topology
 is then version-controlled and reviewable, and matches the reproducibility rule
-in §3. Whether Render Cron Jobs are available on the plan is the one item still
-to confirm; if not, a scheduled trigger inside the worker loop replaces them.
+in §3.
+
+**Render Cron Jobs are available on the plan** (confirmed 2026-11-07). The
+fallback this paragraph previously named — a scheduled trigger inside the worker
+loop — is **dropped**, and [[roadmap]] Phase 8 declares a real Cron Job.
 
 ---
 

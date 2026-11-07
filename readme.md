@@ -16,6 +16,37 @@
 
 ---
 
+# 0. Running it
+
+Python 3.12, managed with [uv](https://docs.astral.sh/uv/). Docker for the local
+database.
+
+```bash
+docker compose up -d --wait                 # PostgreSQL 16 on 5432
+uv sync --frozen                            # the lockfile is authoritative
+export DATABASE_URL="postgres://reckonai:devpassword@localhost:5432/reckonai"
+
+uv run alembic upgrade head                 # apply migrations
+uv run pytest                               # the test suite
+uv run ruff check                           # lint
+
+uv run uvicorn reckonai.app:app --reload    # the API on :8000
+uv run python -m reckonai.worker            # the worker, in another shell
+```
+
+`GET /health` is liveness and touches no database; `GET /health/ready` runs
+`SELECT 1` and answers `503` when the database is unreachable.
+
+The compose credentials above are local-only development values and are not
+secrets. Real credentials never enter this repository: see §12 "Render" for how
+`DATABASE_URL` reaches a deployed service, and `.env.example` for the PayPal
+sandbox variables.
+
+Deployment is declared in `render.yaml` and the phase documentation lives in
+`specs/`. Start with `specs/mission.md`.
+
+---
+
 # 1. Executive Summary
 
 Marketplaces operate complex financial systems involving customers, independent sellers, payment service providers and internal financial records.
@@ -694,6 +725,33 @@ Primary purpose:
 - Application hosting.
 - Backend deployment.
 - Background processing and scheduled reconciliation jobs.
+
+The topology is declared in `render.yaml`, a Blueprint committed to this
+repository rather than configured by hand, so it is version controlled and
+reviewable. Three components, applied against `main`:
+
+| Component | Name | Instance |
+|---|---|---|
+| Web service, FastAPI | `reckonai-api` | Starter, Frankfurt |
+| Worker, queue consumer | `reckonai-worker` | Starter, Frankfurt |
+| Managed PostgreSQL 16 | `reckonai-db` | Basic-1gb (`0.5c-1g`), Frankfurt |
+
+The job queue is tables inside that same database, not a fourth service. That
+co-location is deliberate: it lets a dedupe marker and the financial write it
+guards commit or fail together.
+
+**No database credential exists in this repository.** Render generates the
+password when it creates the instance and injects the connection string through
+`fromDatabase`, so the value lives only in Render's store and in the running
+process's environment. Secrets that do need a value — the PayPal credentials in
+Phase 7, the Anthropic key in Phase 12 — are declared `sync: false`, which puts
+the key name in version control and the value only in the dashboard.
+
+Two operational details worth knowing before a deploy: migrations run in the web
+service's `preDeployCommand`, never from a start command, so a failing migration
+blocks the deploy instead of racing across restarting instances; and the
+database accepts internal Render traffic only, so debugging against deployed
+data goes through Render's dashboard psql rather than a local client.
 
 ## Bryntum
 

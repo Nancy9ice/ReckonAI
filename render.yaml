@@ -1,0 +1,134 @@
+# Render Blueprint - the deployed topology, version controlled rather than
+# configured by hand in the dashboard (specs/tech-stack.md section 11).
+#
+# Three components and no more: one web service, one worker, one managed
+# Postgres. The job queue is tables inside that same database rather than a
+# fourth service, and that co-location is the design: it is what lets a dedupe
+# marker and the financial write it guards share one transaction (section 4).
+#
+# APPLY THIS AGAINST main. The Blueprint tracks main by decision
+# (specs/2026-11-07-repo-deployment-skeleton requirements.md D4), which is why
+# the deployed health checks are a post-merge gate rather than a pre-merge one.
+#
+# FIELDS THAT CANNOT BE CHANGED AFTER THE DATABASE IS CREATED:
+#   name, region, postgresMajorVersion, databaseName, user
+# A wrong value in any of those is permanent short of destroying the instance
+# and losing its data, so the first apply is not a step to improvise through.
+# By contrast `plan` and `ipAllowList` can be changed later, and `diskSizeGB`
+# can only ever grow.
+#
+# The Python version comes from the committed .python-version file (3.12). It
+# is deliberately not repeated here as a PYTHON_VERSION variable - two sources
+# of truth for a runtime version is how a build starts differing from local.
+
+services:
+  # ---------------------------------------------------------------------------
+  # The API. Starter rather than free: a free instance spins down after 15
+  # minutes idle and takes about a minute to wake, which would open a judged
+  # demo on a blank page (specs/tech-stack.md section 11).
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: reckonai-api
+    runtime: python
+    plan: starter
+    region: frankfurt
+    branch: main
+
+    # --no-dev keeps pytest and ruff out of the deployed image. The lockfile
+    # stays authoritative either way - the same resolution, a subset installed -
+    # and it has a second benefit: a runtime module that accidentally imports a
+    # dev-only package passes CI and fails here, loudly, rather than shipping.
+    buildCommand: pip install uv && uv sync --frozen --no-dev
+
+    # Migrations run here, never in startCommand. Pre-deploy runs once per
+    # deploy; a start command would have every instance race to migrate on
+    # every restart - survivable at one instance, a lock-contention bug at two
+    # (requirements.md D7). A failing migration blocks the deploy, which is the
+    # failure mode worth having.
+    preDeployCommand: uv run alembic upgrade head
+
+    startCommand: uv run uvicorn reckonai.app:app --host 0.0.0.0 --port $PORT
+
+    # Liveness, which touches no database. Pointing this at the readiness route
+    # would couple restarts to database health: connections exhausted, check
+    # fails, Render restarts, the new process rebuilds its pool, check fails
+    # again. A restart adds no connections, so the loop never converges.
+    # /health/ready carries the database question instead.
+    healthCheckPath: /health
+
+    envVars:
+      # The credential is never written down. Render generates the password when
+      # it creates the instance below and injects the connection string at
+      # deploy time (specs/tech-stack.md section 10).
+      - key: DATABASE_URL
+        fromDatabase:
+          name: reckonai-db
+          property: connectionString
+      - key: ENVIRONMENT
+        value: production
+      - key: LOG_LEVEL
+        value: INFO
+
+  # ---------------------------------------------------------------------------
+  # The queue consumer. A separate process, not a thread inside the web service
+  # (specs/tech-stack.md sections 4 and 11). In Phase 1 it starts, logs and
+  # stays up; Phase 8 gives it the jobs table to claim against.
+  # ---------------------------------------------------------------------------
+  - type: worker
+    name: reckonai-worker
+    runtime: python
+    plan: starter
+    region: frankfurt
+    branch: main
+    buildCommand: pip install uv && uv sync --frozen --no-dev
+
+    # No preDeployCommand on purpose. The web service owns migrations, and two
+    # components racing to migrate is the problem D7 avoids.
+    startCommand: uv run python -m reckonai.worker
+
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: reckonai-db
+          property: connectionString
+      - key: ENVIRONMENT
+        value: production
+      - key: LOG_LEVEL
+        value: INFO
+      # Stated explicitly even though it matches the code's default, so the
+      # value is auditable and survives a change of default - the same
+      # reasoning specs/tech-stack.md section 5.1 applies to model settings.
+      - key: WORKER_TICK_SECONDS
+        value: "30"
+
+# No cron job here yet. Render Cron Jobs are confirmed available on this plan
+# (notes.md, Group 0 step 4), so the worker-loop timer fallback is dropped - but
+# there is nothing for a scheduled invocation to do until the jobs table exists,
+# so Phase 8 declares it.
+#
+# No static site either. The frontend is Phase 14 (requirements.md D1).
+
+databases:
+  - name: reckonai-db
+
+    # A plan id, not the display name. `Basic-1gb` is rejected; `0.5c-1g` is
+    # the same instance spelled the way the Blueprint expects. Every Basic tier
+    # caps at 100 connections regardless, so this is a memory choice: 256MB is
+    # cramped once the pools in requirements.md D6 are open.
+    plan: 0.5c-1g
+
+    region: frankfurt
+
+    # Set explicitly because Render otherwise provisions the latest major
+    # version, and this field cannot be changed afterwards. 16 is what
+    # specs/tech-stack.md section 1 locks, and what compose.yaml and CI run, so
+    # a migration cannot pass locally and fail here on a version difference.
+    postgresMajorVersion: "16"
+
+    # Internal Render traffic only. An absent ipAllowList means allow every IP
+    # on a new database, and this repository becomes public at submission, so
+    # an allowlisted CIDR would publish which address may reach a database whose
+    # name, user and region sit in this same file. It also fails closed: an
+    # address added in the dashboard for one debugging session is removed again
+    # by the next Blueprint sync (requirements.md D13).
+    ipAllowList: []

@@ -1,0 +1,22 @@
+Alembic migrations for ReckonAI. Single database, one linear history.
+
+Two things differ from a stock Alembic setup, both deliberate:
+
+  - The database URL is read from reckonai.config.Settings, not from
+    alembic.ini, whose sqlalchemy.url is left empty. See env.py.
+  - Migrations run on Render through the web service's preDeployCommand, never
+    from a start command. See specs/2026-11-07-repo-deployment-skeleton
+    requirements.md D7.
+
+Because pre-deploy runs while the previous version is still serving traffic, a
+migration must be backward compatible with the code it is replacing for the
+length of the overlap window. Expand, then contract: add a column, deploy the
+code that writes it, drop the old one in a later revision. Dropping or renaming
+a column the running instance still selects will break it.
+
+Usage:
+
+  uv run alembic upgrade head
+  uv run alembic downgrade base
+  uv run alembic revision -m "<message>"
+  uv run alembic upgrade head --sql      # review the SQL without connecting

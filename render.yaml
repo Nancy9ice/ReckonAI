@@ -45,9 +45,14 @@ services:
     # every restart - survivable at one instance, a lock-contention bug at two
     # (requirements.md D7). A failing migration blocks the deploy, which is the
     # failure mode worth having.
-    preDeployCommand: uv run alembic upgrade head
+    # --no-sync on every `uv run` below. Without it `uv run` re-syncs the
+    # environment before executing, which (a) undoes the --no-dev above by
+    # reinstalling pytest and ruff, and (b) does network installs at container
+    # start, before the port is bound. Verified locally 2026-11-07: a bare
+    # `uv run uvicorn` after a --no-dev build installed 9 packages.
+    preDeployCommand: uv run --no-sync alembic upgrade head
 
-    startCommand: uv run uvicorn reckonai.app:app --host 0.0.0.0 --port $PORT
+    startCommand: uv run --no-sync uvicorn reckonai.app:app --host 0.0.0.0 --port $PORT
 
     # Liveness, which touches no database. Pointing this at the readiness route
     # would couple restarts to database health: connections exhausted, check
@@ -84,7 +89,7 @@ services:
 
     # No preDeployCommand on purpose. The web service owns migrations, and two
     # components racing to migrate is the problem D7 avoids.
-    startCommand: uv run python -m reckonai.worker
+    startCommand: uv run --no-sync python -m reckonai.worker
 
     envVars:
       - key: DATABASE_URL

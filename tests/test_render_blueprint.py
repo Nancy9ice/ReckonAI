@@ -138,6 +138,31 @@ def test_both_services_install_from_the_lockfile(
         assert "uv sync --frozen" in service["buildCommand"]
 
 
+def test_runtime_commands_do_not_resync_the_environment(
+    web: dict[str, Any], worker: dict[str, Any]
+) -> None:
+    """Every `uv run` outside the build carries --no-sync.
+
+    `uv run` syncs before executing by default. In a deployed service that
+    undoes the build's --no-dev by reinstalling the dev group, and it does
+    network installs at container start, before the port is bound - so a
+    registry hiccup becomes a service that will not boot. Verified locally on
+    2026-11-07: a bare `uv run uvicorn` after a --no-dev build installed 9
+    packages.
+    """
+    commands = [
+        service[key]
+        for service in (web, worker)
+        for key in ("startCommand", "preDeployCommand")
+        if key in service
+    ]
+    assert commands, "expected at least one runtime command to check"
+
+    for command in commands:
+        if "uv run" in command:
+            assert "--no-sync" in command, f"`uv run` without --no-sync: {command}"
+
+
 def test_the_database_credential_is_referenced_never_written(
     services: list[dict[str, Any]],
 ) -> None:

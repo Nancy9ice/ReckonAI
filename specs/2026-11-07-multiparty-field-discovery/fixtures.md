@@ -102,9 +102,22 @@ holds — so no derivation is needed, and refusing to guess it was right.
 `INSTANT` one. PayPal documents this nowhere; two orders differing only in
 `disbursement_mode` settled it.
 
-**The fee does not vary by funding instrument.** Card-in-wallet and balance
-produced the same `3.98`. A fee that differs between otherwise-identical
-transactions is therefore a real signal, not noise.
+**The fee did not vary across the three, and `paypal_fee` is present on a `GET`
+for each** — not only in the capture response. All three returned `3.98`.
+
+One qualification, because it is an inference rather than an observation.
+**PayPal's response does not record which funding instrument was used.** All
+three orders carry an identical `payment_source.paypal` block — email,
+`account_id`, `account_status: VERIFIED`, name, country — with nothing
+distinguishing a balance payment from a card inside the wallet. That two of
+these were card-funded and one was balance-funded is known only because the
+person approving them reported it.
+
+So the supportable claim is narrow: **three wallet-funded captures of the same
+amount and currency produced the same fee.** "The fee does not depend on the
+funding instrument" is a reasonable reading but is not established, and nothing
+in the canonical model may branch on funding instrument, because the API does
+not expose it.
 
 **A `DELAYED` capture reports `status: COMPLETED` while the seller has not been
 paid.** The two captures are structurally identical apart from

@@ -176,7 +176,47 @@ mistake Phase 0 exists to prevent, one model later.
 
 ---
 
-## Phase 1 — Repo and deployment skeleton · 0.5 day
+## Phase 1 — Repo and deployment skeleton · 0.5 day · **COMPLETE 2026-11-07**
+
+> **Delivered and deployed**, at **https://reckonai-api.onrender.com**. Spec,
+> plan, merge gate and findings are in
+> `specs/2026-11-07-repo-deployment-skeleton/`.
+>
+> Every exit criterion below passes. The pre-merge gate is 13 automated checks
+> and the post-merge gate is the deployed ones; both results are tabled in that
+> directory's `notes.md`. `/health` and `/health/ready` each answer `200` from
+> the deployed URL, the baseline migration applied through the web service's
+> `preDeployCommand`, and the worker is up.
+>
+> **What later phases inherit, so none of it is rediscovered:**
+>
+> - **Phase 2** sets `target_metadata` in `src/reckonai/migrations/env.py`,
+>   which is `None` with a comment saying so, and **deletes** Phase 1's
+>   `validation.md` C14 rather than inverting it — C14 asserts the money path is
+>   *absent*, and Phase 2 is where the `float` gate replaces it.
+> - **Phase 3** must migrate **expand-then-contract**. `preDeployCommand` runs
+>   while the previous version is still serving traffic, so dropping or renaming
+>   a column the running instance still selects breaks it for the overlap
+>   window. `src/reckonai/migrations/README` carries this where a migration
+>   author will meet it.
+> - **Phase 7** adds PayPal variables to `render.yaml` as `sync: false`, which
+>   puts the key in version control and the value only in the dashboard. None
+>   are declared yet, deliberately.
+> - **Phase 8** declares a real Render Cron Job — **Cron Jobs are confirmed
+>   available on the plan**, so the worker-loop timer fallback in
+>   [[tech-stack]] §11 is dropped. It also owes the worker real retry and
+>   backoff: today an unreachable database logs
+>   `reckonai.worker.database_unreachable` and the loop continues, which is
+>   right for "stays up" and wrong for claiming jobs.
+> - **Phase 14** deploys the frontend as a **separate Render static site**. `/`
+>   is the API's own service index and is not a placeholder for the UI.
+>
+> **Two findings worth not relearning.** Render's `DATABASE_URL` arrives as
+> `postgres://` or `postgresql://` — SQLAlchemy 2.0 rejects the first and maps
+> the second to psycopg2, which this project does not install, so `config.py`
+> normalises both to `postgresql+psycopg://`. And `uv run` re-syncs the
+> environment before executing unless given `--no-sync`, which on Render undid
+> the build's `--no-dev` and installed packages at container start.
 
 **Goal:** A deployable spine, so deployment is never a last-day problem.
 

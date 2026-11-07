@@ -42,8 +42,9 @@ secrets. Real credentials never enter this repository: see §12 "Render" for how
 `DATABASE_URL` reaches a deployed service, and `.env.example` for the PayPal
 sandbox variables.
 
-Deployment is declared in `render.yaml` and the phase documentation lives in
-`specs/`. Start with `specs/mission.md`.
+Deployed at **https://reckonai-api.onrender.com** — see §12 "Render" for the
+topology. Provisioning is declared in `render.yaml`, and the phase documentation
+lives in `specs/`. Start with `specs/mission.md`.
 
 ---
 

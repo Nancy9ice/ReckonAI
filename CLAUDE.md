@@ -19,10 +19,18 @@ Also read, and in this order:
 - `specs/paypal-fields.md` — what PayPal actually returns, per field, with the
   evidence. The root specs state rules and point here; they do not repeat it.
 
-**Phase 0 is complete.** Its observed evidence was captured against a
-**first-party** integration, so it does not cover platform fees, disbursement
-modes or any seller-level view. Phase 0b closes that gap and runs before
-Phase 3.
+**Phases 0, 0b and 1 are complete. Phase 2 is next.**
+
+Phase 0's observed evidence was captured against a **first-party** integration,
+so it does not cover platform fees, disbursement modes or any seller-level view.
+Phase 0b closed that gap, and `specs/paypal-fields.md` is now regenerated from
+multiparty evidence only.
+
+Phase 1 delivered the deployable spine — FastAPI, Postgres, Alembic, pytest,
+GitHub Actions CI and a Render Blueprint — running at
+**https://reckonai-api.onrender.com**. What it hands to Phases 2, 3, 7, 8 and 14
+is listed under Phase 1 in `specs/roadmap.md`; read that before starting any of
+them.
 
 ## Hard rules
 
@@ -53,6 +61,13 @@ trimming of earlier tool results. See `specs/tech-stack.md` §5.2.
 
 - Package manager is `uv`. Install with `uv sync --frozen`, run with `uv run`.
   No hand-maintained `requirements.txt`.
+- **Local work needs the compose database and `DATABASE_URL` exported.**
+  Without them the database-backed tests skip locally and fail hard in CI, which
+  is deliberate — a silent skip would be a green run that tested nothing.
+  `readme.md` §0 has the commands.
+- In a deployed command, `uv run` takes `--no-sync`. Without it `uv run` syncs
+  before executing, undoing the build's `--no-dev` and installing packages at
+  container start.
 - The reconciliation engine is pure functions with no I/O — no database handle,
   HTTP client or clock read inside a calculation.
 - Retain raw source payloads; never discard the evidence for a decision.

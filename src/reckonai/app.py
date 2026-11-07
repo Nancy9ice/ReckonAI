@@ -46,6 +46,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             version=__version__,
             pool_size=WEB_POOL_SIZE,
             max_overflow=WEB_MAX_OVERFLOW,
+            # Render supplies this; locally and in CI there is no external URL,
+            # and "none" is logged rather than the field being dropped, so the
+            # line's shape does not change between environments and stays
+            # parseable by the same expression.
+            url=settings.render_external_url or "none",
         )
     )
 

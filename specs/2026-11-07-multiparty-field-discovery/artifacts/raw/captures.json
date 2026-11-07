@@ -1,0 +1,448 @@
+{
+  "raw": {
+    "record_type": "captures",
+    "source": "scripts/probe_paypal.py",
+    "redacted_by": "scripts/derive_observed.py",
+    "redacted": true,
+    "api_base": "https://api-m.sandbox.paypal.com",
+    "sample_labels": [
+      "capture-instant-card",
+      "capture-delayed-card",
+      "capture-instant-balance",
+      "capture-cross-currency"
+    ],
+    "redaction_note": "Identifiers and buyer PII replaced with <redacted:id> and <redacted:pii>. Amounts, currencies, rates, fees, timestamps, statuses and error codes are kept: they are the evidence (plan.md group 3 step 3). Unredacted fixture ids are in fixtures.md."
+  },
+  "results": [
+    {
+      "record_type": "captures",
+      "note": "seller_receivable_breakdown - the FX and settlement evidence",
+      "request_path": "/v2/payments/captures/{id}",
+      "http_status": 200,
+      "fetched_at": "2026-11-07T09:02:02.787335+00:00",
+      "read_as": "seller:C24NAWELTTHXJ",
+      "status": "ok",
+      "body": {
+        "id": "<redacted:id>",
+        "amount": {
+          "currency_code": "USD",
+          "value": "100.00"
+        },
+        "final_capture": true,
+        "seller_protection": {
+          "status": "ELIGIBLE",
+          "dispute_categories": [
+            "ITEM_NOT_RECEIVED",
+            "UNAUTHORIZED_TRANSACTION"
+          ]
+        },
+        "disbursement_mode": "INSTANT",
+        "status": "PENDING",
+        "status_details": {
+          "reason": "BUYER_COMPLAINT"
+        },
+        "supplementary_data": {
+          "related_ids": {
+            "order_id": "<redacted:id>"
+          }
+        },
+        "payee": {
+          "email_address": "<redacted:pii>",
+          "merchant_id": "<redacted:id>"
+        },
+        "create_time": "2026-11-07T08:01:29Z",
+        "update_time": "2026-11-07T08:58:33Z",
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/captures/{id}",
+            "rel": "self",
+            "method": "GET"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/captures/{id}/refund",
+            "rel": "refund",
+            "method": "POST"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/checkout/orders/{id}",
+            "rel": "up",
+            "method": "GET"
+          }
+        ]
+      },
+      "money_values": [
+        {
+          "path": "$captures.amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "100.00",
+          "raw_json_type": "str"
+        }
+      ]
+    },
+    {
+      "record_type": "captures",
+      "note": "seller_receivable_breakdown - the FX and settlement evidence",
+      "request_path": "/v2/payments/captures/{id}",
+      "http_status": 200,
+      "fetched_at": "2026-11-07T09:02:03.832971+00:00",
+      "read_as": "seller:C24NAWELTTHXJ",
+      "status": "ok",
+      "body": {
+        "id": "<redacted:id>",
+        "amount": {
+          "currency_code": "USD",
+          "value": "100.00"
+        },
+        "final_capture": true,
+        "seller_protection": {
+          "status": "ELIGIBLE",
+          "dispute_categories": [
+            "ITEM_NOT_RECEIVED",
+            "UNAUTHORIZED_TRANSACTION"
+          ]
+        },
+        "disbursement_mode": "DELAYED",
+        "seller_receivable_breakdown": {
+          "gross_amount": {
+            "currency_code": "USD",
+            "value": "100.00"
+          },
+          "paypal_fee": {
+            "currency_code": "USD",
+            "value": "3.98"
+          },
+          "platform_fees": [
+            {
+              "amount": {
+                "currency_code": "USD",
+                "value": "10.00"
+              },
+              "payee": {
+                "merchant_id": "<redacted:id>"
+              }
+            }
+          ],
+          "net_amount": {
+            "currency_code": "USD",
+            "value": "86.02"
+          }
+        },
+        "status": "COMPLETED",
+        "supplementary_data": {
+          "related_ids": {
+            "order_id": "<redacted:id>"
+          }
+        },
+        "payee": {
+          "email_address": "<redacted:pii>",
+          "merchant_id": "<redacted:id>"
+        },
+        "create_time": "2026-11-07T08:01:31Z",
+        "update_time": "2026-11-07T08:01:31Z",
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/captures/{id}",
+            "rel": "self",
+            "method": "GET"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/captures/{id}/refund",
+            "rel": "refund",
+            "method": "POST"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/checkout/orders/{id}",
+            "rel": "up",
+            "method": "GET"
+          }
+        ]
+      },
+      "money_values": [
+        {
+          "path": "$captures.amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "100.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$captures.seller_receivable_breakdown.gross_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "100.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$captures.seller_receivable_breakdown.paypal_fee",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "3.98",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$captures.seller_receivable_breakdown.platform_fees[0].amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "10.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$captures.seller_receivable_breakdown.net_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "86.02",
+          "raw_json_type": "str"
+        }
+      ]
+    },
+    {
+      "record_type": "captures",
+      "note": "seller_receivable_breakdown - the FX and settlement evidence",
+      "request_path": "/v2/payments/captures/{id}",
+      "http_status": 200,
+      "fetched_at": "2026-11-07T09:02:04.439048+00:00",
+      "read_as": "seller:C24NAWELTTHXJ",
+      "status": "ok",
+      "body": {
+        "id": "<redacted:id>",
+        "amount": {
+          "currency_code": "USD",
+          "value": "100.00"
+        },
+        "final_capture": true,
+        "seller_protection": {
+          "status": "ELIGIBLE",
+          "dispute_categories": [
+            "ITEM_NOT_RECEIVED",
+            "UNAUTHORIZED_TRANSACTION"
+          ]
+        },
+        "disbursement_mode": "INSTANT",
+        "seller_receivable_breakdown": {
+          "gross_amount": {
+            "currency_code": "USD",
+            "value": "100.00"
+          },
+          "paypal_fee": {
+            "currency_code": "USD",
+            "value": "3.98"
+          },
+          "platform_fees": [
+            {
+              "amount": {
+                "currency_code": "USD",
+                "value": "10.00"
+              },
+              "payee": {
+                "merchant_id": "<redacted:id>"
+              }
+            }
+          ],
+          "net_amount": {
+            "currency_code": "USD",
+            "value": "86.02"
+          }
+        },
+        "status": "PARTIALLY_REFUNDED",
+        "supplementary_data": {
+          "related_ids": {
+            "order_id": "<redacted:id>"
+          }
+        },
+        "payee": {
+          "email_address": "<redacted:pii>",
+          "merchant_id": "<redacted:id>"
+        },
+        "create_time": "2026-11-07T08:21:24Z",
+        "update_time": "2026-11-07T08:42:43Z",
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/captures/{id}",
+            "rel": "self",
+            "method": "GET"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/captures/{id}/refund",
+            "rel": "refund",
+            "method": "POST"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/checkout/orders/{id}",
+            "rel": "up",
+            "method": "GET"
+          }
+        ]
+      },
+      "money_values": [
+        {
+          "path": "$captures.amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "100.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$captures.seller_receivable_breakdown.gross_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "100.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$captures.seller_receivable_breakdown.paypal_fee",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "3.98",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$captures.seller_receivable_breakdown.platform_fees[0].amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "10.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$captures.seller_receivable_breakdown.net_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "86.02",
+          "raw_json_type": "str"
+        }
+      ]
+    },
+    {
+      "record_type": "captures",
+      "note": "seller_receivable_breakdown - the FX and settlement evidence",
+      "request_path": "/v2/payments/captures/{id}",
+      "http_status": 200,
+      "fetched_at": "2026-11-07T09:02:05.485930+00:00",
+      "read_as": "seller:C24NAWELTTHXJ",
+      "status": "ok",
+      "body": {
+        "id": "<redacted:id>",
+        "amount": {
+          "currency_code": "EUR",
+          "value": "95.50"
+        },
+        "final_capture": true,
+        "seller_protection": {
+          "status": "ELIGIBLE",
+          "dispute_categories": [
+            "ITEM_NOT_RECEIVED",
+            "UNAUTHORIZED_TRANSACTION"
+          ]
+        },
+        "disbursement_mode": "INSTANT",
+        "seller_receivable_breakdown": {
+          "gross_amount": {
+            "currency_code": "EUR",
+            "value": "95.50"
+          },
+          "paypal_fee": {
+            "currency_code": "EUR",
+            "value": "3.72"
+          },
+          "platform_fees": [
+            {
+              "amount": {
+                "currency_code": "EUR",
+                "value": "9.55"
+              },
+              "payee": {
+                "merchant_id": "<redacted:id>"
+              }
+            }
+          ],
+          "net_amount": {
+            "currency_code": "EUR",
+            "value": "82.23"
+          },
+          "receivable_amount": {
+            "currency_code": "USD",
+            "value": "89.59"
+          },
+          "exchange_rate": {
+            "source_currency": "EUR",
+            "target_currency": "USD",
+            "value": "1.089477173902071"
+          }
+        },
+        "status": "COMPLETED",
+        "supplementary_data": {
+          "related_ids": {
+            "order_id": "<redacted:id>"
+          }
+        },
+        "payee": {
+          "email_address": "<redacted:pii>",
+          "merchant_id": "<redacted:id>"
+        },
+        "create_time": "2026-11-07T08:46:18Z",
+        "update_time": "2026-11-07T08:46:18Z",
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/captures/{id}",
+            "rel": "self",
+            "method": "GET"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/captures/{id}/refund",
+            "rel": "refund",
+            "method": "POST"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/checkout/orders/{id}",
+            "rel": "up",
+            "method": "GET"
+          }
+        ]
+      },
+      "money_values": [
+        {
+          "path": "$captures.amount",
+          "currency": "EUR",
+          "currency_key": "currency_code",
+          "amount": "95.50",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$captures.seller_receivable_breakdown.gross_amount",
+          "currency": "EUR",
+          "currency_key": "currency_code",
+          "amount": "95.50",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$captures.seller_receivable_breakdown.paypal_fee",
+          "currency": "EUR",
+          "currency_key": "currency_code",
+          "amount": "3.72",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$captures.seller_receivable_breakdown.platform_fees[0].amount",
+          "currency": "EUR",
+          "currency_key": "currency_code",
+          "amount": "9.55",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$captures.seller_receivable_breakdown.net_amount",
+          "currency": "EUR",
+          "currency_key": "currency_code",
+          "amount": "82.23",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$captures.seller_receivable_breakdown.receivable_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "89.59",
+          "raw_json_type": "str"
+        }
+      ]
+    }
+  ]
+}

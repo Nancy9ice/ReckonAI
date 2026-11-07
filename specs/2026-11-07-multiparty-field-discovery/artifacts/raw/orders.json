@@ -1,0 +1,1001 @@
+{
+  "raw": {
+    "record_type": "orders",
+    "source": "scripts/probe_paypal.py",
+    "redacted_by": "scripts/derive_observed.py",
+    "redacted": true,
+    "api_base": "https://api-m.sandbox.paypal.com",
+    "sample_labels": [
+      "order-instant-card",
+      "order-delayed-card",
+      "order-instant-balance",
+      "order-cross-currency"
+    ],
+    "redaction_note": "Identifiers and buyer PII replaced with <redacted:id> and <redacted:pii>. Amounts, currencies, rates, fees, timestamps, statuses and error codes are kept: they are the evidence (plan.md group 3 step 3). Unredacted fixture ids are in fixtures.md."
+  },
+  "results": [
+    {
+      "record_type": "orders",
+      "note": "purchase units, payer, links",
+      "request_path": "/v2/checkout/orders/{id}",
+      "http_status": 200,
+      "fetched_at": "2026-11-07T09:02:06.614138+00:00",
+      "read_as": "seller:C24NAWELTTHXJ",
+      "status": "ok",
+      "body": {
+        "id": "<redacted:id>",
+        "intent": "CAPTURE",
+        "status": "COMPLETED",
+        "payment_source": {
+          "paypal": {
+            "email_address": "<redacted:pii>",
+            "account_id": "<redacted:id>",
+            "account_status": "VERIFIED",
+            "name": {
+              "given_name": "<redacted:pii>",
+              "surname": "<redacted:pii>"
+            },
+            "address": {
+              "country_code": "US"
+            }
+          }
+        },
+        "purchase_units": [
+          {
+            "reference_id": "<redacted:id>",
+            "amount": {
+              "currency_code": "USD",
+              "value": "100.00",
+              "breakdown": {}
+            },
+            "payee": {
+              "merchant_id": "<redacted:id>",
+              "display_data": {
+                "brand_name": "ReckonAI Test Marketplace"
+              }
+            },
+            "payment_instruction": {
+              "platform_fees": [
+                {
+                  "amount": {
+                    "currency_code": "USD",
+                    "value": "10.00"
+                  },
+                  "payee": {
+                    "merchant_id": "<redacted:id>"
+                  }
+                }
+              ],
+              "disbursement_mode": "INSTANT"
+            },
+            "description": "ReckonAI phase-0b fixture (instant)",
+            "soft_descriptor": "PAYPAL *TEST STORE",
+            "shipping": {
+              "name": {
+                "full_name": "<redacted:pii>"
+              },
+              "address": {
+                "address_line_1": "<redacted:pii>",
+                "admin_area_2": "<redacted:pii>",
+                "admin_area_1": "<redacted:pii>",
+                "postal_code": "<redacted:pii>",
+                "country_code": "US"
+              }
+            },
+            "payments": {
+              "captures": [
+                {
+                  "id": "<redacted:id>",
+                  "status": "PENDING",
+                  "status_details": {
+                    "reason": "BUYER_COMPLAINT"
+                  },
+                  "amount": {
+                    "currency_code": "USD",
+                    "value": "100.00"
+                  },
+                  "final_capture": true,
+                  "disbursement_mode": "INSTANT",
+                  "seller_protection": {
+                    "status": "ELIGIBLE",
+                    "dispute_categories": [
+                      "ITEM_NOT_RECEIVED",
+                      "UNAUTHORIZED_TRANSACTION"
+                    ]
+                  },
+                  "links": [
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/captures/{id}",
+                      "rel": "self",
+                      "method": "GET"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/captures/{id}/refund",
+                      "rel": "refund",
+                      "method": "POST"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/checkout/orders/{id}",
+                      "rel": "up",
+                      "method": "GET"
+                    }
+                  ],
+                  "create_time": "2026-11-07T08:01:29Z",
+                  "update_time": "2026-11-07T08:58:33Z"
+                }
+              ],
+              "refunds": [
+                {
+                  "id": "<redacted:id>",
+                  "amount": {
+                    "currency_code": "USD",
+                    "value": "86.02"
+                  },
+                  "seller_payable_breakdown": {
+                    "gross_amount": {
+                      "currency_code": "USD",
+                      "value": "86.02"
+                    },
+                    "paypal_fee": {
+                      "currency_code": "USD",
+                      "value": "0.00"
+                    },
+                    "platform_fees": [
+                      {
+                        "amount": {
+                          "currency_code": "USD",
+                          "value": "0.00"
+                        }
+                      }
+                    ],
+                    "net_amount": {
+                      "currency_code": "USD",
+                      "value": "86.02"
+                    },
+                    "total_refunded_amount": {
+                      "currency_code": "USD",
+                      "value": "0.00"
+                    }
+                  },
+                  "status": "PENDING",
+                  "links": [
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/refunds/{id}",
+                      "rel": "self",
+                      "method": "GET"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/captures/{id}",
+                      "rel": "up",
+                      "method": "GET"
+                    }
+                  ],
+                  "create_time": "2026-11-07T00:58:33-08:00",
+                  "update_time": "2026-11-07T00:58:33-08:00"
+                }
+              ]
+            }
+          }
+        ],
+        "payer": {
+          "name": {
+            "given_name": "<redacted:pii>",
+            "surname": "<redacted:pii>"
+          },
+          "email_address": "<redacted:pii>",
+          "payer_id": "<redacted:id>",
+          "address": {
+            "country_code": "US"
+          }
+        },
+        "create_time": "2026-11-07T08:01:29Z",
+        "update_time": "2026-11-07T08:58:33Z",
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/checkout/orders/{id}",
+            "rel": "self",
+            "method": "GET"
+          }
+        ]
+      },
+      "money_values": [
+        {
+          "path": "$orders.purchase_units[0].amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "100.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payment_instruction.platform_fees[0].amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "10.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payments.captures[0].amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "100.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payments.refunds[0].amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "86.02",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payments.refunds[0].seller_payable_breakdown.gross_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "86.02",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payments.refunds[0].seller_payable_breakdown.paypal_fee",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "0.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payments.refunds[0].seller_payable_breakdown.platform_fees[0].amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "0.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payments.refunds[0].seller_payable_breakdown.net_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "86.02",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payments.refunds[0].seller_payable_breakdown.total_refunded_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "0.00",
+          "raw_json_type": "str"
+        }
+      ]
+    },
+    {
+      "record_type": "orders",
+      "note": "purchase units, payer, links",
+      "request_path": "/v2/checkout/orders/{id}",
+      "http_status": 200,
+      "fetched_at": "2026-11-07T09:02:07.770144+00:00",
+      "read_as": "seller:C24NAWELTTHXJ",
+      "status": "ok",
+      "body": {
+        "id": "<redacted:id>",
+        "intent": "CAPTURE",
+        "status": "COMPLETED",
+        "payment_source": {
+          "paypal": {
+            "email_address": "<redacted:pii>",
+            "account_id": "<redacted:id>",
+            "account_status": "VERIFIED",
+            "name": {
+              "given_name": "<redacted:pii>",
+              "surname": "<redacted:pii>"
+            },
+            "address": {
+              "country_code": "US"
+            }
+          }
+        },
+        "purchase_units": [
+          {
+            "reference_id": "<redacted:id>",
+            "amount": {
+              "currency_code": "USD",
+              "value": "100.00",
+              "breakdown": {}
+            },
+            "payee": {
+              "merchant_id": "<redacted:id>",
+              "display_data": {
+                "brand_name": "ReckonAI Test Marketplace"
+              }
+            },
+            "payment_instruction": {
+              "platform_fees": [
+                {
+                  "amount": {
+                    "currency_code": "USD",
+                    "value": "10.00"
+                  },
+                  "payee": {
+                    "merchant_id": "<redacted:id>"
+                  }
+                }
+              ],
+              "disbursement_mode": "DELAYED"
+            },
+            "description": "ReckonAI phase-0b fixture (delayed)",
+            "soft_descriptor": "PAYPAL *TEST STORE",
+            "shipping": {
+              "name": {
+                "full_name": "<redacted:pii>"
+              },
+              "address": {
+                "address_line_1": "<redacted:pii>",
+                "admin_area_2": "<redacted:pii>",
+                "admin_area_1": "<redacted:pii>",
+                "postal_code": "<redacted:pii>",
+                "country_code": "US"
+              }
+            },
+            "payments": {
+              "captures": [
+                {
+                  "id": "<redacted:id>",
+                  "status": "COMPLETED",
+                  "amount": {
+                    "currency_code": "USD",
+                    "value": "100.00"
+                  },
+                  "final_capture": true,
+                  "disbursement_mode": "DELAYED",
+                  "seller_protection": {
+                    "status": "ELIGIBLE",
+                    "dispute_categories": [
+                      "ITEM_NOT_RECEIVED",
+                      "UNAUTHORIZED_TRANSACTION"
+                    ]
+                  },
+                  "seller_receivable_breakdown": {
+                    "gross_amount": {
+                      "currency_code": "USD",
+                      "value": "100.00"
+                    },
+                    "paypal_fee": {
+                      "currency_code": "USD",
+                      "value": "3.98"
+                    },
+                    "platform_fees": [
+                      {
+                        "amount": {
+                          "currency_code": "USD",
+                          "value": "10.00"
+                        },
+                        "payee": {
+                          "merchant_id": "<redacted:id>"
+                        }
+                      }
+                    ],
+                    "net_amount": {
+                      "currency_code": "USD",
+                      "value": "86.02"
+                    }
+                  },
+                  "links": [
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/captures/{id}",
+                      "rel": "self",
+                      "method": "GET"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/captures/{id}/refund",
+                      "rel": "refund",
+                      "method": "POST"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/checkout/orders/{id}",
+                      "rel": "up",
+                      "method": "GET"
+                    }
+                  ],
+                  "create_time": "2026-11-07T08:01:31Z",
+                  "update_time": "2026-11-07T08:01:31Z"
+                }
+              ]
+            }
+          }
+        ],
+        "payer": {
+          "name": {
+            "given_name": "<redacted:pii>",
+            "surname": "<redacted:pii>"
+          },
+          "email_address": "<redacted:pii>",
+          "payer_id": "<redacted:id>",
+          "address": {
+            "country_code": "US"
+          }
+        },
+        "create_time": "2026-11-07T08:01:31Z",
+        "update_time": "2026-11-07T08:01:31Z",
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/checkout/orders/{id}",
+            "rel": "self",
+            "method": "GET"
+          }
+        ]
+      },
+      "money_values": [
+        {
+          "path": "$orders.purchase_units[0].amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "100.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payment_instruction.platform_fees[0].amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "10.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payments.captures[0].amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "100.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payments.captures[0].seller_receivable_breakdown.gross_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "100.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payments.captures[0].seller_receivable_breakdown.paypal_fee",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "3.98",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payments.captures[0].seller_receivable_breakdown.platform_fees[0].amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "10.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payments.captures[0].seller_receivable_breakdown.net_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "86.02",
+          "raw_json_type": "str"
+        }
+      ]
+    },
+    {
+      "record_type": "orders",
+      "note": "purchase units, payer, links",
+      "request_path": "/v2/checkout/orders/{id}",
+      "http_status": 200,
+      "fetched_at": "2026-11-07T09:02:08.604585+00:00",
+      "read_as": "seller:C24NAWELTTHXJ",
+      "status": "ok",
+      "body": {
+        "id": "<redacted:id>",
+        "intent": "CAPTURE",
+        "status": "COMPLETED",
+        "payment_source": {
+          "paypal": {
+            "email_address": "<redacted:pii>",
+            "account_id": "<redacted:id>",
+            "account_status": "VERIFIED",
+            "name": {
+              "given_name": "<redacted:pii>",
+              "surname": "<redacted:pii>"
+            },
+            "address": {
+              "country_code": "US"
+            }
+          }
+        },
+        "purchase_units": [
+          {
+            "reference_id": "<redacted:id>",
+            "amount": {
+              "currency_code": "USD",
+              "value": "100.00",
+              "breakdown": {}
+            },
+            "payee": {
+              "merchant_id": "<redacted:id>",
+              "display_data": {
+                "brand_name": "ReckonAI Test Marketplace"
+              }
+            },
+            "payment_instruction": {
+              "platform_fees": [
+                {
+                  "amount": {
+                    "currency_code": "USD",
+                    "value": "10.00"
+                  },
+                  "payee": {
+                    "merchant_id": "<redacted:id>"
+                  }
+                }
+              ],
+              "disbursement_mode": "INSTANT"
+            },
+            "description": "ReckonAI phase-0b fixture (instant, balance funded)",
+            "soft_descriptor": "TEST STORE",
+            "shipping": {
+              "name": {
+                "full_name": "<redacted:pii>"
+              },
+              "address": {
+                "address_line_1": "<redacted:pii>",
+                "admin_area_2": "<redacted:pii>",
+                "admin_area_1": "<redacted:pii>",
+                "postal_code": "<redacted:pii>",
+                "country_code": "US"
+              }
+            },
+            "payments": {
+              "captures": [
+                {
+                  "id": "<redacted:id>",
+                  "status": "PARTIALLY_REFUNDED",
+                  "amount": {
+                    "currency_code": "USD",
+                    "value": "100.00"
+                  },
+                  "final_capture": true,
+                  "disbursement_mode": "INSTANT",
+                  "seller_protection": {
+                    "status": "ELIGIBLE",
+                    "dispute_categories": [
+                      "ITEM_NOT_RECEIVED",
+                      "UNAUTHORIZED_TRANSACTION"
+                    ]
+                  },
+                  "seller_receivable_breakdown": {
+                    "gross_amount": {
+                      "currency_code": "USD",
+                      "value": "100.00"
+                    },
+                    "paypal_fee": {
+                      "currency_code": "USD",
+                      "value": "3.98"
+                    },
+                    "platform_fees": [
+                      {
+                        "amount": {
+                          "currency_code": "USD",
+                          "value": "10.00"
+                        },
+                        "payee": {
+                          "merchant_id": "<redacted:id>"
+                        }
+                      }
+                    ],
+                    "net_amount": {
+                      "currency_code": "USD",
+                      "value": "86.02"
+                    }
+                  },
+                  "links": [
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/captures/{id}",
+                      "rel": "self",
+                      "method": "GET"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/captures/{id}/refund",
+                      "rel": "refund",
+                      "method": "POST"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/checkout/orders/{id}",
+                      "rel": "up",
+                      "method": "GET"
+                    }
+                  ],
+                  "create_time": "2026-11-07T08:21:24Z",
+                  "update_time": "2026-11-07T08:42:43Z"
+                }
+              ],
+              "refunds": [
+                {
+                  "id": "<redacted:id>",
+                  "amount": {
+                    "currency_code": "USD",
+                    "value": "30.00"
+                  },
+                  "note_to_payer": "ReckonAI phase-0b partial refund fixture",
+                  "seller_payable_breakdown": {
+                    "gross_amount": {
+                      "currency_code": "USD",
+                      "value": "30.00"
+                    },
+                    "paypal_fee": {
+                      "currency_code": "USD",
+                      "value": "0.00"
+                    },
+                    "platform_fees": [
+                      {
+                        "amount": {
+                          "currency_code": "USD",
+                          "value": "3.00"
+                        }
+                      }
+                    ],
+                    "net_amount": {
+                      "currency_code": "USD",
+                      "value": "27.00"
+                    },
+                    "total_refunded_amount": {
+                      "currency_code": "USD",
+                      "value": "30.00"
+                    }
+                  },
+                  "status": "COMPLETED",
+                  "links": [
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/refunds/{id}",
+                      "rel": "self",
+                      "method": "GET"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/captures/{id}",
+                      "rel": "up",
+                      "method": "GET"
+                    }
+                  ],
+                  "create_time": "2026-11-07T00:42:43-08:00",
+                  "update_time": "2026-11-07T00:42:43-08:00"
+                }
+              ]
+            }
+          }
+        ],
+        "payer": {
+          "name": {
+            "given_name": "<redacted:pii>",
+            "surname": "<redacted:pii>"
+          },
+          "email_address": "<redacted:pii>",
+          "payer_id": "<redacted:id>",
+          "address": {
+            "country_code": "US"
+          }
+        },
+        "create_time": "2026-11-07T08:21:24Z",
+        "update_time": "2026-11-07T08:42:43Z",
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/checkout/orders/{id}",
+            "rel": "self",
+            "method": "GET"
+          }
+        ]
+      },
+      "money_values": [
+        {
+          "path": "$orders.purchase_units[0].amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "100.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payment_instruction.platform_fees[0].amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "10.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payments.captures[0].amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "100.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payments.captures[0].seller_receivable_breakdown.gross_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "100.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payments.captures[0].seller_receivable_breakdown.paypal_fee",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "3.98",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payments.captures[0].seller_receivable_breakdown.platform_fees[0].amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "10.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payments.captures[0].seller_receivable_breakdown.net_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "86.02",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payments.refunds[0].amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "30.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payments.refunds[0].seller_payable_breakdown.gross_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "30.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payments.refunds[0].seller_payable_breakdown.paypal_fee",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "0.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payments.refunds[0].seller_payable_breakdown.platform_fees[0].amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "3.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payments.refunds[0].seller_payable_breakdown.net_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "27.00",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payments.refunds[0].seller_payable_breakdown.total_refunded_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "30.00",
+          "raw_json_type": "str"
+        }
+      ]
+    },
+    {
+      "record_type": "orders",
+      "note": "purchase units, payer, links",
+      "request_path": "/v2/checkout/orders/{id}",
+      "http_status": 200,
+      "fetched_at": "2026-11-07T09:02:09.750639+00:00",
+      "read_as": "seller:C24NAWELTTHXJ",
+      "status": "ok",
+      "body": {
+        "id": "<redacted:id>",
+        "intent": "CAPTURE",
+        "status": "COMPLETED",
+        "payment_source": {
+          "paypal": {
+            "email_address": "<redacted:pii>",
+            "account_id": "<redacted:id>",
+            "account_status": "VERIFIED",
+            "name": {
+              "given_name": "<redacted:pii>",
+              "surname": "<redacted:pii>"
+            },
+            "address": {
+              "country_code": "US"
+            }
+          }
+        },
+        "purchase_units": [
+          {
+            "reference_id": "<redacted:id>",
+            "amount": {
+              "currency_code": "EUR",
+              "value": "95.50",
+              "breakdown": {}
+            },
+            "payee": {
+              "merchant_id": "<redacted:id>",
+              "display_data": {
+                "brand_name": "ReckonAI Test Marketplace"
+              }
+            },
+            "payment_instruction": {
+              "platform_fees": [
+                {
+                  "amount": {
+                    "currency_code": "EUR",
+                    "value": "9.55"
+                  },
+                  "payee": {
+                    "merchant_id": "<redacted:id>"
+                  }
+                }
+              ],
+              "disbursement_mode": "INSTANT"
+            },
+            "description": "ReckonAI phase-0b fixture (cross-currency)",
+            "soft_descriptor": "TEST STORE",
+            "shipping": {
+              "name": {
+                "full_name": "<redacted:pii>"
+              },
+              "address": {
+                "address_line_1": "<redacted:pii>",
+                "admin_area_2": "<redacted:pii>",
+                "admin_area_1": "<redacted:pii>",
+                "postal_code": "<redacted:pii>",
+                "country_code": "US"
+              }
+            },
+            "payments": {
+              "captures": [
+                {
+                  "id": "<redacted:id>",
+                  "status": "COMPLETED",
+                  "amount": {
+                    "currency_code": "EUR",
+                    "value": "95.50"
+                  },
+                  "final_capture": true,
+                  "disbursement_mode": "INSTANT",
+                  "seller_protection": {
+                    "status": "ELIGIBLE",
+                    "dispute_categories": [
+                      "ITEM_NOT_RECEIVED",
+                      "UNAUTHORIZED_TRANSACTION"
+                    ]
+                  },
+                  "seller_receivable_breakdown": {
+                    "gross_amount": {
+                      "currency_code": "EUR",
+                      "value": "95.50"
+                    },
+                    "paypal_fee": {
+                      "currency_code": "EUR",
+                      "value": "3.72"
+                    },
+                    "platform_fees": [
+                      {
+                        "amount": {
+                          "currency_code": "EUR",
+                          "value": "9.55"
+                        },
+                        "payee": {
+                          "merchant_id": "<redacted:id>"
+                        }
+                      }
+                    ],
+                    "net_amount": {
+                      "currency_code": "EUR",
+                      "value": "82.23"
+                    },
+                    "receivable_amount": {
+                      "currency_code": "USD",
+                      "value": "89.59"
+                    },
+                    "exchange_rate": {
+                      "source_currency": "EUR",
+                      "target_currency": "USD",
+                      "value": "1.089477173902071"
+                    }
+                  },
+                  "links": [
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/captures/{id}",
+                      "rel": "self",
+                      "method": "GET"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/captures/{id}/refund",
+                      "rel": "refund",
+                      "method": "POST"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/checkout/orders/{id}",
+                      "rel": "up",
+                      "method": "GET"
+                    }
+                  ],
+                  "create_time": "2026-11-07T08:46:18Z",
+                  "update_time": "2026-11-07T08:46:18Z"
+                }
+              ]
+            }
+          }
+        ],
+        "payer": {
+          "name": {
+            "given_name": "<redacted:pii>",
+            "surname": "<redacted:pii>"
+          },
+          "email_address": "<redacted:pii>",
+          "payer_id": "<redacted:id>",
+          "address": {
+            "country_code": "US"
+          }
+        },
+        "create_time": "2026-11-07T08:46:18Z",
+        "update_time": "2026-11-07T08:46:18Z",
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/checkout/orders/{id}",
+            "rel": "self",
+            "method": "GET"
+          }
+        ]
+      },
+      "money_values": [
+        {
+          "path": "$orders.purchase_units[0].amount",
+          "currency": "EUR",
+          "currency_key": "currency_code",
+          "amount": "95.50",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payment_instruction.platform_fees[0].amount",
+          "currency": "EUR",
+          "currency_key": "currency_code",
+          "amount": "9.55",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payments.captures[0].amount",
+          "currency": "EUR",
+          "currency_key": "currency_code",
+          "amount": "95.50",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payments.captures[0].seller_receivable_breakdown.gross_amount",
+          "currency": "EUR",
+          "currency_key": "currency_code",
+          "amount": "95.50",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payments.captures[0].seller_receivable_breakdown.paypal_fee",
+          "currency": "EUR",
+          "currency_key": "currency_code",
+          "amount": "3.72",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payments.captures[0].seller_receivable_breakdown.platform_fees[0].amount",
+          "currency": "EUR",
+          "currency_key": "currency_code",
+          "amount": "9.55",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payments.captures[0].seller_receivable_breakdown.net_amount",
+          "currency": "EUR",
+          "currency_key": "currency_code",
+          "amount": "82.23",
+          "raw_json_type": "str"
+        },
+        {
+          "path": "$orders.purchase_units[0].payments.captures[0].seller_receivable_breakdown.receivable_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "89.59",
+          "raw_json_type": "str"
+        }
+      ]
+    }
+  ]
+}

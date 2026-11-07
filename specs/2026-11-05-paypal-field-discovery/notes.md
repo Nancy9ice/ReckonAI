@@ -1,5 +1,21 @@
 # Phase 0 — PayPal field discovery · Notes
 
+> **HISTORICAL RECORD. Superseded 2026-11-07 — do not build from this.**
+>
+> This phase measured a **first-party** integration. The product targets
+> PayPal's **multiparty** model (`specs/multiparty-direction.md`), and several
+> observations below are contradicted under it — `capture.paypal_fee`,
+> `payer_identity`, `platform_fee` and the dispute rows among them.
+>
+> The live record is **`specs/2026-11-07-multiparty-field-discovery/notes.md`**,
+> which restates everything here that is still true, so you never need this
+> file to build. `specs/paypal-fields.md` is generated from Phase 0b's
+> artifacts, not these.
+>
+> This file and its artifacts are kept because they are the accurate record of
+> what Phase 0 measured, and because the direction change was itself a Phase 0
+> finding. Nothing reads them.
+
 **Branch:** `phase-0/paypal-field-discovery`
 Scope: `./requirements.md` · Task groups: `./plan.md` · Merge gate: `./validation.md`
 

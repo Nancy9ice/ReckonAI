@@ -1,0 +1,82 @@
+{
+  "raw": {
+    "record_type": "disputes",
+    "source": "scripts/probe_paypal.py",
+    "redacted_by": "scripts/derive_observed.py",
+    "redacted": true,
+    "api_base": "https://api-m.sandbox.paypal.com",
+    "sample_labels": [
+      "disputes:list"
+    ],
+    "redaction_note": "Identifiers and buyer PII replaced with <redacted:id> and <redacted:pii>. Amounts, currencies, rates, fees, timestamps, statuses and error codes are kept: they are the evidence (plan.md group 3 step 3). Unredacted fixture ids are in fixtures.md."
+  },
+  "results": [
+    {
+      "record_type": "disputes",
+      "note": "dispute list, lifecycle states",
+      "request_path": "/v1/customer/disputes",
+      "http_status": 200,
+      "fetched_at": "2026-11-07T09:02:11.950336+00:00",
+      "read_as": "self",
+      "status": "ok",
+      "body": {
+        "items": [
+          {
+            "dispute_id": "<redacted:id>",
+            "create_time": "2026-11-07T08:55:17.000Z",
+            "update_time": "2026-11-07T08:58:43.000Z",
+            "disputed_transactions": [
+              {
+                "buyer_transaction_id": "<redacted:id>",
+                "buyer": {
+                  "payer_id": "<redacted:id>"
+                },
+                "seller": {
+                  "merchant_id": "<redacted:id>"
+                }
+              }
+            ],
+            "reason": "MERCHANDISE_OR_SERVICE_NOT_RECEIVED",
+            "status": "WAITING_FOR_SELLER_RESPONSE",
+            "dispute_state": "REQUIRED_ACTION",
+            "dispute_amount": {
+              "currency_code": "USD",
+              "value": "100.00"
+            },
+            "dispute_life_cycle_stage": "INQUIRY",
+            "dispute_channel": "INTERNAL",
+            "seller_response_due_date": "2026-11-27T08:55:17.000Z",
+            "links": [
+              {
+                "href": "https://api-m.sandbox.paypal.com/v1/customer/disputes/PP-R-QKS-10196968",
+                "rel": "self",
+                "method": "GET"
+              }
+            ]
+          }
+        ],
+        "links": [
+          {
+            "href": "https://api-m.sandbox.paypal.com/v1/customer/disputes?page_size=50",
+            "rel": "self",
+            "method": "GET"
+          },
+          {
+            "href": "https://api-m.sandbox.paypal.com/v1/customer/disputes?page_size=50",
+            "rel": "first",
+            "method": "GET"
+          }
+        ]
+      },
+      "money_values": [
+        {
+          "path": "$disputes.items[0].dispute_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "100.00",
+          "raw_json_type": "str"
+        }
+      ]
+    }
+  ]
+}

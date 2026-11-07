@@ -726,10 +726,10 @@ def build(
     titles = {
         "payment": "Payment",
         "capture": "Capture",
+        "platform_fee": "Platform fee",
         "refund": "Refund",
         "dispute": "Dispute",
-        "payout_batch": "Payout batch",
-        "payout_item": "Payout item",
+        "disbursement": "Disbursement",
         "fx_conversion": "FX conversion",
     }
     leads = {
@@ -747,11 +747,15 @@ def build(
         "though the behaviour is not. **None of these rows may be read as "
         "`absent`** - that would be a claim about PayPal that our evidence does "
         "not support.",
-        "payout_batch": "Read from `GET /v1/payments/payouts/{id}`. Two batches "
-        "sampled, one `SUCCESS` and one `DENIED`, which is what made the fee "
-        "findings possible.",
-        "payout_item": "Four items across the two batches, two successful and "
-        "two failed.",
+        "platform_fee": "PayPal's own record of the commission the marketplace "
+        "took. Under multiparty this is independent evidence against the "
+        "marketplace's rules - in the merchant-of-record model the commission was "
+        "merely whatever the marketplace kept, with nothing to check it against.",
+        "disbursement": "**Every row here is `unanswered`.** Under `DELAYED`, "
+        "release is `POST /v1/payments/referenced-payouts-items`, and both "
+        "referenced-payouts endpoints answer `403` for this app - they need "
+        "partner approval and a BN code. Under `INSTANT` the seller is paid at "
+        "capture and there is no separate disbursement record to read.",
         "fx_conversion": "**The reason this phase ran first.** `mission.md` P3 "
         "forbids substituting an estimate for a provider record, so the model "
         "may only carry what PayPal actually supplies. Rows are gated on a real "

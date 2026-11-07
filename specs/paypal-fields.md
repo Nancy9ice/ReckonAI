@@ -86,9 +86,9 @@ The settlement-side record, and where PayPal puts its conversion evidence. Read 
 | `settlement_currency` | `balances` `$.balances[].currency` | Required (SDK) | 1/1 | `present` | The balances endpoint answers this unconditionally, which beats inferring it per capture. |
 | `created_at` | `captures` `$.create_time` | Optional (SDK) | 4/4 | `present` | - |
 
-## 3. platform_fee
+## 3. Platform fee
 
-
+PayPal's own record of the commission the marketplace took. Under multiparty this is independent evidence against the marketplace's rules - in the merchant-of-record model the commission was merely whatever the marketplace kept, with nothing to check it against.
 
 | Canonical field | PayPal path | Declared | Observed | Verdict | Condition / note |
 |---|---|---|---|---|---|
@@ -136,9 +136,9 @@ Read from `GET /v2/payments/refunds/{id}`, except where the order view carries m
 | `seller_identity` | `disputes` `$.items[].disputed_transactions[].seller.merchant_id` | **not declared** | 1/1 | `present` | - |
 | `capture_linkage` | `disputes` `$.items[].disputed_transactions[].buyer_transaction_id` | **not declared** | 1/1 | `present` | **Not our capture id.** The buyer's side of the transaction has its own identifier, so matching a dispute to a capture needs a join we have not established. Filtering by `disputed_transaction_id` does accept the capture id. |
 
-## 6. disbursement
+## 6. Disbursement
 
-
+**Every row here is `unanswered`.** Under `DELAYED`, release is `POST /v1/payments/referenced-payouts-items`, and both referenced-payouts endpoints answer `403` for this app - they need partner approval and a BN code. Under `INSTANT` the seller is paid at capture and there is no separate disbursement record to read.
 
 | Canonical field | PayPal path | Declared | Observed | Verdict | Condition / note |
 |---|---|---|---|---|---|

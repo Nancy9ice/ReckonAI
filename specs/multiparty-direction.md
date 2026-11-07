@@ -210,7 +210,21 @@ It is PayPal's cost to the partner rather than a per-transaction conversion fee
 in a seller's settlement, so the `fx_conversion.fee` verdict is unchanged — but
 the claim needed bounding.
 
-### 8.2 Open questions
+### 8.2 Open questions — **all answered 2026-11-07 by Phase 0b**
+
+The table below is the state before Phase 0b ran, kept because it records what
+was unknown and why. **Every question is now answered**; the answers and the
+evidence are in `specs/2026-11-07-multiparty-field-discovery/notes.md`, and the
+verdicts they produced are in `specs/paypal-fields.md`.
+
+In brief: platform fees and delayed disbursement are both reachable; a platform
+can read a seller's records with `PayPal-Auth-Assertion`; the release is
+`POST /v1/payments/referenced-payouts-items` and produces a record PayPal
+publishes no contract for; FX behaves normally under a seller payee except that
+the conversion applies to the **net**; commission is reversed automatically on
+both refunds and lost disputes; and the fee is taken **at capture** in both
+modes. The one probe still outstanding — whether the fee reaches the platform
+through a readable API — is a reporting lag, not a blocker.
 
 | # | Question | Unblocks | State |
 |---|---|---|---|

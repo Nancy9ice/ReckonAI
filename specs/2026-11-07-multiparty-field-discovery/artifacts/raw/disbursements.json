@@ -1,0 +1,57 @@
+{
+  "raw": {
+    "record_type": "disbursements",
+    "source": "scripts/probe_paypal.py",
+    "redacted_by": "scripts/derive_observed.py",
+    "redacted": true,
+    "api_base": "https://api-m.sandbox.paypal.com",
+    "sample_labels": [
+      "disbursements:list"
+    ],
+    "redaction_note": "Identifiers and buyer PII replaced with <redacted:id> and <redacted:pii>. Amounts, currencies, rates, fees, timestamps, statuses and error codes are kept: they are the evidence (plan.md group 3 step 3). Unredacted fixture ids are in fixtures.md."
+  },
+  "results": [
+    {
+      "record_type": "disbursements",
+      "note": "a DELAYED release: the record proving a seller was actually paid",
+      "request_path": "/v1/payments/referenced-payouts-items/9T5nyXMWZuuKwX6Xe_NpPu0Z-Ap-i_yLtufYV7lO2H9muq_-o2MODJpGi0ZYJbg=",
+      "http_status": 200,
+      "fetched_at": "2026-11-07T09:30:18.649366+00:00",
+      "read_as": "seller:C24NAWELTTHXJ",
+      "status": "ok",
+      "body": {
+        "item_id": "<redacted:id>",
+        "processing_state": {
+          "status": "SUCCESS"
+        },
+        "reference_id": "<redacted:id>",
+        "reference_type": "TRANSACTION_ID",
+        "payout_transaction_id": "<redacted:id>",
+        "payout_amount": {
+          "currency_code": "USD",
+          "value": "86.02"
+        },
+        "payout_destination": "C24NAWELTTHXJ",
+        "last_response_code": 0,
+        "time_updated": 0,
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v1/payments/referenced-payouts-items/9T5nyXMWZuuKwX6Xe_NpPu0Z-Ap-i_yLtufYV7lO2H9muq_-o2MODJpGi0ZYJbg=",
+            "rel": "self",
+            "method": "GET",
+            "encType": "application/json"
+          }
+        ]
+      },
+      "money_values": [
+        {
+          "path": "$disbursements.payout_amount",
+          "currency": "USD",
+          "currency_key": "currency_code",
+          "amount": "86.02",
+          "raw_json_type": "str"
+        }
+      ]
+    }
+  ]
+}

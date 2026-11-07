@@ -90,741 +90,324 @@ NO_PLATFORM_CAPABILITY = (
 # would report provider conversion evidence we do not have.
 CANONICAL: list[dict[str, Any]] = [
     # ---------------------------------------------------------------- payment
-    {
-        "entity": "payment",
-        "field": "payment_id",
-        "sources": [("orders", "$.id")],
-        "note": "PayPal's order id. The canonical payment key.",
-    },
-    {
-        "entity": "payment",
-        "field": "amount",
-        "sources": [("orders", "$.purchase_units[].amount.value")],
-        "note": "String, parses straight to Decimal.",
-    },
-    {
-        "entity": "payment",
-        "field": "currency",
-        "sources": [("orders", "$.purchase_units[].amount.currency_code")],
-        "note": "Buyer-facing currency, not necessarily the settlement currency.",
-    },
-    {
-        "entity": "payment",
-        "field": "status",
-        "sources": [("orders", "$.status")],
-        "note": "COMPLETED observed. Feeds the lifecycle enum of Phase 3.",
-    },
-    {
-        "entity": "payment",
-        "field": "intent",
-        "sources": [("orders", "$.intent")],
-        "note": "CAPTURE observed. Distinguishes authorize-then-capture flows.",
-    },
-    {
-        "entity": "payment",
-        "field": "created_at",
-        "sources": [("orders", "$.create_time")],
-        "note": "RFC 3339.",
-    },
-    {
-        "entity": "payment",
-        "field": "updated_at",
-        "sources": [("orders", "$.update_time")],
-        "note": "RFC 3339.",
-    },
-    {
-        "entity": "payment",
-        "field": "payer_identity",
-        "sources": [("orders", "$.payer")],
-        "unobserved_reason": NO_WALLET,
-        "note": "Buyer identity. See notes.md F5: a refund's payer block carries "
-        "the MERCHANT, so it is not a substitute.",
-    },
-    {
-        "entity": "payment",
-        "field": "funding_instrument",
-        "sources": [("orders", "$.payment_source.card.brand")],
-        "note": "Card brand. The funding instrument determines whether payer "
-        "identity and disputes are available at all.",
-    },
-    {
-        "entity": "payment",
-        "field": "seller_identity",
-        "sources": [("orders", "$.purchase_units[].payee.merchant_id")],
-        "note": "The payee merchant id. Ties a payment to a seller.",
-    },
+    {"entity": "payment", "field": "payment_id", "sources": [("orders", "$.id")],
+     "note": "PayPal's order id. The canonical payment key."},
+    {"entity": "payment", "field": "amount",
+     "sources": [("orders", "$.purchase_units[].amount.value")]},
+    {"entity": "payment", "field": "currency",
+     "sources": [("orders", "$.purchase_units[].amount.currency_code")],
+     "note": "Buyer-facing currency, not necessarily the settlement currency."},
+    {"entity": "payment", "field": "status", "sources": [("orders", "$.status")]},
+    {"entity": "payment", "field": "intent", "sources": [("orders", "$.intent")]},
+    {"entity": "payment", "field": "created_at", "sources": [("orders", "$.create_time")]},
+    {"entity": "payment", "field": "payer_identity",
+     "sources": [("orders", "$.payer.payer_id")],
+     "note": "**Present under multiparty, and it was not before.** Phase 0's "
+     "card-funded orders carried no payer at all. A wallet-funded order carries "
+     "`address`, `email_address`, `name` and `payer_id`."},
+    {"entity": "payment", "field": "buyer_verification",
+     "sources": [("orders", "$.payment_source.paypal.account_status")],
+     "note": "`VERIFIED` observed. A buyer trust signal with no equivalent on a "
+     "card payment."},
+    {"entity": "payment", "field": "seller_identity",
+     "sources": [("orders", "$.purchase_units[].payee.merchant_id")],
+     "note": "**The join the whole product rests on.** Under multiparty the "
+     "payee is the seller, not the marketplace."},
+    {"entity": "payment", "field": "disbursement_mode",
+     "sources": [("orders", "$.purchase_units[].payment_instruction.disbursement_mode")],
+     "note": "`INSTANT` or `DELAYED`. Decides whether the seller is paid at "
+     "capture or on release."},
     # ---------------------------------------------------------------- capture
-    {
-        "entity": "capture",
-        "field": "capture_id",
-        "sources": [("captures", "$.id")],
-        "note": "The authoritative settlement-side key.",
-    },
-    {
-        "entity": "capture",
-        "field": "payment_linkage",
-        "sources": [("captures", "$.supplementary_data.related_ids.order_id")],
-        "note": "A real field, not a link to parse. Capture to order is a "
-        "provider-supplied foreign key.",
-    },
-    {
-        "entity": "capture",
-        "field": "amount",
-        "sources": [("captures", "$.amount.value")],
-    },
-    {
-        "entity": "capture",
-        "field": "currency",
-        "sources": [("captures", "$.amount.currency_code")],
-    },
-    {
-        "entity": "capture",
-        "field": "gross_amount",
-        "sources": [("captures", "$.seller_receivable_breakdown.gross_amount.value")],
-        "note": "Pre-fee, pre-conversion.",
-    },
-    {
-        "entity": "capture",
-        "field": "net_amount",
-        "sources": [("captures", "$.seller_receivable_breakdown.net_amount.value")],
-        "note": "Equal to gross on our fixtures because no fee was assessed.",
-    },
-    {
-        "entity": "capture",
-        "field": "paypal_fee",
-        "sources": [("captures", "$.seller_receivable_breakdown.paypal_fee.value")],
-        "note": "**The weakest row in this table.** Absent on both captures, yet "
-        "the refund carries paypal_fee as an explicit 0.00, so PayPal does emit "
-        "the field when it has a value. Cause not established. Phase 7 must NOT "
-        "conclude that PayPal withholds capture fees; re-verify against a "
-        "fee-bearing transaction. See notes.md.",
-    },
-    {
-        "entity": "capture",
-        "field": "settlement_amount",
-        "sources": [
-            ("captures", "$.seller_receivable_breakdown.receivable_amount.value")
-        ],
-        "note": "What the seller actually receives, in the settlement currency.",
-    },
-    {
-        "entity": "capture",
-        "field": "settlement_currency",
-        "sources": [
-            ("captures", "$.seller_receivable_breakdown.receivable_amount.currency_code"),
-            ("balances", "$.balances[].currency"),
-        ],
-        "note": "The balances endpoint answers this directly and unconditionally, "
-        "which is why it beats inferring it per capture.",
-    },
-    {
-        "entity": "capture",
-        "field": "status",
-        "sources": [("captures", "$.status")],
-        "note": "PARTIALLY_REFUNDED observed, which the order view agrees with.",
-    },
-    {
-        "entity": "capture",
-        "field": "final_capture",
-        "sources": [("captures", "$.final_capture")],
-        "note": "Whether more captures may follow against the authorization.",
-    },
-    {
-        "entity": "capture",
-        "field": "created_at",
-        "sources": [("captures", "$.create_time")],
-    },
-    {
-        "entity": "capture",
-        "field": "updated_at",
-        "sources": [("captures", "$.update_time")],
-    },
-    {
-        "entity": "capture",
-        "field": "platform_fee",
-        "sources": [
-            ("captures", "$.seller_receivable_breakdown.platform_fees[].amount.value")
-        ],
-        "unobserved_reason": NO_PLATFORM_CAPABILITY,
-        "note": "Marketplace commission. **Reclassified from `absent` to "
-        "`unanswered` on 2026-11-06**: the contract shows a platform fee only "
-        "exists when the caller instructs one and the merchant holds the "
-        "Marketplaces capability, so its absence here says nothing about PayPal.",
-    },
+    {"entity": "capture", "field": "capture_id", "sources": [("captures", "$.id")]},
+    {"entity": "capture", "field": "payment_linkage",
+     "sources": [("captures", "$.supplementary_data.related_ids.order_id")],
+     "note": "A real field, not a link to parse."},
+    {"entity": "capture", "field": "amount", "sources": [("captures", "$.amount.value")]},
+    {"entity": "capture", "field": "currency",
+     "sources": [("captures", "$.amount.currency_code")]},
+    {"entity": "capture", "field": "status", "sources": [("captures", "$.status")],
+     "note": "**Mutable, and it does not mean the seller was paid.** A `DELAYED` "
+     "capture reads `COMPLETED` while funds are held, and a disputed capture "
+     "reverts to `PENDING`."},
+    {"entity": "capture", "field": "disbursement_mode",
+     "sources": [("captures", "$.disbursement_mode")],
+     "note": "Echoed onto the capture, so the mode is recoverable without the order."},
+    {"entity": "capture", "field": "seller_identity",
+     "sources": [("captures", "$.payee.merchant_id")]},
+    {"entity": "capture", "field": "gross_amount",
+     "sources": [("captures", "$.seller_receivable_breakdown.gross_amount.value")],
+     "note": "Pre-fee, pre-conversion."},
+    {"entity": "capture", "field": "net_amount",
+     "sources": [("captures", "$.seller_receivable_breakdown.net_amount.value")],
+     "note": "`gross - paypal_fee - platform_fees`, observed exactly on every "
+     "capture carrying a breakdown."},
+    {"entity": "capture", "field": "paypal_fee",
+     "sources": [("captures", "$.seller_receivable_breakdown.paypal_fee.value")],
+     "note": "**Phase 0 recorded this `absent`; under multiparty it is there.** "
+     "3.98 on 100.00, identical across card-in-wallet and balance funding. "
+     "**But the whole breakdown disappears while a capture is `PENDING`**, which "
+     "an open dispute causes - observed, then observed returning once the "
+     "dispute resolved. Capture these values at ingestion; a later read can "
+     "return nothing, and that absence is not evidence of no fee."},
+    {"entity": "capture", "field": "settlement_amount",
+     "sources": [("captures", "$.seller_receivable_breakdown.receivable_amount.value")],
+     "note": "Only where a conversion occurred. **Converts the net, not the "
+     "gross** - see fx_conversion.source_amount."},
+    {"entity": "capture", "field": "settlement_currency",
+     "sources": [
+         ("captures", "$.seller_receivable_breakdown.receivable_amount.currency_code"),
+         ("balances", "$.balances[].currency"),
+     ],
+     "note": "The balances endpoint answers this unconditionally, which beats "
+     "inferring it per capture."},
+    {"entity": "capture", "field": "created_at", "sources": [("captures", "$.create_time")]},
+    # ----------------------------------------------------------- platform fee
+    {"entity": "platform_fee", "field": "amount",
+     "sources": [("captures", "$.seller_receivable_breakdown.platform_fees[].amount.value")],
+     "note": "The marketplace's commission, as PayPal actually took it. "
+     "Independent evidence against the marketplace's own rules."},
+    {"entity": "platform_fee", "field": "currency",
+     "sources": [("captures",
+                  "$.seller_receivable_breakdown.platform_fees[].amount.currency_code")],
+     "note": "Must match the transaction currency; PayPal rejects a mismatch."},
+    {"entity": "platform_fee", "field": "payee",
+     "sources": [("captures",
+                  "$.seller_receivable_breakdown.platform_fees[].payee.merchant_id")],
+     "note": "Where the commission was routed. Defaults to the API caller when "
+     "the order does not name one, and PayPal fills it in explicitly."},
+    {"entity": "platform_fee", "field": "reversal_on_refund",
+     "sources": [("refunds", "$.seller_payable_breakdown.platform_fees[].amount.value")],
+     "note": "**Reversed automatically and pro rata**, on an ordinary refund and "
+     "on a lost dispute alike. A 30.00 refund of a 100.00 capture returned 3.00 "
+     "of the 10.00 commission; accepting a dispute claim returned the full "
+     "10.00. So the marketplace does not keep commission on a reversed "
+     "transaction, and Phase 10's expected position must assume the reversal. "
+     "Overriding the amount needs an account enablement we do not have "
+     "(`PLATFORM_FEE_NOT_ENABLED`)."},
+    {"entity": "platform_fee", "field": "settlement_reference", "sources": [],
+     "note": "Partner fees settle as a next-day consolidated bank payment. No "
+     "per-transaction settlement reference is exposed, and reconciling the "
+     "aggregate is deferred (`mission.md` section 7)."},
     # ----------------------------------------------------------------- refund
-    {
-        "entity": "refund",
-        "field": "refund_id",
-        "sources": [("refunds", "$.id")],
-    },
-    {
-        "entity": "refund",
-        "field": "capture_linkage",
-        "sources": [("refunds", "$.links[].href")],
-        "note": "**Derived, not provider-supplied.** There is no capture_id field "
-        "on a refund; the only link back is links[rel=up], whose href must be "
-        "parsed. Phase 7 must record this as a derived linkage.",
-    },
-    {
-        "entity": "refund",
-        "field": "amount",
-        "sources": [("refunds", "$.amount.value")],
-    },
-    {
-        "entity": "refund",
-        "field": "currency",
-        "sources": [("refunds", "$.amount.currency_code")],
-    },
-    {
-        "entity": "refund",
-        "field": "gross_amount",
-        "sources": [("refunds", "$.seller_payable_breakdown.gross_amount.value")],
-        "note": "Note the name: a refund carries seller_PAYABLE_breakdown, a "
-        "capture seller_RECEIVABLE_breakdown. Mapping code cannot share a path.",
-    },
-    {
-        "entity": "refund",
-        "field": "net_amount",
-        "sources": [("refunds", "$.seller_payable_breakdown.net_amount.value")],
-    },
-    {
-        "entity": "refund",
-        "field": "paypal_fee",
-        "sources": [("refunds", "$.seller_payable_breakdown.paypal_fee.value")],
-        "note": "Present as an explicit 0.00. This is the evidence that the "
-        "capture-side absence is not PayPal withholding the field.",
-    },
-    {
-        "entity": "refund",
-        "field": "total_refunded_amount",
-        "sources": [
-            ("refunds", "$.seller_payable_breakdown.total_refunded_amount.value")
-        ],
-        "note": "What makes partial-refund tracking possible. readme section 13 "
-        "Scenario 1 depends on it.",
-    },
-    {
-        "entity": "refund",
-        "field": "platform_fee",
-        "sources": [
-            (
-                "orders",
-                "$.purchase_units[].payments.refunds[].seller_payable_breakdown"
-                ".platform_fees[].amount.value",
-            ),
-            ("refunds", "$.seller_payable_breakdown.platform_fees[].amount.value"),
-        ],
-        "note": "**Read-path dependent.** Populated when the refund is read "
-        "through the order, absent from the refund endpoint for the same record. "
-        "Phase 7 should ingest refunds via the order. See notes.md F2.",
-    },
-    {
-        "entity": "refund",
-        "field": "status",
-        "sources": [("refunds", "$.status")],
-    },
-    {
-        "entity": "refund",
-        "field": "created_at",
-        "sources": [("refunds", "$.create_time")],
-        "note": "Returned with a -08:00 offset where captures use Z. Both are "
-        "RFC 3339; a naive string comparison across the two would be wrong.",
-    },
+    {"entity": "refund", "field": "refund_id", "sources": [("refunds", "$.id")]},
+    {"entity": "refund", "field": "capture_linkage",
+     "sources": [("refunds", "$.links[].href")],
+     "note": "**Derived, not provider-supplied.** No capture id on a refund; the "
+     "only link back is `links[rel=up]`, whose href must be parsed."},
+    {"entity": "refund", "field": "amount", "sources": [("refunds", "$.amount.value")]},
+    {"entity": "refund", "field": "currency",
+     "sources": [("refunds", "$.amount.currency_code")]},
+    {"entity": "refund", "field": "gross_amount",
+     "sources": [("refunds", "$.seller_payable_breakdown.gross_amount.value")],
+     "note": "A refund carries `seller_payable_breakdown`, a capture "
+     "`seller_receivable_breakdown`. Mapping code cannot share a path."},
+    {"entity": "refund", "field": "net_amount",
+     "sources": [("refunds", "$.seller_payable_breakdown.net_amount.value")],
+     "note": "The same identity as a capture: 30.00 - 0.00 - 3.00 = 27.00."},
+    {"entity": "refund", "field": "paypal_fee",
+     "sources": [("refunds", "$.seller_payable_breakdown.paypal_fee.value")],
+     "note": "`0.00` observed: PayPal did not return its own fee on the refund."},
+    {"entity": "refund", "field": "total_refunded_amount",
+     "sources": [("refunds", "$.seller_payable_breakdown.total_refunded_amount.value")],
+     "note": "What makes partial-refund tracking possible."},
+    {"entity": "refund", "field": "status", "sources": [("refunds", "$.status")]},
+    {"entity": "refund", "field": "created_at", "sources": [("refunds", "$.create_time")]},
     # ---------------------------------------------------------------- dispute
-    {
-        "entity": "dispute",
-        "field": "dispute_id",
-        "sources": [("disputes", "$.items[].dispute_id")],
-        "unobserved_reason": NO_DISPUTE,
-    },
-    {
-        "entity": "dispute",
-        "field": "status",
-        "sources": [("disputes", "$.items[].status")],
-        "unobserved_reason": NO_DISPUTE,
-    },
-    {
-        "entity": "dispute",
-        "field": "lifecycle_stage",
-        "sources": [("disputes", "$.items[].dispute_life_cycle_stage")],
-        "unobserved_reason": NO_DISPUTE,
-        "note": "Declared read-only. The lifecycle states mission.md P4 wants.",
-    },
-    {
-        "entity": "dispute",
-        "field": "dispute_state",
-        "sources": [("disputes", "$.items[].dispute_state")],
-        "unobserved_reason": NO_DISPUTE,
-    },
-    {
-        "entity": "dispute",
-        "field": "amount",
-        "sources": [("disputes", "$.items[].dispute_amount.value")],
-        "unobserved_reason": NO_DISPUTE,
-    },
-    {
-        "entity": "dispute",
-        "field": "currency",
-        "sources": [("disputes", "$.items[].dispute_amount.currency_code")],
-        "unobserved_reason": NO_DISPUTE,
-    },
-    {
-        "entity": "dispute",
-        "field": "reason",
-        "sources": [("disputes", "$.items[].reason")],
-        "unobserved_reason": NO_DISPUTE,
-    },
-    {
-        "entity": "dispute",
-        "field": "created_at",
-        "sources": [("disputes", "$.items[].create_time")],
-        "unobserved_reason": NO_DISPUTE,
-    },
-    {
-        "entity": "dispute",
-        "field": "seller_response_due_date",
-        "sources": [("disputes", "$.items[].seller_response_due_date")],
-        "unobserved_reason": NO_DISPUTE,
-        "note": "Drives the awaiting-evidence lifecycle state of mission.md P4.",
-    },
-    {
-        "entity": "dispute",
-        "field": "capture_linkage",
-        "sources": [("disputes", "$.items[].links[].href")],
-        "unobserved_reason": NO_DISPUTE,
-        "note": "The list response declares no transaction id at all, only links. "
-        "Linkage would have to come from the single-dispute endpoint.",
-    },
-    # ----------------------------------------------------------- payout batch
-    {
-        "entity": "payout_batch",
-        "field": "batch_id",
-        "sources": [("payouts", "$.batch_header.payout_batch_id")],
-    },
-    {
-        "entity": "payout_batch",
-        "field": "status",
-        "sources": [("payouts", "$.batch_header.batch_status")],
-        "note": "SUCCESS and DENIED both observed.",
-    },
-    {
-        "entity": "payout_batch",
-        "field": "amount",
-        "sources": [("payouts", "$.batch_header.amount.value")],
-    },
-    {
-        "entity": "payout_batch",
-        "field": "currency",
-        "sources": [("payouts", "$.batch_header.amount.currency")],
-        "note": "**Spelled `currency`, not `currency_code`.** Payouts v1 is the "
-        "only API that does this, and the contract declares it. See notes.md F3 "
-        "and G4.",
-    },
-    {
-        "entity": "payout_batch",
-        "field": "fees",
-        "sources": [("payouts", "$.batch_header.fees.value")],
-        "note": "**Only trustworthy on a batch that processed.** On SUCCESS it "
-        "equals the sum of item fees. On DENIED the figure is not the fee that "
-        "would have been charged - observed wrong by a factor of 2.6. Never "
-        "carry a denied batch's fee forward.",
-    },
-    {
-        "entity": "payout_batch",
-        "field": "created_at",
-        "sources": [("payouts", "$.batch_header.time_created")],
-    },
-    {
-        "entity": "payout_batch",
-        "field": "completed_at",
-        "sources": [("payouts", "$.batch_header.time_completed")],
-        "note": "Populated on the denied batch too; it records when processing "
-        "ended, not that it succeeded.",
-    },
-    {
-        "entity": "payout_batch",
-        "field": "funding_source",
-        "sources": [("payouts", "$.batch_header.funding_source")],
-    },
-    # ------------------------------------------------------------ payout item
-    {
-        "entity": "payout_item",
-        "field": "item_id",
-        "sources": [("payouts", "$.items[].payout_item_id")],
-    },
-    {
-        "entity": "payout_item",
-        "field": "batch_linkage",
-        "sources": [("payouts", "$.items[].payout_batch_id")],
-        "note": "Provider-supplied, repeated on every item.",
-    },
-    {
-        "entity": "payout_item",
-        "field": "amount",
-        "sources": [("payouts", "$.items[].payout_item.amount.value")],
-    },
-    {
-        "entity": "payout_item",
-        "field": "currency",
-        "sources": [("payouts", "$.items[].payout_item.amount.currency")],
-    },
-    {
-        "entity": "payout_item",
-        "field": "fee",
-        "sources": [("payouts", "$.items[].payout_item_fee.value")],
-        "note": "Populated in both terminal states, but 0.00 on the failed items. "
-        "Reconcile against the batch fee only on a successful batch.",
-    },
-    {
-        "entity": "payout_item",
-        "field": "status",
-        "sources": [("payouts", "$.items[].transaction_status")],
-        "note": "SUCCESS and FAILED both observed.",
-    },
-    {
-        "entity": "payout_item",
-        "field": "transaction_id",
-        "sources": [("payouts", "$.items[].transaction_id")],
-        "note": "The link to the money movement. Absent on a failed item, which "
-        "is correct - no transaction occurred.",
-    },
-    {
-        "entity": "payout_item",
-        "field": "processed_at",
-        "sources": [("payouts", "$.items[].time_processed")],
-        "note": "**Populated on failed items too** (4 of 4). PayPal stamps a time "
-        "on any item it attempted, so this timestamp is not evidence of payment. "
-        "This corrects an earlier claim in fixtures.md; see notes.md F1.",
-    },
-    {
-        "entity": "payout_item",
-        "field": "recipient",
-        "sources": [("payouts", "$.items[].payout_item.receiver")],
-        "note": "Redacted in the committed artifacts as buyer PII; presence is "
-        "what the verdict rests on.",
-    },
-    {
-        "entity": "payout_item",
-        "field": "failure_reason",
-        "sources": [("payouts", "$.items[].errors.name")],
-        "note": "RECEIVER_COUNTRY_NOT_ALLOWED observed. **Account-dependent**: a "
-        "different sandbox account denied the same request with errors empty. "
-        "When it is absent the product must answer insufficient_evidence rather "
-        "than assemble a cause.",
-    },
-    {
-        "entity": "payout_item",
-        "field": "sender_item_reference",
-        "sources": [("payouts", "$.items[].payout_item.sender_item_id")],
-        "note": "Our own idempotency/correlation key, echoed back.",
-    },
+    {"entity": "dispute", "field": "dispute_id",
+     "sources": [("disputes", "$.items[].dispute_id")]},
+    {"entity": "dispute", "field": "status",
+     "sources": [("disputes", "$.items[].status")],
+     "note": "`WAITING_FOR_SELLER_RESPONSE` observed."},
+    {"entity": "dispute", "field": "lifecycle_stage",
+     "sources": [("disputes", "$.items[].dispute_life_cycle_stage")],
+     "note": "`INQUIRY` observed - the pre-claim stage."},
+    {"entity": "dispute", "field": "dispute_state",
+     "sources": [("disputes", "$.items[].dispute_state")],
+     "note": "`REQUIRED_ACTION`. Note the list endpoint filters on this: a "
+     "default query returns the dispute, but `dispute_state=OPEN_INQUIRIES` "
+     "does not."},
+    {"entity": "dispute", "field": "amount",
+     "sources": [("disputes", "$.items[].dispute_amount.value")]},
+    {"entity": "dispute", "field": "currency",
+     "sources": [("disputes", "$.items[].dispute_amount.currency_code")]},
+    {"entity": "dispute", "field": "reason",
+     "sources": [("disputes", "$.items[].reason")],
+     "note": "`MERCHANDISE_OR_SERVICE_NOT_RECEIVED`."},
+    {"entity": "dispute", "field": "channel",
+     "sources": [("disputes", "$.items[].dispute_channel")],
+     "note": "`INTERNAL` - raised through PayPal rather than as a card chargeback."},
+    {"entity": "dispute", "field": "created_at",
+     "sources": [("disputes", "$.items[].create_time")]},
+    {"entity": "dispute", "field": "updated_at",
+     "sources": [("disputes", "$.items[].update_time")]},
+    {"entity": "dispute", "field": "seller_response_due_date",
+     "sources": [("disputes", "$.items[].seller_response_due_date")],
+     "note": "20 days out. Drives the awaiting-evidence lifecycle state of "
+     "`mission.md` P4."},
+    {"entity": "dispute", "field": "buyer_identity",
+     "sources": [("disputes", "$.items[].disputed_transactions[].buyer.payer_id")]},
+    {"entity": "dispute", "field": "seller_identity",
+     "sources": [("disputes", "$.items[].disputed_transactions[].seller.merchant_id")]},
+    {"entity": "dispute", "field": "capture_linkage",
+     "sources": [("disputes", "$.items[].disputed_transactions[].buyer_transaction_id")],
+     "note": "**Not our capture id.** The buyer's side of the transaction has "
+     "its own identifier, so matching a dispute to a capture needs a join we "
+     "have not established. Filtering by `disputed_transaction_id` does accept "
+     "the capture id."},
+    # ----------------------------------------------------------- disbursement
+    {"entity": "disbursement", "field": "disbursement_id",
+     "sources": [("disbursements", "$.item_id")],
+     "note": "Returned by `POST /v1/payments/referenced-payouts-items`. The "
+     "release is idempotent per reference: a second attempt answers "
+     "`422 PAYOUT_ALREADY_COMPLETED_FOR_REFERENCE`, so a retry cannot double-pay."},
+    {"entity": "disbursement", "field": "status",
+     "sources": [("disbursements", "$.processing_state.status")],
+     "note": "`SUCCESS` observed. **This is the only evidence a seller was "
+     "paid** - the capture does not change when funds are released."},
+    {"entity": "disbursement", "field": "amount",
+     "sources": [("disbursements", "$.payout_amount.value")],
+     "note": "`86.02` - the capture's **net**. Fees were already taken at "
+     "capture, which confirms the fee timing from a second direction."},
+    {"entity": "disbursement", "field": "currency",
+     "sources": [("disbursements", "$.payout_amount.currency_code")]},
+    {"entity": "disbursement", "field": "recipient",
+     "sources": [("disbursements", "$.payout_destination")],
+     "note": "The seller's merchant id, so the disbursement attributes to a "
+     "seller without a join."},
+    {"entity": "disbursement", "field": "capture_linkage",
+     "sources": [("disbursements", "$.reference_id")],
+     "note": "**Provider-supplied, and the capture id itself** - with "
+     "`reference_type: TRANSACTION_ID`. Unlike refund-to-capture, this linkage "
+     "needs no parsing."},
+    {"entity": "disbursement", "field": "payout_transaction_id",
+     "sources": [("disbursements", "$.payout_transaction_id")],
+     "note": "The money movement itself, distinct from the release instruction."},
+    {"entity": "disbursement", "field": "released_at", "sources": [],
+     "note": "**No usable timestamp on the release record.** `time_updated` is "
+     "the integer `0`, not a date. So when a seller was paid is not readable "
+     "from the disbursement, and must come from the reporting ledger or be "
+     "recorded at ingestion. PayPal also auto-releases after 28 days with no "
+     "instruction, so absence of a release does not mean funds are stuck."},
     # --------------------------------------------------------- fx_conversion
-    # requirements.md section 7 enumerates these. They are gated on an actual
-    # conversion record so the table cannot report conversion evidence that
-    # only exists because an unconverted amount happened to be present.
-    {
-        "entity": "fx_conversion",
-        "field": "source_amount",
-        "sources": [
-            (
-                "captures",
-                "$.seller_receivable_breakdown.gross_amount.value",
-                "$.seller_receivable_breakdown.exchange_rate.value",
-            )
-        ],
-        "note": "Gated on a conversion existing. EUR 95.50 observed.",
-    },
-    {
-        "entity": "fx_conversion",
-        "field": "source_currency",
-        "sources": [
-            ("captures", "$.seller_receivable_breakdown.exchange_rate.source_currency")
-        ],
-        "note": "Declared on the conversion record itself.",
-    },
-    {
-        "entity": "fx_conversion",
-        "field": "target_amount",
-        "sources": [
-            ("captures", "$.seller_receivable_breakdown.receivable_amount.value")
-        ],
-        "note": "USD 104.05 observed. **Rounded to the cent by PayPal**, while "
-        "the rate is not. Compare against this figure, never against a "
-        "recomputation of gross times rate, or every cross-currency transaction "
-        "shows a half-cent exception that is a rounding artefact.",
-    },
-    {
-        "entity": "fx_conversion",
-        "field": "target_currency",
-        "sources": [
-            ("captures", "$.seller_receivable_breakdown.exchange_rate.target_currency")
-        ],
-    },
-    {
-        "entity": "fx_conversion",
-        "field": "rate",
-        "sources": [("captures", "$.seller_receivable_breakdown.exchange_rate.value")],
-        "note": "**15 decimal places observed** (1.089477173902071). Parse from "
-        "the string into Decimal and store at full precision; rounding it before "
-        "the Phase 11 comparison manufactures a discrepancy.",
-    },
-    {
-        "entity": "fx_conversion",
-        "field": "timestamp",
-        "sources": [],
-        "note": "**No declared source anywhere in PayPal's contract.** Settled "
-        "across all four declared conversion sites and both source grades; see "
-        "notes.md G3. No further probing can change this. A timestamp taken from "
-        "the capture's create_time is a derivation, not provider evidence.",
-    },
-    {
-        "entity": "fx_conversion",
-        "field": "fee",
-        "sources": [],
-        "note": "**No declared FX conversion fee anywhere.** paypal_fee and "
-        "paypal_fee_in_receivable_currency are declared on a capture but neither "
-        "is declared AS the conversion fee, and the payouts conversion structure "
-        "declares no fee at all. Treating one as an FX fee is the substitution "
-        "mission.md P3 forbids.",
-    },
-    {
-        "entity": "fx_conversion",
-        "field": "provider",
-        "sources": [],
-        "connector_metadata": True,
-        "note": "Not a PayPal field and never will be. Set by the ingestion "
-        "connector, which knows which provider it called. An absent verdict here "
-        "is not a product limitation.",
-    },
-    {
-        "entity": "fx_conversion",
-        "field": "is_derived",
-        "sources": [],
-        "connector_metadata": True,
-        "note": "Our own provenance flag (tech-stack.md section 2). Absent from "
-        "PayPal by definition; it exists to mark the fields above that we had to "
-        "derive.",
-    },
+    {"entity": "fx_conversion", "field": "source_amount",
+     "sources": [("captures", "$.seller_receivable_breakdown.net_amount.value",
+                  "$.seller_receivable_breakdown.exchange_rate.value")],
+     "note": "**The net, not the gross.** PayPal deducts fees in the transaction "
+     "currency and converts the remainder: 82.23 EUR net * rate = the reported "
+     "89.59 USD. Converting the gross instead is wrong by the whole fee - 14.46 "
+     "USD on this fixture."},
+    {"entity": "fx_conversion", "field": "source_currency",
+     "sources": [("captures",
+                  "$.seller_receivable_breakdown.exchange_rate.source_currency")]},
+    {"entity": "fx_conversion", "field": "target_amount",
+     "sources": [("captures", "$.seller_receivable_breakdown.receivable_amount.value")],
+     "note": "Rounded to the cent while the rate is not. Compare against this "
+     "figure, never a recomputation."},
+    {"entity": "fx_conversion", "field": "target_currency",
+     "sources": [("captures",
+                  "$.seller_receivable_breakdown.exchange_rate.target_currency")]},
+    {"entity": "fx_conversion", "field": "rate",
+     "sources": [("captures", "$.seller_receivable_breakdown.exchange_rate.value")],
+     "note": "15 decimal places. Parse from the string into `Decimal` and store "
+     "whole."},
+    {"entity": "fx_conversion", "field": "timestamp", "sources": [],
+     "note": "**No declared source on any conversion structure.** Read the "
+     "reporting ledger's `T0200` event, which lags about a day, or derive from "
+     "the capture time and flag `is_derived`."},
+    {"entity": "fx_conversion", "field": "fee", "sources": [],
+     "note": "**No conversion fee anywhere in the transaction APIs.** The "
+     "residue of net times rate minus the reported settlement is rounding, not "
+     "a fee."},
+    {"entity": "fx_conversion", "field": "provider", "sources": [],
+     "connector_metadata": True,
+     "note": "Set by the ingestion connector."},
+    {"entity": "fx_conversion", "field": "is_derived", "sources": [],
+     "connector_metadata": True,
+     "note": "Our own provenance flag."},
 ]
 
-# Task group 6: one decision per absent and per present-but-unreliable field
-# (plan.md group 6, validation.md C8). Keyed on (entity, field).
-#
-# Four kinds, and the distinction is the point:
-#
-#   derive               we can compute the value. It must be written with
-#                        is_derived true and may never be presented as
-#                        provider evidence (tech-stack.md section 2,
-#                        mission.md P3).
-#   limitation           we cannot have the value. The entry states what the
-#                        product therefore cannot do.
-#   no_action            the conditional availability is correct for the
-#                        domain. Nothing is derived and nothing is lost - the
-#                        entry says why the condition is right.
-#   connector_metadata   not a PayPal field at all. In the table only because
-#                        requirements.md section 7 lists it.
 DECISIONS: dict[tuple[str, str], dict[str, Any]] = {
-    ("capture", "paypal_fee"): {
-        "kind": "limitation",
-        "is_derived": False,
-        "text": "The engine cannot attribute a PayPal fee to a capture, and "
-        "**must not derive one as gross minus net.** Two things were tested "
-        "before settling this. First, `Prefer: return=representation` - which "
-        "PayPal's v1-to-v2 migration guide identifies as the gate on financial "
-        "detail - **makes no difference on a GET**: the breakdown came back "
-        "byte-identical with and without it, so the minimal-response mechanism "
-        "is not the cause. Second, an omitted field is **not an implied zero**: "
-        "PayPal emits `paypal_fee` as an explicit `0.00` on the refund of this "
-        "same capture, so it clearly states a zero fee when it means one, and "
-        "inferring `0.00` from silence would be inventing a value. PayPal never "
-        "states the `net = gross - fee` identity either; the contract gives only "
-        "boilerplate Money descriptions. Treat a capture fee as **unknown, never "
-        "as zero** (`tech-stack.md` section 9.6). A fee-inclusive entitlement "
-        "check must exclude capture fees and say so in its exception report. "
-        "**Re-verify against production before Phase 10 treats this as "
-        "settled** - the migration guide claims v2 gives \"full fee transparency "
-        "on every capture\", which makes this omission anomalous rather than "
-        "expected. **Corroborated 2026-11-07:** once Transaction Search caught "
-        "up, the `T0005` capture events carried `fee_amount: null` while the "
-        "`T0001` payout items in the same response carried `-0.25`. The "
-        "reporting API reports fees where they exist and reported none for "
-        "these captures, which makes \"no fee was assessed in this sandbox\" far "
-        "more likely than \"PayPal withholds capture fees\" - but it is still "
-        "sandbox-only.",
-    },
     ("fx_conversion", "timestamp"): {
-        "kind": "derive",
-        "is_derived": True,
-        "text": "**A provider source exists after all, found 2026-11-07 once "
-        "Transaction Search caught up.** The reporting ledger records a "
-        "conversion as a pair of `T0200` events - one debiting the source "
-        "currency, one crediting the target - linked to the capture by "
-        "`paypal_reference_id`, each carrying its own "
-        "`transaction_initiation_date`. That is a PayPal-stamped time on the "
-        "conversion event itself, so **prefer it**. It is late and conditional: "
-        "it needs the reporting API, a filter on the `T0200` event code, and "
-        "the reporting lag to have elapsed - over 21 hours on our fixtures. "
-        "Where reporting has not caught up, fall back to the capture's "
-        "`create_time` with **`is_derived` true**. The canonical field will "
-        "therefore carry a provider value sometimes and a derived one "
-        "otherwise, which is exactly the distinction `is_derived` exists to "
-        "record. No v2 resource endpoint carries it, which is why the verdict "
-        "above remains `absent`.",
+        "kind": "derive", "is_derived": True,
+        "text": "Prefer the reporting ledger's `T0200` conversion event, which "
+        "carries its own `transaction_initiation_date` and is provider evidence. "
+        "It lags about a day; where reporting has not caught up, fall back to the "
+        "capture's `create_time` with **`is_derived` true**. The field therefore "
+        "carries a provider value sometimes and a derived one otherwise, which is "
+        "exactly what `is_derived` exists to record.",
     },
     ("fx_conversion", "fee"): {
-        "kind": "limitation",
-        "is_derived": False,
-        "text": "No conversion fee can be reported, and none may be "
-        "manufactured. Substituting `paypal_fee` or "
-        "`paypal_fee_in_receivable_currency` is the substitution `mission.md` P3 "
-        "forbids - neither is declared as the fee for a conversion. **Nor is the "
-        "arithmetic residue a fee**: gross times rate minus `receivable_amount` "
-        "came to `-0.00492989235221950` on our fixture, which is PayPal rounding "
-        "the settlement to the cent. Recording that as a conversion fee would be "
-        "fabricating a financial value. **Independently corroborated "
-        "2026-11-07:** Transaction Search reports `fee_amount` where a fee "
-        "exists - `-0.25` on each payout item - and reports none on either "
-        "`T0200` conversion event, so the absence is now evidence that no "
-        "conversion fee was charged rather than merely that none is declared. "
-        "Consequence: readme section 13 Scenario 3 narrows to an incorrect "
-        "conversion **value** and cannot cover an incorrect conversion **fee**.",
+        "kind": "limitation", "is_derived": False,
+        "text": "No conversion fee can be reported. Substituting `paypal_fee` is "
+        "the substitution `mission.md` P3 forbids, and the arithmetic residue is "
+        "PayPal's rounding. Consequence: readme section 13 Scenario 3 covers an "
+        "incorrect conversion **value**, never an incorrect conversion **fee**.",
     },
     ("fx_conversion", "provider"): {
-        "kind": "connector_metadata",
-        "is_derived": False,
-        "text": "Set by the ingestion connector, which knows which provider it "
-        "called. Not derived from PayPal data and so carries no `is_derived` "
-        "flag; it asserts nothing about money.",
+        "kind": "connector_metadata", "is_derived": False,
+        "text": "Set by the connector, which knows which provider it called.",
     },
     ("fx_conversion", "is_derived"): {
-        "kind": "connector_metadata",
-        "is_derived": False,
-        "text": "Our own provenance flag. It is the mechanism the decisions "
-        "above rely on, not a field needing one.",
+        "kind": "connector_metadata", "is_derived": False,
+        "text": "Our own provenance flag; the mechanism the decisions above rely on.",
     },
-    ("capture", "settlement_amount"): {
-        "kind": "derive",
-        "is_derived": True,
-        "text": "Present on a cross-currency capture. For a same-currency "
-        "capture there is no `receivable_amount` and none is needed: derive the "
-        "settlement amount as `net_amount`, valid **only** where no "
-        "`exchange_rate` is present and the breakdown currency equals the "
-        "account's settlement currency from `/v1/reporting/balances`. Flag "
-        "`is_derived` true. **Where a conversion did occur, never derive it** - "
-        "use PayPal's reported `receivable_amount`, which is rounded to the "
-        "cent, and never a recomputation of gross times rate.",
+    ("dispute", "seller_response_due_date"): {
+        "kind": "no_action", "is_derived": False,
+        "text": "Present while a seller response is outstanding - observed at "
+        "`WAITING_FOR_SELLER_RESPONSE` with a date 20 days out - and gone once "
+        "the seller accepted the claim, because nothing is due any more. The "
+        "absence is correct, and the field is what `mission.md` P4's "
+        "awaiting-evidence state keys on while it lasts. Phase 3 must make it "
+        "nullable and must not read its absence as a missed deadline.",
     },
-    ("refund", "platform_fee"): {
-        "kind": "limitation",
-        "is_derived": False,
-        "text": "A read-path requirement rather than an API absence. The refund "
-        "endpoint does not carry `platform_fees`; the same record read through "
-        "`GET /v2/checkout/orders/{id}` does. **Phase 7 must ingest refunds via "
-        "the order** to obtain it, and a refund ingested from the refund "
-        "endpoint alone must record the platform fee as unknown, not zero. "
-        "**The observed value is a weak signal**: it was `0.00` on an account "
-        "with no Marketplaces capability, so it shows the field is emitted on "
-        "this read path but not that a real platform fee would be reported "
-        "there. That needs a capability-enabled account to confirm.",
-    },
-    ("payout_item", "transaction_id"): {
-        "kind": "no_action",
-        "is_derived": False,
-        "text": "Absent only on a failed item, which is correct - no transaction "
-        "occurred, so there is no id. The canonical model must make it nullable "
-        "and must not quarantine a failed item for lacking one. Its absence is "
-        "itself evidence that the item did not pay out, and pairs with "
-        "`processed_at`, which **is** populated on a failed item and therefore "
-        "proves nothing about payment.",
-    },
-    ("payout_item", "failure_reason"): {
-        "kind": "limitation",
-        "is_derived": False,
-        "text": "Populated only on a failed item, and **account-dependent**: a "
-        "different sandbox account denied identical requests with `errors` "
-        "empty. When present it is provider evidence and may be cited as the "
-        "cause. When absent, the product reports that the payout was denied, "
-        "cites `batch_status` and `transaction_status`, and **stops** - "
-        "`insufficient_evidence` per roadmap Phase 12. It must never assemble a "
-        "plausible cause from context. The failure is silent in the worst way: "
-        "the status fields are always present and always look authoritative.",
+    ("platform_fee", "settlement_reference"): {
+        "kind": "limitation", "is_derived": False,
+        "text": "Partner fees arrive as a single next-day consolidated bank "
+        "payment, and no per-transaction settlement reference is exposed. The "
+        "per-transaction fee comparison is in scope; reconciling the aggregate is "
+        "settlement-account work, deferred by `mission.md` section 7. A "
+        "`platform_fee` row should still be able to carry a settlement reference "
+        "later.",
     },
 }
 
-# The five fx_conversion rows whose conditional availability is simply correct.
-_FX_CONDITION_IS_CORRECT = {
-    "kind": "no_action",
-    "is_derived": False,
+_CONDITION_IS_CORRECT = {
+    "kind": "no_action", "is_derived": False,
     "text": "Populated only where a conversion occurred, which is right: a "
-    "same-currency transaction has no conversion and must carry **no "
-    "`fx_conversion` row at all**. Nothing is derived and nothing is lost. "
-    "Phase 3 should create an `fx_conversion` record only when PayPal reports an "
-    "`exchange_rate`, so that an empty row can never be mistaken for a "
-    "conversion whose fields went missing.",
+    "same-currency transaction has no conversion and must carry no "
+    "`fx_conversion` row at all. Nothing is derived and nothing is lost.",
 }
-for _field in ("source_amount", "source_currency", "target_currency", "rate"):
-    DECISIONS[("fx_conversion", _field)] = _FX_CONDITION_IS_CORRECT
-DECISIONS[("fx_conversion", "target_amount")] = {
-    "kind": "no_action",
-    "is_derived": False,
-    "text": _FX_CONDITION_IS_CORRECT["text"]
-    + " And where it does exist, **compare against this figure** rather than "
-    "recomputing gross times rate: PayPal rounds the settlement to the cent "
-    "while leaving the rate unrounded, so a recomputation shows a half-cent "
-    "exception on every cross-currency transaction. That would breach the "
-    "hardest exit criterion in roadmap Phase 11 - the clean baseline producing "
-    "zero exceptions.",
+for _field in ("source_amount", "source_currency", "target_amount",
+               "target_currency", "rate"):
+    DECISIONS[("fx_conversion", _field)] = _CONDITION_IS_CORRECT
+
+_BREAKDOWN_GONE_WHILE_PENDING = {
+    "kind": "limitation", "is_derived": False,
+    "text": "**A capture loses its entire `seller_receivable_breakdown` while "
+    "pending, and a dispute puts it there.** The disputed fixture reverted from "
+    "`COMPLETED` to `PENDING` and the breakdown vanished - fee, net and platform "
+    "fee with it. The SDK model documents this (\"not available for transactions "
+    "that are in pending state\") but it had never been observed. So these values "
+    "must be captured at ingestion and retained; re-reading later can return "
+    "nothing, and the absence is not evidence that no fee was charged.",
+}
+for _field in ("gross_amount", "net_amount", "paypal_fee", "settlement_amount",
+               "settlement_currency"):
+    DECISIONS[("capture", _field)] = _BREAKDOWN_GONE_WHILE_PENDING
+for _field in ("amount", "currency", "payee"):
+    DECISIONS[("platform_fee", _field)] = _BREAKDOWN_GONE_WHILE_PENDING
+
+PENDING: dict[tuple[str, str], dict[str, str]] = {}
+
+DECISIONS[("disbursement", "released_at")] = {
+    "kind": "limitation", "is_derived": False,
+    "text": "The release record carries no usable timestamp - `time_updated` is "
+    "the integer `0`. So the moment a seller was paid cannot be read back from "
+    "the disbursement. Record the time at ingestion, or take it from the "
+    "reporting ledger once that catches up, and never present an ingestion time "
+    "as a provider timestamp.",
 }
 
-# Task group 6, for the rows that are unanswered rather than absent. These get
-# an interim handling and the fixture that would settle them, NOT a decision: a
-# decision implies the evidence is in, and for these it is not.
-PENDING: dict[tuple[str, str], dict[str, str]] = {
-    ("capture", "platform_fee"): {
-        "answered_by": "a capture on an account enabled for PayPal Complete "
-        "Payments Platform for Marketplaces, with "
-        "`payment_instruction.platform_fees` set at capture time",
-        "interim": "Take the marketplace's own commission from the marketplace "
-        "side, which is authoritative for it in any case. Do not read PayPal's "
-        "silence as zero, and do not treat this as evidence that PayPal cannot "
-        "report platform fees - the capability was never enabled, so no platform "
-        "fee could have existed to report.",
-    },
-    ("payment", "payer_identity"): {
-        "answered_by": "a wallet-funded order, which needs a sandbox personal "
-        "account to approve the order in a browser",
-        "interim": "Treat payer identity as unavailable for card-funded "
-        "payments. Do not make it required, and do not quarantine a card "
-        "payment for lacking it. **Reconciling a marketplace buyer to a PayPal "
-        "buyer account is impossible for card transactions**, so any matching "
-        "rule must key on the order or capture id instead.",
-    },
-}
-_DISPUTE_PENDING = {
-    "answered_by": "a wallet-funded capture, which `POST /v1/customer/disputes` "
-    "would then accept",
-    "interim": "Phase 3 may build the dispute table from the declared shape, "
-    "which is pinned and complete, but **no dispute field may be marked "
-    "required** and Phase 7 must not assume any of them is populated. Re-run "
-    "the probe once a dispute exists; until then the product cannot "
-    "reconcile disputes and should say so rather than report zero disputes.",
-}
-for _field in (
-    "dispute_id",
-    "status",
-    "lifecycle_stage",
-    "dispute_state",
-    "amount",
-    "currency",
-    "reason",
-    "created_at",
-    "seller_response_due_date",
-    "capture_linkage",
-):
-    PENDING[("dispute", _field)] = _DISPUTE_PENDING
-
-# What a declared-but-not-observed field's absence means. Keyed on the exact
-# path; the grouped rules below cover the rest.
 GAP_MEANING: dict[str, str] = {
     "$.seller_receivable_breakdown.paypal_fee": "The capture fee. See the capture.paypal_fee row - the one place our evidence is weaker than the format suggests.",
     "$.seller_receivable_breakdown.paypal_fee_in_receivable_currency": "The capture fee in settlement currency. Would have been the closest thing to an FX-side fee; not populated, and not declared as a conversion fee in any case.",
@@ -1019,11 +602,17 @@ def build(
                 best = judged
 
         if best is None:
-            # No PayPal path at all: nothing in the contract can carry it.
+            # No PayPal path at all. That is `absent` when nothing in the
+            # contract can carry the field, but `unanswered` when a reason is
+            # recorded for why we could not reach one - the same distinction
+            # the verdicts draw everywhere else, and the no-path case has to
+            # honour it too or an unreachable endpoint reads as a claim about
+            # PayPal.
+            reason = item.get("unobserved_reason")
             best = {
-                "verdict": ABSENT,
+                "verdict": UNANSWERED if reason else ABSENT,
                 "cell": "no path",
-                "condition": "",
+                "condition": reason or "",
                 "record_type": "-",
                 "path": "-",
                 "gate": None,
@@ -1170,10 +759,10 @@ def build(
     titles = {
         "payment": "Payment",
         "capture": "Capture",
+        "platform_fee": "Platform fee",
         "refund": "Refund",
         "dispute": "Dispute",
-        "payout_batch": "Payout batch",
-        "payout_item": "Payout item",
+        "disbursement": "Disbursement",
         "fx_conversion": "FX conversion",
     }
     leads = {
@@ -1191,11 +780,22 @@ def build(
         "though the behaviour is not. **None of these rows may be read as "
         "`absent`** - that would be a claim about PayPal that our evidence does "
         "not support.",
-        "payout_batch": "Read from `GET /v1/payments/payouts/{id}`. Two batches "
-        "sampled, one `SUCCESS` and one `DENIED`, which is what made the fee "
-        "findings possible.",
-        "payout_item": "Four items across the two batches, two successful and "
-        "two failed.",
+        "platform_fee": "PayPal's own record of the commission the marketplace "
+        "took. Under multiparty this is independent evidence against the "
+        "marketplace's rules - in the merchant-of-record model the commission was "
+        "merely whatever the marketplace kept, with nothing to check it against.",
+        "disbursement": "Under `DELAYED`, release is "
+        "`POST /v1/payments/referenced-payouts-items` and produces the record "
+        "below. Under `INSTANT` the seller is paid at capture and no such "
+        "record exists.\n\n"
+        "**Two things make this the most dangerous entity in the model.** "
+        "First, releasing funds changes **nothing** on the capture - status, "
+        "mode and breakdown are identical before and after - so the capture can "
+        "never tell you whether a seller was paid, and every `DELAYED` "
+        "transaction must be joined to its disbursement. Second, PayPal "
+        "publishes **no contract at all** for referenced payouts, in neither the "
+        "SDK nor its OpenAPI documents, so every field here is known from "
+        "observation alone and a change would arrive without warning.",
         "fx_conversion": "**The reason this phase ran first.** `mission.md` P3 "
         "forbids substituting an estimate for a provider record, so the model "
         "may only carry what PayPal actually supplies. Rows are gated on a real "

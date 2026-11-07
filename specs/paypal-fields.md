@@ -39,11 +39,11 @@ A cell marked **gated** is not a raw lookup. A few canonical fields are only mea
 
 | Verdict | Canonical fields |
 |---|---|
-| `present` | 47 |
-| `present-but-unreliable` | 9 |
-| `absent` | 5 |
-| `unanswered` | 12 |
-| **total** | **73** |
+| `present` | 56 |
+| `present-but-unreliable` | 6 |
+| `absent` | 7 |
+| `unanswered` | 0 |
+| **total** | **69** |
 
 No blank verdicts, and no canonical field without a row (`validation.md` C4, C5).
 
@@ -56,15 +56,15 @@ The buyer-facing transaction. Read from `GET /v2/checkout/orders/{id}`.
 | Canonical field | PayPal path | Declared | Observed | Verdict | Condition / note |
 |---|---|---|---|---|---|
 | `payment_id` | `orders` `$.id` | Optional, read-only (SDK) | 4/4 | `present` | PayPal's order id. The canonical payment key. |
-| `amount` | `orders` `$.purchase_units[].amount.value` | Required (SDK) | 4/4 | `present` | String, parses straight to Decimal. |
+| `amount` | `orders` `$.purchase_units[].amount.value` | Required (SDK) | 4/4 | `present` | - |
 | `currency` | `orders` `$.purchase_units[].amount.currency_code` | Required (SDK) | 4/4 | `present` | Buyer-facing currency, not necessarily the settlement currency. |
-| `status` | `orders` `$.status` | Optional (SDK) | 4/4 | `present` | COMPLETED observed. Feeds the lifecycle enum of Phase 3. |
-| `intent` | `orders` `$.intent` | Optional (SDK) | 4/4 | `present` | CAPTURE observed. Distinguishes authorize-then-capture flows. |
-| `created_at` | `orders` `$.create_time` | Optional (SDK) | 4/4 | `present` | RFC 3339. |
-| `updated_at` | `orders` `$.update_time` | Optional (SDK) | 4/4 | `present` | RFC 3339. |
-| `payer_identity` | `orders` `$.payer` | Optional (SDK) | 0/4 | `unanswered` | **both order fixtures were card-funded, and a card-funded order carries no payer at all. A wallet-funded order would answer it.** Buyer identity. See notes.md F5: a refund's payer block carries the MERCHANT, so it is not a substitute. |
-| `funding_instrument` | `orders` `$.payment_source.card.brand` | Optional (SDK) | 4/4 | `present` | Card brand. The funding instrument determines whether payer identity and disputes are available at all. |
-| `seller_identity` | `orders` `$.purchase_units[].payee.merchant_id` | Optional (SDK) | 4/4 | `present` | The payee merchant id. Ties a payment to a seller. |
+| `status` | `orders` `$.status` | Optional (SDK) | 4/4 | `present` | - |
+| `intent` | `orders` `$.intent` | Optional (SDK) | 4/4 | `present` | - |
+| `created_at` | `orders` `$.create_time` | Optional (SDK) | 4/4 | `present` | - |
+| `payer_identity` | `orders` `$.payer.payer_id` | Optional (SDK) | 4/4 | `present` | **Present under multiparty, and it was not before.** Phase 0's card-funded orders carried no payer at all. A wallet-funded order carries `address`, `email_address`, `name` and `payer_id`. |
+| `buyer_verification` | `orders` `$.payment_source.paypal.account_status` | Optional, read-only (SDK) | 4/4 | `present` | `VERIFIED` observed. A buyer trust signal with no equivalent on a card payment. |
+| `seller_identity` | `orders` `$.purchase_units[].payee.merchant_id` | Optional (SDK) | 4/4 | `present` | **The join the whole product rests on.** Under multiparty the payee is the seller, not the marketplace. |
+| `disbursement_mode` | `orders` `$.purchase_units[].payment_instruction.disbursement_mode` | Optional (SDK) | 4/4 | `present` | `INSTANT` or `DELAYED`. Decides whether the seller is paid at capture or on release. |
 
 ## 2. Capture
 
@@ -72,88 +72,86 @@ The settlement-side record, and where PayPal puts its conversion evidence. Read 
 
 | Canonical field | PayPal path | Declared | Observed | Verdict | Condition / note |
 |---|---|---|---|---|---|
-| `capture_id` | `captures` `$.id` | Optional, read-only (SDK) | 4/4 | `present` | The authoritative settlement-side key. |
-| `payment_linkage` | `captures` `$.supplementary_data.related_ids.order_id` | Optional (SDK) | 4/4 | `present` | A real field, not a link to parse. Capture to order is a provider-supplied foreign key. |
+| `capture_id` | `captures` `$.id` | Optional, read-only (SDK) | 4/4 | `present` | - |
+| `payment_linkage` | `captures` `$.supplementary_data.related_ids.order_id` | Optional (SDK) | 4/4 | `present` | A real field, not a link to parse. |
 | `amount` | `captures` `$.amount.value` | Required (SDK) | 4/4 | `present` | - |
 | `currency` | `captures` `$.amount.currency_code` | Required (SDK) | 4/4 | `present` | - |
+| `status` | `captures` `$.status` | Optional, read-only (SDK) | 4/4 | `present` | **Mutable, and it does not mean the seller was paid.** A `DELAYED` capture reads `COMPLETED` while funds are held, and a disputed capture reverts to `PENDING`. |
+| `disbursement_mode` | `captures` `$.disbursement_mode` | Optional (SDK) | 4/4 | `present` | Echoed onto the capture, so the mode is recoverable without the order. |
+| `seller_identity` | `captures` `$.payee.merchant_id` | Optional (SDK) | 4/4 | `present` | - |
 | `gross_amount` | `captures` `$.seller_receivable_breakdown.gross_amount.value` | Required (SDK) | 4/4 | `present` | Pre-fee, pre-conversion. |
-| `net_amount` | `captures` `$.seller_receivable_breakdown.net_amount.value` | Required (SDK) | 4/4 | `present` | Equal to gross on our fixtures because no fee was assessed. |
-| `paypal_fee` | `captures` `$.seller_receivable_breakdown.paypal_fee.value` | Required (SDK) | 0/4 | `absent` | **The weakest row in this table.** Absent on both captures, yet the refund carries paypal_fee as an explicit 0.00, so PayPal does emit the field when it has a value. Cause not established. Phase 7 must NOT conclude that PayPal withholds capture fees; re-verify against a fee-bearing transaction. See notes.md. |
-| `settlement_amount` | `captures` `$.seller_receivable_breakdown.receivable_amount.value` | Required (SDK) | 2/4 | `present-but-unreliable` | **only on capture-cross-currency@2026-11-06, capture-cross-currency@2026-11-07.** What the seller actually receives, in the settlement currency. |
-| `settlement_currency` | `balances` `$.balances[].currency` | Required (SDK) | 2/2 | `present` | The balances endpoint answers this directly and unconditionally, which is why it beats inferring it per capture. |
-| `status` | `captures` `$.status` | Optional, read-only (SDK) | 4/4 | `present` | PARTIALLY_REFUNDED observed, which the order view agrees with. |
-| `final_capture` | `captures` `$.final_capture` | Optional, read-only (SDK) | 4/4 | `present` | Whether more captures may follow against the authorization. |
+| `net_amount` | `captures` `$.seller_receivable_breakdown.net_amount.value` | Required (SDK) | 4/4 | `present` | `gross - paypal_fee - platform_fees`, observed exactly on every capture carrying a breakdown. |
+| `paypal_fee` | `captures` `$.seller_receivable_breakdown.paypal_fee.value` | Required (SDK) | 4/4 | `present` | **Phase 0 recorded this `absent`; under multiparty it is there.** 3.98 on 100.00, identical across card-in-wallet and balance funding. **But the whole breakdown disappears while a capture is `PENDING`**, which an open dispute causes - observed, then observed returning once the dispute resolved. Capture these values at ingestion; a later read can return nothing, and that absence is not evidence of no fee. |
+| `settlement_amount` | `captures` `$.seller_receivable_breakdown.receivable_amount.value` | Required (SDK) | 1/4 | `present-but-unreliable` | **only on capture-cross-currency.** Only where a conversion occurred. **Converts the net, not the gross** - see fx_conversion.source_amount. |
+| `settlement_currency` | `balances` `$.balances[].currency` | Required (SDK) | 1/1 | `present` | The balances endpoint answers this unconditionally, which beats inferring it per capture. |
 | `created_at` | `captures` `$.create_time` | Optional (SDK) | 4/4 | `present` | - |
-| `updated_at` | `captures` `$.update_time` | Optional (SDK) | 4/4 | `present` | - |
-| `platform_fee` | `captures` `$.seller_receivable_breakdown.platform_fees[].amount.value` | Required (SDK) | 0/4 | `unanswered` | **a platform fee is caller-supplied at capture time via `payment_instruction.platform_fees`, and the contract restricts it to merchants enabled for PayPal Complete Payments Platform for Marketplaces. This account has neither, so no platform fee could have been charged.** Marketplace commission. **Reclassified from `absent` to `unanswered` on 2026-11-06**: the contract shows a platform fee only exists when the caller instructs one and the merchant holds the Marketplaces capability, so its absence here says nothing about PayPal. |
 
-## 3. Refund
+## 3. Platform fee
+
+PayPal's own record of the commission the marketplace took. Under multiparty this is independent evidence against the marketplace's rules - in the merchant-of-record model the commission was merely whatever the marketplace kept, with nothing to check it against.
+
+| Canonical field | PayPal path | Declared | Observed | Verdict | Condition / note |
+|---|---|---|---|---|---|
+| `amount` | `captures` `$.seller_receivable_breakdown.platform_fees[].amount.value` | Required (SDK) | 4/4 | `present` | The marketplace's commission, as PayPal actually took it. Independent evidence against the marketplace's own rules. |
+| `currency` | `captures` `$.seller_receivable_breakdown.platform_fees[].amount.currency_code` | Required (SDK) | 4/4 | `present` | Must match the transaction currency; PayPal rejects a mismatch. |
+| `payee` | `captures` `$.seller_receivable_breakdown.platform_fees[].payee.merchant_id` | Optional (SDK) | 4/4 | `present` | Where the commission was routed. Defaults to the API caller when the order does not name one, and PayPal fills it in explicitly. |
+| `reversal_on_refund` | `refunds` `$.seller_payable_breakdown.platform_fees[].amount.value` | Required (SDK) | 3/3 | `present` | **Reversed automatically and pro rata**, on an ordinary refund and on a lost dispute alike. A 30.00 refund of a 100.00 capture returned 3.00 of the 10.00 commission; accepting a dispute claim returned the full 10.00. So the marketplace does not keep commission on a reversed transaction, and Phase 10's expected position must assume the reversal. Overriding the amount needs an account enablement we do not have (`PLATFORM_FEE_NOT_ENABLED`). |
+| `settlement_reference` | none | **not declared** | no path | `absent` | Partner fees settle as a next-day consolidated bank payment. No per-transaction settlement reference is exposed, and reconciling the aggregate is deferred (`mission.md` section 7). |
+
+## 4. Refund
 
 Read from `GET /v2/payments/refunds/{id}`, except where the order view carries more - see `platform_fee`.
 
 | Canonical field | PayPal path | Declared | Observed | Verdict | Condition / note |
 |---|---|---|---|---|---|
-| `refund_id` | `refunds` `$.id` | Optional, read-only (SDK) | 2/2 | `present` | - |
-| `capture_linkage` | `refunds` `$.links[].href` | Required (SDK) | 2/2 | `present` | **Derived, not provider-supplied.** There is no capture_id field on a refund; the only link back is links[rel=up], whose href must be parsed. Phase 7 must record this as a derived linkage. |
-| `amount` | `refunds` `$.amount.value` | Required (SDK) | 2/2 | `present` | - |
-| `currency` | `refunds` `$.amount.currency_code` | Required (SDK) | 2/2 | `present` | - |
-| `gross_amount` | `refunds` `$.seller_payable_breakdown.gross_amount.value` | Required (SDK) | 2/2 | `present` | Note the name: a refund carries seller_PAYABLE_breakdown, a capture seller_RECEIVABLE_breakdown. Mapping code cannot share a path. |
-| `net_amount` | `refunds` `$.seller_payable_breakdown.net_amount.value` | Required (SDK) | 2/2 | `present` | - |
-| `paypal_fee` | `refunds` `$.seller_payable_breakdown.paypal_fee.value` | Required (SDK) | 2/2 | `present` | Present as an explicit 0.00. This is the evidence that the capture-side absence is not PayPal withholding the field. |
-| `total_refunded_amount` | `refunds` `$.seller_payable_breakdown.total_refunded_amount.value` | Required (SDK) | 2/2 | `present` | What makes partial-refund tracking possible. readme section 13 Scenario 1 depends on it. |
-| `platform_fee` | `orders` `$.purchase_units[].payments.refunds[].seller_payable_breakdown.platform_fees[].amount.value` | Required (SDK) | 2/4 | `present-but-unreliable` | **only on order-same-currency@2026-11-06, order-same-currency@2026-11-07.** **Read-path dependent.** Populated when the refund is read through the order, absent from the refund endpoint for the same record. Phase 7 should ingest refunds via the order. See notes.md F2. |
-| `status` | `refunds` `$.status` | Optional, read-only (SDK) | 2/2 | `present` | - |
-| `created_at` | `refunds` `$.create_time` | Optional (SDK) | 2/2 | `present` | Returned with a -08:00 offset where captures use Z. Both are RFC 3339; a naive string comparison across the two would be wrong. |
+| `refund_id` | `refunds` `$.id` | Optional, read-only (SDK) | 3/3 | `present` | - |
+| `capture_linkage` | `refunds` `$.links[].href` | Required (SDK) | 3/3 | `present` | **Derived, not provider-supplied.** No capture id on a refund; the only link back is `links[rel=up]`, whose href must be parsed. |
+| `amount` | `refunds` `$.amount.value` | Required (SDK) | 3/3 | `present` | - |
+| `currency` | `refunds` `$.amount.currency_code` | Required (SDK) | 3/3 | `present` | - |
+| `gross_amount` | `refunds` `$.seller_payable_breakdown.gross_amount.value` | Required (SDK) | 3/3 | `present` | A refund carries `seller_payable_breakdown`, a capture `seller_receivable_breakdown`. Mapping code cannot share a path. |
+| `net_amount` | `refunds` `$.seller_payable_breakdown.net_amount.value` | Required (SDK) | 3/3 | `present` | The same identity as a capture: 30.00 - 0.00 - 3.00 = 27.00. |
+| `paypal_fee` | `refunds` `$.seller_payable_breakdown.paypal_fee.value` | Required (SDK) | 3/3 | `present` | `0.00` observed: PayPal did not return its own fee on the refund. |
+| `total_refunded_amount` | `refunds` `$.seller_payable_breakdown.total_refunded_amount.value` | Required (SDK) | 3/3 | `present` | What makes partial-refund tracking possible. |
+| `status` | `refunds` `$.status` | Optional, read-only (SDK) | 3/3 | `present` | - |
+| `created_at` | `refunds` `$.create_time` | Optional (SDK) | 3/3 | `present` | - |
 
-## 4. Dispute
+## 5. Dispute
 
 **Every row here is `unanswered`.** `POST /v1/customer/disputes` accepts creation but rejects a card-funded capture with `TRANSACTION_NOT_ELIGIBLE`, and both fixtures were card-funded, so no dispute record exists to observe. The declared column is complete and comes from PayPal's own OpenAPI document, so the shape is known even though the behaviour is not. **None of these rows may be read as `absent`** - that would be a claim about PayPal that our evidence does not support.
 
 | Canonical field | PayPal path | Declared | Observed | Verdict | Condition / note |
 |---|---|---|---|---|---|
-| `dispute_id` | `disputes` `$.items[].dispute_id` | Optional, read-only (OpenAPI) | 0/2 | `unanswered` | **no dispute record exists; a wallet-funded capture would answer it.** |
-| `status` | `disputes` `$.items[].status` | Optional, read-only (OpenAPI) | 0/2 | `unanswered` | **no dispute record exists; a wallet-funded capture would answer it.** |
-| `lifecycle_stage` | `disputes` `$.items[].dispute_life_cycle_stage` | Optional, read-only (OpenAPI) | 0/2 | `unanswered` | **no dispute record exists; a wallet-funded capture would answer it.** Declared read-only. The lifecycle states mission.md P4 wants. |
-| `dispute_state` | `disputes` `$.items[].dispute_state` | Optional, read-only (OpenAPI) | 0/2 | `unanswered` | **no dispute record exists; a wallet-funded capture would answer it.** |
-| `amount` | `disputes` `$.items[].dispute_amount.value` | Required (OpenAPI) | 0/2 | `unanswered` | **no dispute record exists; a wallet-funded capture would answer it.** |
-| `currency` | `disputes` `$.items[].dispute_amount.currency_code` | Required (OpenAPI) | 0/2 | `unanswered` | **no dispute record exists; a wallet-funded capture would answer it.** |
-| `reason` | `disputes` `$.items[].reason` | Optional (OpenAPI) | 0/2 | `unanswered` | **no dispute record exists; a wallet-funded capture would answer it.** |
-| `created_at` | `disputes` `$.items[].create_time` | Optional, read-only (OpenAPI) | 0/2 | `unanswered` | **no dispute record exists; a wallet-funded capture would answer it.** |
-| `seller_response_due_date` | `disputes` `$.items[].seller_response_due_date` | Optional, read-only (OpenAPI) | 0/2 | `unanswered` | **no dispute record exists; a wallet-funded capture would answer it.** Drives the awaiting-evidence lifecycle state of mission.md P4. |
-| `capture_linkage` | `disputes` `$.items[].links[].href` | Required (OpenAPI) | 0/2 | `unanswered` | **no dispute record exists; a wallet-funded capture would answer it.** The list response declares no transaction id at all, only links. Linkage would have to come from the single-dispute endpoint. |
+| `dispute_id` | `disputes` `$.items[].dispute_id` | Optional, read-only (OpenAPI) | 1/1 | `present` | - |
+| `status` | `disputes` `$.items[].status` | Optional, read-only (OpenAPI) | 1/1 | `present` | `WAITING_FOR_SELLER_RESPONSE` observed. |
+| `lifecycle_stage` | `disputes` `$.items[].dispute_life_cycle_stage` | Optional, read-only (OpenAPI) | 1/1 | `present` | `INQUIRY` observed - the pre-claim stage. |
+| `dispute_state` | `disputes` `$.items[].dispute_state` | Optional, read-only (OpenAPI) | 1/1 | `present` | `REQUIRED_ACTION`. Note the list endpoint filters on this: a default query returns the dispute, but `dispute_state=OPEN_INQUIRIES` does not. |
+| `amount` | `disputes` `$.items[].dispute_amount.value` | Required (OpenAPI) | 1/1 | `present` | - |
+| `currency` | `disputes` `$.items[].dispute_amount.currency_code` | Required (OpenAPI) | 1/1 | `present` | - |
+| `reason` | `disputes` `$.items[].reason` | Optional (OpenAPI) | 1/1 | `present` | `MERCHANDISE_OR_SERVICE_NOT_RECEIVED`. |
+| `channel` | `disputes` `$.items[].dispute_channel` | Optional, read-only (OpenAPI) | 1/1 | `present` | `INTERNAL` - raised through PayPal rather than as a card chargeback. |
+| `created_at` | `disputes` `$.items[].create_time` | Optional, read-only (OpenAPI) | 1/1 | `present` | - |
+| `updated_at` | `disputes` `$.items[].update_time` | Optional, read-only (OpenAPI) | 1/1 | `present` | - |
+| `seller_response_due_date` | `disputes` `$.items[].seller_response_due_date` | Optional, read-only (OpenAPI) | 0/1 | `absent` | 20 days out. Drives the awaiting-evidence lifecycle state of `mission.md` P4. |
+| `buyer_identity` | `disputes` `$.items[].disputed_transactions[].buyer.payer_id` | **not declared** | 1/1 | `present` | - |
+| `seller_identity` | `disputes` `$.items[].disputed_transactions[].seller.merchant_id` | **not declared** | 1/1 | `present` | - |
+| `capture_linkage` | `disputes` `$.items[].disputed_transactions[].buyer_transaction_id` | **not declared** | 1/1 | `present` | **Not our capture id.** The buyer's side of the transaction has its own identifier, so matching a dispute to a capture needs a join we have not established. Filtering by `disputed_transaction_id` does accept the capture id. |
 
-## 5. Payout batch
+## 6. Disbursement
 
-Read from `GET /v1/payments/payouts/{id}`. Two batches sampled, one `SUCCESS` and one `DENIED`, which is what made the fee findings possible.
+Under `DELAYED`, release is `POST /v1/payments/referenced-payouts-items` and produces the record below. Under `INSTANT` the seller is paid at capture and no such record exists.
 
-| Canonical field | PayPal path | Declared | Observed | Verdict | Condition / note |
-|---|---|---|---|---|---|
-| `batch_id` | `payouts` `$.batch_header.payout_batch_id` | Required (OpenAPI) | 4/4 | `present` | - |
-| `status` | `payouts` `$.batch_header.batch_status` | Required (OpenAPI) | 4/4 | `present` | SUCCESS and DENIED both observed. |
-| `amount` | `payouts` `$.batch_header.amount.value` | Required (OpenAPI) | 4/4 | `present` | - |
-| `currency` | `payouts` `$.batch_header.amount.currency` | Required (OpenAPI) | 4/4 | `present` | **Spelled `currency`, not `currency_code`.** Payouts v1 is the only API that does this, and the contract declares it. See notes.md F3 and G4. |
-| `fees` | `payouts` `$.batch_header.fees.value` | Required (OpenAPI) | 4/4 | `present` | **Only trustworthy on a batch that processed.** On SUCCESS it equals the sum of item fees. On DENIED the figure is not the fee that would have been charged - observed wrong by a factor of 2.6. Never carry a denied batch's fee forward. |
-| `created_at` | `payouts` `$.batch_header.time_created` | Optional (OpenAPI) | 4/4 | `present` | - |
-| `completed_at` | `payouts` `$.batch_header.time_completed` | Optional (OpenAPI) | 4/4 | `present` | Populated on the denied batch too; it records when processing ended, not that it succeeded. |
-| `funding_source` | `payouts` `$.batch_header.funding_source` | Optional (OpenAPI) | 4/4 | `present` | - |
-
-## 6. Payout item
-
-Four items across the two batches, two successful and two failed.
+**Two things make this the most dangerous entity in the model.** First, releasing funds changes **nothing** on the capture - status, mode and breakdown are identical before and after - so the capture can never tell you whether a seller was paid, and every `DELAYED` transaction must be joined to its disbursement. Second, PayPal publishes **no contract at all** for referenced payouts, in neither the SDK nor its OpenAPI documents, so every field here is known from observation alone and a change would arrive without warning.
 
 | Canonical field | PayPal path | Declared | Observed | Verdict | Condition / note |
 |---|---|---|---|---|---|
-| `item_id` | `payouts` `$.items[].payout_item_id` | Required (OpenAPI) | 4/4 | `present` | - |
-| `batch_linkage` | `payouts` `$.items[].payout_batch_id` | Required (OpenAPI) | 4/4 | `present` | Provider-supplied, repeated on every item. |
-| `amount` | `payouts` `$.items[].payout_item.amount.value` | Required (OpenAPI) | 4/4 | `present` | - |
-| `currency` | `payouts` `$.items[].payout_item.amount.currency` | Required (OpenAPI) | 4/4 | `present` | - |
-| `fee` | `payouts` `$.items[].payout_item_fee.value` | Required (OpenAPI) | 4/4 | `present` | Populated in both terminal states, but 0.00 on the failed items. Reconcile against the batch fee only on a successful batch. |
-| `status` | `payouts` `$.items[].transaction_status` | Optional (OpenAPI) | 4/4 | `present` | SUCCESS and FAILED both observed. |
-| `transaction_id` | `payouts` `$.items[].transaction_id` | Optional (OpenAPI) | 2/4 | `present-but-unreliable` | **only on payout-batch-success@2026-11-06, payout-batch-success@2026-11-07.** The link to the money movement. Absent on a failed item, which is correct - no transaction occurred. |
-| `processed_at` | `payouts` `$.items[].time_processed` | Optional (OpenAPI) | 4/4 | `present` | **Populated on failed items too** (4 of 4). PayPal stamps a time on any item it attempted, so this timestamp is not evidence of payment. This corrects an earlier claim in fixtures.md; see notes.md F1. |
-| `recipient` | `payouts` `$.items[].payout_item.receiver` | Required (OpenAPI) | 4/4 | `present` | Redacted in the committed artifacts as buyer PII; presence is what the verdict rests on. |
-| `failure_reason` | `payouts` `$.items[].errors.name` | Required (OpenAPI) | 2/4 | `present-but-unreliable` | **only on payout-batch-denied@2026-11-06, payout-batch-denied@2026-11-07.** RECEIVER_COUNTRY_NOT_ALLOWED observed. **Account-dependent**: a different sandbox account denied the same request with errors empty. When it is absent the product must answer insufficient_evidence rather than assemble a cause. |
-| `sender_item_reference` | `payouts` `$.items[].payout_item.sender_item_id` | Optional (OpenAPI) | 4/4 | `present` | Our own idempotency/correlation key, echoed back. |
+| `disbursement_id` | `disbursements` `$.item_id` | **not declared** | 1/1 | `present` | Returned by `POST /v1/payments/referenced-payouts-items`. The release is idempotent per reference: a second attempt answers `422 PAYOUT_ALREADY_COMPLETED_FOR_REFERENCE`, so a retry cannot double-pay. |
+| `status` | `disbursements` `$.processing_state.status` | **not declared** | 1/1 | `present` | `SUCCESS` observed. **This is the only evidence a seller was paid** - the capture does not change when funds are released. |
+| `amount` | `disbursements` `$.payout_amount.value` | **not declared** | 1/1 | `present` | `86.02` - the capture's **net**. Fees were already taken at capture, which confirms the fee timing from a second direction. |
+| `currency` | `disbursements` `$.payout_amount.currency_code` | **not declared** | 1/1 | `present` | - |
+| `recipient` | `disbursements` `$.payout_destination` | **not declared** | 1/1 | `present` | The seller's merchant id, so the disbursement attributes to a seller without a join. |
+| `capture_linkage` | `disbursements` `$.reference_id` | **not declared** | 1/1 | `present` | **Provider-supplied, and the capture id itself** - with `reference_type: TRANSACTION_ID`. Unlike refund-to-capture, this linkage needs no parsing. |
+| `payout_transaction_id` | `disbursements` `$.payout_transaction_id` | **not declared** | 1/1 | `present` | The money movement itself, distinct from the release instruction. |
+| `released_at` | none | **not declared** | no path | `absent` | **No usable timestamp on the release record.** `time_updated` is the integer `0`, not a date. So when a seller was paid is not readable from the disbursement, and must come from the reporting ledger or be recorded at ingestion. PayPal also auto-releases after 28 days with no instruction, so absence of a release does not mean funds are stuck. |
 
 ## 7. FX conversion
 
@@ -163,15 +161,15 @@ On the count: `validation.md` C4 asks for "all eight `fx_conversion` fields" whi
 
 | Canonical field | PayPal path | Declared | Observed | Verdict | Condition / note |
 |---|---|---|---|---|---|
-| `source_amount` | `captures` `$.seller_receivable_breakdown.gross_amount.value`<br>gated on `$.seller_receivable_breakdown.exchange_rate.value` | Required (SDK) | 2/4 gated | `present-but-unreliable` | **only on capture-cross-currency@2026-11-06, capture-cross-currency@2026-11-07.** Gated on a conversion existing. EUR 95.50 observed. |
-| `source_currency` | `captures` `$.seller_receivable_breakdown.exchange_rate.source_currency` | Optional (SDK) | 2/4 | `present-but-unreliable` | **only on capture-cross-currency@2026-11-06, capture-cross-currency@2026-11-07.** Declared on the conversion record itself. |
-| `target_amount` | `captures` `$.seller_receivable_breakdown.receivable_amount.value` | Required (SDK) | 2/4 | `present-but-unreliable` | **only on capture-cross-currency@2026-11-06, capture-cross-currency@2026-11-07.** USD 104.05 observed. **Rounded to the cent by PayPal**, while the rate is not. Compare against this figure, never against a recomputation of gross times rate, or every cross-currency transaction shows a half-cent exception that is a rounding artefact. |
-| `target_currency` | `captures` `$.seller_receivable_breakdown.exchange_rate.target_currency` | Optional (SDK) | 2/4 | `present-but-unreliable` | **only on capture-cross-currency@2026-11-06, capture-cross-currency@2026-11-07.** |
-| `rate` | `captures` `$.seller_receivable_breakdown.exchange_rate.value` | Optional (SDK) | 2/4 | `present-but-unreliable` | **only on capture-cross-currency@2026-11-06, capture-cross-currency@2026-11-07.** **15 decimal places observed** (1.089477173902071). Parse from the string into Decimal and store at full precision; rounding it before the Phase 11 comparison manufactures a discrepancy. |
-| `timestamp` | none | **not declared** | no path | `absent` | **No declared source anywhere in PayPal's contract.** Settled across all four declared conversion sites and both source grades; see notes.md G3. No further probing can change this. A timestamp taken from the capture's create_time is a derivation, not provider evidence. |
-| `fee` | none | **not declared** | no path | `absent` | **No declared FX conversion fee anywhere.** paypal_fee and paypal_fee_in_receivable_currency are declared on a capture but neither is declared AS the conversion fee, and the payouts conversion structure declares no fee at all. Treating one as an FX fee is the substitution mission.md P3 forbids. |
-| `provider` | none | **not declared** | no path | `absent` | Not a PayPal field and never will be. Set by the ingestion connector, which knows which provider it called. An absent verdict here is not a product limitation. |
-| `is_derived` | none | **not declared** | no path | `absent` | Our own provenance flag (tech-stack.md section 2). Absent from PayPal by definition; it exists to mark the fields above that we had to derive. |
+| `source_amount` | `captures` `$.seller_receivable_breakdown.net_amount.value`<br>gated on `$.seller_receivable_breakdown.exchange_rate.value` | Required (SDK) | 1/4 gated | `present-but-unreliable` | **only on capture-cross-currency.** **The net, not the gross.** PayPal deducts fees in the transaction currency and converts the remainder: 82.23 EUR net * rate = the reported 89.59 USD. Converting the gross instead is wrong by the whole fee - 14.46 USD on this fixture. |
+| `source_currency` | `captures` `$.seller_receivable_breakdown.exchange_rate.source_currency` | Optional (SDK) | 1/4 | `present-but-unreliable` | **only on capture-cross-currency.** |
+| `target_amount` | `captures` `$.seller_receivable_breakdown.receivable_amount.value` | Required (SDK) | 1/4 | `present-but-unreliable` | **only on capture-cross-currency.** Rounded to the cent while the rate is not. Compare against this figure, never a recomputation. |
+| `target_currency` | `captures` `$.seller_receivable_breakdown.exchange_rate.target_currency` | Optional (SDK) | 1/4 | `present-but-unreliable` | **only on capture-cross-currency.** |
+| `rate` | `captures` `$.seller_receivable_breakdown.exchange_rate.value` | Optional (SDK) | 1/4 | `present-but-unreliable` | **only on capture-cross-currency.** 15 decimal places. Parse from the string into `Decimal` and store whole. |
+| `timestamp` | none | **not declared** | no path | `absent` | **No declared source on any conversion structure.** Read the reporting ledger's `T0200` event, which lags about a day, or derive from the capture time and flag `is_derived`. |
+| `fee` | none | **not declared** | no path | `absent` | **No conversion fee anywhere in the transaction APIs.** The residue of net times rate minus the reported settlement is rounding, not a fee. |
+| `provider` | none | **not declared** | no path | `absent` | Set by the ingestion connector. |
+| `is_derived` | none | **not declared** | no path | `absent` | Our own provenance flag. |
 
 ## Decisions
 
@@ -184,24 +182,23 @@ Every `absent` and every `present-but-unreliable` field carries one of four deci
 | `no_action` | The conditional availability is correct for the domain. Nothing is derived and nothing is lost; the entry says why the condition is right. |
 | `connector_metadata` | Not a PayPal field at all, and in this table only because `requirements.md` section 7 lists it. |
 
-14 fields need a decision: 2 `connector_metadata`, 2 `derive`, 4 `limitation`, 6 `no_action`.
+13 fields need a decision: 2 `connector_metadata`, 1 `derive`, 4 `limitation`, 6 `no_action`.
 
 | Field | Verdict | Decision | `is_derived` | Detail |
 |---|---|---|---|---|
-| `capture.paypal_fee` | `absent` | `limitation` | no | The engine cannot attribute a PayPal fee to a capture, and **must not derive one as gross minus net.** Two things were tested before settling this. First, `Prefer: return=representation` - which PayPal's v1-to-v2 migration guide identifies as the gate on financial detail - **makes no difference on a GET**: the breakdown came back byte-identical with and without it, so the minimal-response mechanism is not the cause. Second, an omitted field is **not an implied zero**: PayPal emits `paypal_fee` as an explicit `0.00` on the refund of this same capture, so it clearly states a zero fee when it means one, and inferring `0.00` from silence would be inventing a value. PayPal never states the `net = gross - fee` identity either; the contract gives only boilerplate Money descriptions. Treat a capture fee as **unknown, never as zero** (`tech-stack.md` section 9.6). A fee-inclusive entitlement check must exclude capture fees and say so in its exception report. **Re-verify against production before Phase 10 treats this as settled** - the migration guide claims v2 gives "full fee transparency on every capture", which makes this omission anomalous rather than expected. **Corroborated 2026-11-07:** once Transaction Search caught up, the `T0005` capture events carried `fee_amount: null` while the `T0001` payout items in the same response carried `-0.25`. The reporting API reports fees where they exist and reported none for these captures, which makes "no fee was assessed in this sandbox" far more likely than "PayPal withholds capture fees" - but it is still sandbox-only. |
-| `capture.settlement_amount` | `present-but-unreliable` | `derive` | **yes** | Present on a cross-currency capture. For a same-currency capture there is no `receivable_amount` and none is needed: derive the settlement amount as `net_amount`, valid **only** where no `exchange_rate` is present and the breakdown currency equals the account's settlement currency from `/v1/reporting/balances`. Flag `is_derived` true. **Where a conversion did occur, never derive it** - use PayPal's reported `receivable_amount`, which is rounded to the cent, and never a recomputation of gross times rate. |
-| `refund.platform_fee` | `present-but-unreliable` | `limitation` | no | A read-path requirement rather than an API absence. The refund endpoint does not carry `platform_fees`; the same record read through `GET /v2/checkout/orders/{id}` does. **Phase 7 must ingest refunds via the order** to obtain it, and a refund ingested from the refund endpoint alone must record the platform fee as unknown, not zero. **The observed value is a weak signal**: it was `0.00` on an account with no Marketplaces capability, so it shows the field is emitted on this read path but not that a real platform fee would be reported there. That needs a capability-enabled account to confirm. |
-| `payout_item.transaction_id` | `present-but-unreliable` | `no_action` | no | Absent only on a failed item, which is correct - no transaction occurred, so there is no id. The canonical model must make it nullable and must not quarantine a failed item for lacking one. Its absence is itself evidence that the item did not pay out, and pairs with `processed_at`, which **is** populated on a failed item and therefore proves nothing about payment. |
-| `payout_item.failure_reason` | `present-but-unreliable` | `limitation` | no | Populated only on a failed item, and **account-dependent**: a different sandbox account denied identical requests with `errors` empty. When present it is provider evidence and may be cited as the cause. When absent, the product reports that the payout was denied, cites `batch_status` and `transaction_status`, and **stops** - `insufficient_evidence` per roadmap Phase 12. It must never assemble a plausible cause from context. The failure is silent in the worst way: the status fields are always present and always look authoritative. |
-| `fx_conversion.source_amount` | `present-but-unreliable` | `no_action` | no | Populated only where a conversion occurred, which is right: a same-currency transaction has no conversion and must carry **no `fx_conversion` row at all**. Nothing is derived and nothing is lost. Phase 3 should create an `fx_conversion` record only when PayPal reports an `exchange_rate`, so that an empty row can never be mistaken for a conversion whose fields went missing. |
-| `fx_conversion.source_currency` | `present-but-unreliable` | `no_action` | no | Populated only where a conversion occurred, which is right: a same-currency transaction has no conversion and must carry **no `fx_conversion` row at all**. Nothing is derived and nothing is lost. Phase 3 should create an `fx_conversion` record only when PayPal reports an `exchange_rate`, so that an empty row can never be mistaken for a conversion whose fields went missing. |
-| `fx_conversion.target_amount` | `present-but-unreliable` | `no_action` | no | Populated only where a conversion occurred, which is right: a same-currency transaction has no conversion and must carry **no `fx_conversion` row at all**. Nothing is derived and nothing is lost. Phase 3 should create an `fx_conversion` record only when PayPal reports an `exchange_rate`, so that an empty row can never be mistaken for a conversion whose fields went missing. And where it does exist, **compare against this figure** rather than recomputing gross times rate: PayPal rounds the settlement to the cent while leaving the rate unrounded, so a recomputation shows a half-cent exception on every cross-currency transaction. That would breach the hardest exit criterion in roadmap Phase 11 - the clean baseline producing zero exceptions. |
-| `fx_conversion.target_currency` | `present-but-unreliable` | `no_action` | no | Populated only where a conversion occurred, which is right: a same-currency transaction has no conversion and must carry **no `fx_conversion` row at all**. Nothing is derived and nothing is lost. Phase 3 should create an `fx_conversion` record only when PayPal reports an `exchange_rate`, so that an empty row can never be mistaken for a conversion whose fields went missing. |
-| `fx_conversion.rate` | `present-but-unreliable` | `no_action` | no | Populated only where a conversion occurred, which is right: a same-currency transaction has no conversion and must carry **no `fx_conversion` row at all**. Nothing is derived and nothing is lost. Phase 3 should create an `fx_conversion` record only when PayPal reports an `exchange_rate`, so that an empty row can never be mistaken for a conversion whose fields went missing. |
-| `fx_conversion.timestamp` | `absent` | `derive` | **yes** | **A provider source exists after all, found 2026-11-07 once Transaction Search caught up.** The reporting ledger records a conversion as a pair of `T0200` events - one debiting the source currency, one crediting the target - linked to the capture by `paypal_reference_id`, each carrying its own `transaction_initiation_date`. That is a PayPal-stamped time on the conversion event itself, so **prefer it**. It is late and conditional: it needs the reporting API, a filter on the `T0200` event code, and the reporting lag to have elapsed - over 21 hours on our fixtures. Where reporting has not caught up, fall back to the capture's `create_time` with **`is_derived` true**. The canonical field will therefore carry a provider value sometimes and a derived one otherwise, which is exactly the distinction `is_derived` exists to record. No v2 resource endpoint carries it, which is why the verdict above remains `absent`. |
-| `fx_conversion.fee` | `absent` | `limitation` | no | No conversion fee can be reported, and none may be manufactured. Substituting `paypal_fee` or `paypal_fee_in_receivable_currency` is the substitution `mission.md` P3 forbids - neither is declared as the fee for a conversion. **Nor is the arithmetic residue a fee**: gross times rate minus `receivable_amount` came to `-0.00492989235221950` on our fixture, which is PayPal rounding the settlement to the cent. Recording that as a conversion fee would be fabricating a financial value. **Independently corroborated 2026-11-07:** Transaction Search reports `fee_amount` where a fee exists - `-0.25` on each payout item - and reports none on either `T0200` conversion event, so the absence is now evidence that no conversion fee was charged rather than merely that none is declared. Consequence: readme section 13 Scenario 3 narrows to an incorrect conversion **value** and cannot cover an incorrect conversion **fee**. |
-| `fx_conversion.provider` | `absent` | `connector_metadata` | no | Set by the ingestion connector, which knows which provider it called. Not derived from PayPal data and so carries no `is_derived` flag; it asserts nothing about money. |
-| `fx_conversion.is_derived` | `absent` | `connector_metadata` | no | Our own provenance flag. It is the mechanism the decisions above rely on, not a field needing one. |
+| `capture.settlement_amount` | `present-but-unreliable` | `limitation` | no | **A capture loses its entire `seller_receivable_breakdown` while pending, and a dispute puts it there.** The disputed fixture reverted from `COMPLETED` to `PENDING` and the breakdown vanished - fee, net and platform fee with it. The SDK model documents this ("not available for transactions that are in pending state") but it had never been observed. So these values must be captured at ingestion and retained; re-reading later can return nothing, and the absence is not evidence that no fee was charged. |
+| `platform_fee.settlement_reference` | `absent` | `limitation` | no | Partner fees arrive as a single next-day consolidated bank payment, and no per-transaction settlement reference is exposed. The per-transaction fee comparison is in scope; reconciling the aggregate is settlement-account work, deferred by `mission.md` section 7. A `platform_fee` row should still be able to carry a settlement reference later. |
+| `dispute.seller_response_due_date` | `absent` | `no_action` | no | Present while a seller response is outstanding - observed at `WAITING_FOR_SELLER_RESPONSE` with a date 20 days out - and gone once the seller accepted the claim, because nothing is due any more. The absence is correct, and the field is what `mission.md` P4's awaiting-evidence state keys on while it lasts. Phase 3 must make it nullable and must not read its absence as a missed deadline. |
+| `disbursement.released_at` | `absent` | `limitation` | no | The release record carries no usable timestamp - `time_updated` is the integer `0`. So the moment a seller was paid cannot be read back from the disbursement. Record the time at ingestion, or take it from the reporting ledger once that catches up, and never present an ingestion time as a provider timestamp. |
+| `fx_conversion.source_amount` | `present-but-unreliable` | `no_action` | no | Populated only where a conversion occurred, which is right: a same-currency transaction has no conversion and must carry no `fx_conversion` row at all. Nothing is derived and nothing is lost. |
+| `fx_conversion.source_currency` | `present-but-unreliable` | `no_action` | no | Populated only where a conversion occurred, which is right: a same-currency transaction has no conversion and must carry no `fx_conversion` row at all. Nothing is derived and nothing is lost. |
+| `fx_conversion.target_amount` | `present-but-unreliable` | `no_action` | no | Populated only where a conversion occurred, which is right: a same-currency transaction has no conversion and must carry no `fx_conversion` row at all. Nothing is derived and nothing is lost. |
+| `fx_conversion.target_currency` | `present-but-unreliable` | `no_action` | no | Populated only where a conversion occurred, which is right: a same-currency transaction has no conversion and must carry no `fx_conversion` row at all. Nothing is derived and nothing is lost. |
+| `fx_conversion.rate` | `present-but-unreliable` | `no_action` | no | Populated only where a conversion occurred, which is right: a same-currency transaction has no conversion and must carry no `fx_conversion` row at all. Nothing is derived and nothing is lost. |
+| `fx_conversion.timestamp` | `absent` | `derive` | **yes** | Prefer the reporting ledger's `T0200` conversion event, which carries its own `transaction_initiation_date` and is provider evidence. It lags about a day; where reporting has not caught up, fall back to the capture's `create_time` with **`is_derived` true**. The field therefore carries a provider value sometimes and a derived one otherwise, which is exactly what `is_derived` exists to record. |
+| `fx_conversion.fee` | `absent` | `limitation` | no | No conversion fee can be reported. Substituting `paypal_fee` is the substitution `mission.md` P3 forbids, and the arithmetic residue is PayPal's rounding. Consequence: readme section 13 Scenario 3 covers an incorrect conversion **value**, never an incorrect conversion **fee**. |
+| `fx_conversion.provider` | `absent` | `connector_metadata` | no | Set by the connector, which knows which provider it called. |
+| `fx_conversion.is_derived` | `absent` | `connector_metadata` | no | Our own provenance flag; the mechanism the decisions above rely on. |
 
 **Two derivations exist, and both are labelled.** `fx_conversion.timestamp` and the same-currency case of `capture.settlement_amount` are the only values this phase authorises computing, and each must carry `is_derived`. Everything else is either a stated limitation or a condition that is correct as it stands. No monetary value is derived from an undocumented formula - the `capture.paypal_fee` row explains why that mattered.
 
@@ -209,22 +206,10 @@ Every `absent` and every `present-but-unreliable` field carries one of four deci
 
 ## Pending answers
 
-The 12 `unanswered` fields get an interim handling and the fixture that would settle them - **not** a decision. A decision implies the evidence is in; for these it is not, and recording a limitation would overstate what we know.
+The 0 `unanswered` fields get an interim handling and the fixture that would settle them - **not** a decision. A decision implies the evidence is in; for these it is not, and recording a limitation would overstate what we know.
 
 | Field | What would answer it | Interim handling |
 |---|---|---|
-| `payment.payer_identity` | a wallet-funded order, which needs a sandbox personal account to approve the order in a browser | Treat payer identity as unavailable for card-funded payments. Do not make it required, and do not quarantine a card payment for lacking it. **Reconciling a marketplace buyer to a PayPal buyer account is impossible for card transactions**, so any matching rule must key on the order or capture id instead. |
-| `capture.platform_fee` | a capture on an account enabled for PayPal Complete Payments Platform for Marketplaces, with `payment_instruction.platform_fees` set at capture time | Take the marketplace's own commission from the marketplace side, which is authoritative for it in any case. Do not read PayPal's silence as zero, and do not treat this as evidence that PayPal cannot report platform fees - the capability was never enabled, so no platform fee could have existed to report. |
-| `dispute.dispute_id` | a wallet-funded capture, which `POST /v1/customer/disputes` would then accept | Phase 3 may build the dispute table from the declared shape, which is pinned and complete, but **no dispute field may be marked required** and Phase 7 must not assume any of them is populated. Re-run the probe once a dispute exists; until then the product cannot reconcile disputes and should say so rather than report zero disputes. |
-| `dispute.status` | a wallet-funded capture, which `POST /v1/customer/disputes` would then accept | Phase 3 may build the dispute table from the declared shape, which is pinned and complete, but **no dispute field may be marked required** and Phase 7 must not assume any of them is populated. Re-run the probe once a dispute exists; until then the product cannot reconcile disputes and should say so rather than report zero disputes. |
-| `dispute.lifecycle_stage` | a wallet-funded capture, which `POST /v1/customer/disputes` would then accept | Phase 3 may build the dispute table from the declared shape, which is pinned and complete, but **no dispute field may be marked required** and Phase 7 must not assume any of them is populated. Re-run the probe once a dispute exists; until then the product cannot reconcile disputes and should say so rather than report zero disputes. |
-| `dispute.dispute_state` | a wallet-funded capture, which `POST /v1/customer/disputes` would then accept | Phase 3 may build the dispute table from the declared shape, which is pinned and complete, but **no dispute field may be marked required** and Phase 7 must not assume any of them is populated. Re-run the probe once a dispute exists; until then the product cannot reconcile disputes and should say so rather than report zero disputes. |
-| `dispute.amount` | a wallet-funded capture, which `POST /v1/customer/disputes` would then accept | Phase 3 may build the dispute table from the declared shape, which is pinned and complete, but **no dispute field may be marked required** and Phase 7 must not assume any of them is populated. Re-run the probe once a dispute exists; until then the product cannot reconcile disputes and should say so rather than report zero disputes. |
-| `dispute.currency` | a wallet-funded capture, which `POST /v1/customer/disputes` would then accept | Phase 3 may build the dispute table from the declared shape, which is pinned and complete, but **no dispute field may be marked required** and Phase 7 must not assume any of them is populated. Re-run the probe once a dispute exists; until then the product cannot reconcile disputes and should say so rather than report zero disputes. |
-| `dispute.reason` | a wallet-funded capture, which `POST /v1/customer/disputes` would then accept | Phase 3 may build the dispute table from the declared shape, which is pinned and complete, but **no dispute field may be marked required** and Phase 7 must not assume any of them is populated. Re-run the probe once a dispute exists; until then the product cannot reconcile disputes and should say so rather than report zero disputes. |
-| `dispute.created_at` | a wallet-funded capture, which `POST /v1/customer/disputes` would then accept | Phase 3 may build the dispute table from the declared shape, which is pinned and complete, but **no dispute field may be marked required** and Phase 7 must not assume any of them is populated. Re-run the probe once a dispute exists; until then the product cannot reconcile disputes and should say so rather than report zero disputes. |
-| `dispute.seller_response_due_date` | a wallet-funded capture, which `POST /v1/customer/disputes` would then accept | Phase 3 may build the dispute table from the declared shape, which is pinned and complete, but **no dispute field may be marked required** and Phase 7 must not assume any of them is populated. Re-run the probe once a dispute exists; until then the product cannot reconcile disputes and should say so rather than report zero disputes. |
-| `dispute.capture_linkage` | a wallet-funded capture, which `POST /v1/customer/disputes` would then accept | Phase 3 may build the dispute table from the declared shape, which is pinned and complete, but **no dispute field may be marked required** and Phase 7 must not assume any of them is populated. Re-run the probe once a dispute exists; until then the product cannot reconcile disputes and should say so rather than report zero disputes. |
 
 Both fixtures need the same thing: **a wallet-funded capture**, which requires a sandbox personal account to approve an order in a browser. That one fixture would answer eleven rows, and would also let a cross-currency refund and payout settle the two unobserved conversion sites. It is the highest-value follow-up this phase produces and it is cheap.
 
@@ -234,9 +219,9 @@ Both fixtures need the same thing: **a wallet-funded capture**, which requires a
 
 The highest-value output of this phase (`plan.md` Group 5 step 4): fields PayPal's contract promises that our sandbox never delivered. Each gets a line on what its absence means for the canonical model.
 
-**Scoped deliberately.** The contract declares 1148 paths and we observed 339, so the raw difference runs to hundreds - most of it alternative payment methods and optional reporting blocks nested under objects that never appeared at all. Listing those would bury the findings. This section lists the fields whose **parent object was observed**: PayPal returned the enclosing structure and left this member out. That is the set where an absence is informative. The full difference is derivable from the two artifacts at any time.
+**Scoped deliberately.** The contract declares 1148 paths and we observed 371, so the raw difference runs to hundreds - most of it alternative payment methods and optional reporting blocks nested under objects that never appeared at all. Listing those would bury the findings. This section lists the fields whose **parent object was observed**: PayPal returned the enclosing structure and left this member out. That is the set where an absence is informative. The full difference is derivable from the two artifacts at any time.
 
-Fields whose parent object was observed: **120**, from a raw difference of 813.
+Fields whose parent object was observed: **129**, from a raw difference of 722.
 
 ### balances
 
@@ -249,39 +234,58 @@ Fields whose parent object was observed: **120**, from a raw difference of 813.
 | Declared path | Declared | What its absence means |
 |---|---|---|
 | `$.custom_id` | Optional | A caller-supplied external reference, as invoice_id. This is the intended place to carry a marketplace order id into PayPal and have it come back. |
-| `$.disbursement_mode` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
 | `$.invoice_id` | Optional, read-only | A caller-supplied external reference. We did not set one, so its absence says nothing about PayPal. The canonical model may rely on it only if the marketplace sets it at capture time. |
-| `$.network_transaction_reference.acquirer_reference_number` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
-| `$.network_transaction_reference.date` | Optional | Card network timestamp. Not a settlement timestamp and not a substitute for an FX conversion time. |
-| `$.processor_response.payment_advice_code` | Optional, read-only | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
-| `$.seller_protection.dispute_categories` | Optional, read-only | Which dispute categories the capture is protected against. Unobserved, and seller_protection was NOT_ELIGIBLE on both fixtures. |
-| `$.seller_receivable_breakdown.paypal_fee` | Optional | The capture fee. See the capture.paypal_fee row - the one place our evidence is weaker than the format suggests. |
+| `$.network_transaction_reference` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `$.processor_response` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
 | `$.seller_receivable_breakdown.paypal_fee_in_receivable_currency` | Optional | The capture fee in settlement currency. Would have been the closest thing to an FX-side fee; not populated, and not declared as a conversion fee in any case. |
-| `$.seller_receivable_breakdown.platform_fees` | Optional | Marketplace commission on a capture. Its absence means platform fees cannot be read from the capture endpoint; the order view carries them on refunds. |
+| `$.seller_receivable_breakdown.platform_fees[].payee.email_address` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
 | `$.status_details` | Optional | The reason behind a non-terminal status. Absent because every fixture reached a terminal state; it will matter for the PENDING and delayed lifecycle states of mission.md P4. |
 | `$.supplementary_data.related_ids.authorization_id` | Optional | Capture to authorization linkage. Unobserved because our captures had no separate authorization step. |
 | `$.supplementary_data.related_ids.capture_id` | Optional | Present only on records other than the capture itself. |
+
+### disputes
+
+| Declared path | Declared | What its absence means |
+|---|---|---|
+| `$.items[].buyer_response_due_date` | Optional, read-only | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `$.items[].dispute_asset` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `$.items[].seller_response_due_date` | Optional, read-only | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
 
 ### orders
 
 | Declared path | Declared | What its absence means |
 |---|---|---|
-| `$.payer` | Optional | Buyer identity on an order. Unanswered, not absent: both fixtures were card-funded and a card-funded order carries no payer. Reconciling a marketplace to a PayPal buyer account is impossible for card transactions. |
+| `$.payer.address.address_line_1` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `$.payer.address.address_line_2` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `$.payer.address.admin_area_1` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `$.payer.address.admin_area_2` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `$.payer.address.postal_code` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `$.payer.birth_date` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `$.payer.phone` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `$.payer.tax_info` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
 | `$.payment_source.apple_pay` | Optional | An alternative funding instrument. Unobserved because both fixtures were card-funded; one row per instrument PayPal declares, none of them exercised. Not an API absence. |
 | `$.payment_source.bancontact` | Optional | An alternative funding instrument. Unobserved because both fixtures were card-funded; one row per instrument PayPal declares, none of them exercised. Not an API absence. |
 | `$.payment_source.blik` | Optional | An alternative funding instrument. Unobserved because both fixtures were card-funded; one row per instrument PayPal declares, none of them exercised. Not an API absence. |
-| `$.payment_source.card.attributes` | Optional | An alternative funding instrument. Unobserved because both fixtures were card-funded; one row per instrument PayPal declares, none of them exercised. Not an API absence. |
-| `$.payment_source.card.authentication_result` | Optional | An alternative funding instrument. Unobserved because both fixtures were card-funded; one row per instrument PayPal declares, none of them exercised. Not an API absence. |
-| `$.payment_source.card.available_networks` | Optional, read-only | An alternative funding instrument. Unobserved because both fixtures were card-funded; one row per instrument PayPal declares, none of them exercised. Not an API absence. |
-| `$.payment_source.card.from_request` | Optional | An alternative funding instrument. Unobserved because both fixtures were card-funded; one row per instrument PayPal declares, none of them exercised. Not an API absence. |
-| `$.payment_source.card.stored_credential` | Optional | An alternative funding instrument. Unobserved because both fixtures were card-funded; one row per instrument PayPal declares, none of them exercised. Not an API absence. |
+| `$.payment_source.card` | Optional | An alternative funding instrument. Unobserved because both fixtures were card-funded; one row per instrument PayPal declares, none of them exercised. Not an API absence. |
 | `$.payment_source.eps` | Optional | An alternative funding instrument. Unobserved because both fixtures were card-funded; one row per instrument PayPal declares, none of them exercised. Not an API absence. |
 | `$.payment_source.giropay` | Optional | An alternative funding instrument. Unobserved because both fixtures were card-funded; one row per instrument PayPal declares, none of them exercised. Not an API absence. |
 | `$.payment_source.google_pay` | Optional | An alternative funding instrument. Unobserved because both fixtures were card-funded; one row per instrument PayPal declares, none of them exercised. Not an API absence. |
 | `$.payment_source.ideal` | Optional | An alternative funding instrument. Unobserved because both fixtures were card-funded; one row per instrument PayPal declares, none of them exercised. Not an API absence. |
 | `$.payment_source.mybank` | Optional | An alternative funding instrument. Unobserved because both fixtures were card-funded; one row per instrument PayPal declares, none of them exercised. Not an API absence. |
 | `$.payment_source.p24` | Optional | An alternative funding instrument. Unobserved because both fixtures were card-funded; one row per instrument PayPal declares, none of them exercised. Not an API absence. |
-| `$.payment_source.paypal` | Optional | An alternative funding instrument. Unobserved because both fixtures were card-funded; one row per instrument PayPal declares, none of them exercised. Not an API absence. |
+| `$.payment_source.paypal.address.address_line_1` | Optional | An alternative funding instrument. Unobserved because both fixtures were card-funded; one row per instrument PayPal declares, none of them exercised. Not an API absence. |
+| `$.payment_source.paypal.address.address_line_2` | Optional | An alternative funding instrument. Unobserved because both fixtures were card-funded; one row per instrument PayPal declares, none of them exercised. Not an API absence. |
+| `$.payment_source.paypal.address.admin_area_1` | Optional | An alternative funding instrument. Unobserved because both fixtures were card-funded; one row per instrument PayPal declares, none of them exercised. Not an API absence. |
+| `$.payment_source.paypal.address.admin_area_2` | Optional | An alternative funding instrument. Unobserved because both fixtures were card-funded; one row per instrument PayPal declares, none of them exercised. Not an API absence. |
+| `$.payment_source.paypal.address.postal_code` | Optional | An alternative funding instrument. Unobserved because both fixtures were card-funded; one row per instrument PayPal declares, none of them exercised. Not an API absence. |
+| `$.payment_source.paypal.attributes` | Optional | An alternative funding instrument. Unobserved because both fixtures were card-funded; one row per instrument PayPal declares, none of them exercised. Not an API absence. |
+| `$.payment_source.paypal.birth_date` | Optional | An alternative funding instrument. Unobserved because both fixtures were card-funded; one row per instrument PayPal declares, none of them exercised. Not an API absence. |
+| `$.payment_source.paypal.business_name` | Optional | An alternative funding instrument. Unobserved because both fixtures were card-funded; one row per instrument PayPal declares, none of them exercised. Not an API absence. |
+| `$.payment_source.paypal.experience_status` | Optional, read-only | An alternative funding instrument. Unobserved because both fixtures were card-funded; one row per instrument PayPal declares, none of them exercised. Not an API absence. |
+| `$.payment_source.paypal.phone_number` | Optional | An alternative funding instrument. Unobserved because both fixtures were card-funded; one row per instrument PayPal declares, none of them exercised. Not an API absence. |
+| `$.payment_source.paypal.phone_type` | Optional | An alternative funding instrument. Unobserved because both fixtures were card-funded; one row per instrument PayPal declares, none of them exercised. Not an API absence. |
+| `$.payment_source.paypal.stored_credential` | Optional | An alternative funding instrument. Unobserved because both fixtures were card-funded; one row per instrument PayPal declares, none of them exercised. Not an API absence. |
+| `$.payment_source.paypal.tax_info` | Optional | An alternative funding instrument. Unobserved because both fixtures were card-funded; one row per instrument PayPal declares, none of them exercised. Not an API absence. |
 | `$.payment_source.sofort` | Optional | An alternative funding instrument. Unobserved because both fixtures were card-funded; one row per instrument PayPal declares, none of them exercised. Not an API absence. |
 | `$.payment_source.trustly` | Optional | An alternative funding instrument. Unobserved because both fixtures were card-funded; one row per instrument PayPal declares, none of them exercised. Not an API absence. |
 | `$.payment_source.venmo` | Optional | An alternative funding instrument. Unobserved because both fixtures were card-funded; one row per instrument PayPal declares, none of them exercised. Not an API absence. |
@@ -291,19 +295,17 @@ Fields whose parent object was observed: **120**, from a raw difference of 813.
 | `$.purchase_units[].invoice_id` | Optional | A caller-supplied external reference. We did not set one, so its absence says nothing about PayPal. The canonical model may rely on it only if the marketplace sets it at capture time. |
 | `$.purchase_units[].items` | Optional | Line items. Their absence means basket-level reconciliation is not available from PayPal and must come from the marketplace side. |
 | `$.purchase_units[].most_recent_errors` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
-| `$.purchase_units[].payment_instruction` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `$.purchase_units[].payee.email_address` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `$.purchase_units[].payment_instruction.payee_pricing_tier_id` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `$.purchase_units[].payment_instruction.payee_receivable_fx_rate_id` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `$.purchase_units[].payment_instruction.platform_fees[].payee.email_address` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
 | `$.purchase_units[].payments.authorizations` | Optional | Authorizations. Our fixtures captured directly, so the authorize-then-capture lifecycle is unobserved. |
 | `$.purchase_units[].payments.captures[].custom_id` | Optional | A caller-supplied external reference, as invoice_id. This is the intended place to carry a marketplace order id into PayPal and have it come back. |
-| `$.purchase_units[].payments.captures[].disbursement_mode` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
 | `$.purchase_units[].payments.captures[].invoice_id` | Optional, read-only | A caller-supplied external reference. We did not set one, so its absence says nothing about PayPal. The canonical model may rely on it only if the marketplace sets it at capture time. |
-| `$.purchase_units[].payments.captures[].network_transaction_reference.acquirer_reference_number` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
-| `$.purchase_units[].payments.captures[].network_transaction_reference.date` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
-| `$.purchase_units[].payments.captures[].processor_response.avs_code` | Optional, read-only | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
-| `$.purchase_units[].payments.captures[].processor_response.payment_advice_code` | Optional, read-only | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
-| `$.purchase_units[].payments.captures[].seller_protection.dispute_categories` | Optional, read-only | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
-| `$.purchase_units[].payments.captures[].seller_receivable_breakdown.paypal_fee` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `$.purchase_units[].payments.captures[].network_transaction_reference` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `$.purchase_units[].payments.captures[].processor_response` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
 | `$.purchase_units[].payments.captures[].seller_receivable_breakdown.paypal_fee_in_receivable_currency` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
-| `$.purchase_units[].payments.captures[].seller_receivable_breakdown.platform_fees` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `$.purchase_units[].payments.captures[].seller_receivable_breakdown.platform_fees[].payee.email_address` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
 | `$.purchase_units[].payments.captures[].status_details` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
 | `$.purchase_units[].payments.refunds[].acquirer_reference_number` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
 | `$.purchase_units[].payments.refunds[].custom_id` | Optional | A caller-supplied external reference, as invoice_id. This is the intended place to carry a marketplace order id into PayPal and have it come back. |
@@ -314,21 +316,13 @@ Fields whose parent object was observed: **120**, from a raw difference of 813.
 | `$.purchase_units[].payments.refunds[].seller_payable_breakdown.paypal_fee_in_receivable_currency` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
 | `$.purchase_units[].payments.refunds[].seller_payable_breakdown.platform_fees[].payee` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
 | `$.purchase_units[].payments.refunds[].status_details` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
-| `$.purchase_units[].shipping` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
-| `$.purchase_units[].supplementary_data.card` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
-| `$.purchase_units[].supplementary_data.risk.customer` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
-
-### payouts
-
-| Declared path | Declared | What its absence means |
-|---|---|---|
-| `$.batch_header.sender_batch_header.email_message` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
-| `$.batch_header.sender_batch_header.recipient_type` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
-| `$.items[].currency_conversion` | Optional | **A conversion record on payout items**, with exchange_rate, from_amount and to_amount. Unanswered: both batches were USD to USD. This is a third place FX evidence can come from and Phase 11 should know it exists. |
-| `$.items[].errors.debug_id` | Required | PayPal's support correlation id on a failed item. Its absence means a failure cannot be quoted to PayPal support by id. |
-| `$.items[].payout_item.recipient_name` | Optional | Recipient name. Not populated for an EMAIL-type recipient; identity is the email alone. |
-| `$.total_items` | Optional | Declared by PayPal's own OpenAPI document on a payout batch and not returned by the API. The published spec overstates the payload; do not rely on it for pagination. |
-| `$.total_pages` | Optional | As total_items. Payout item pagination cannot be driven off these fields. |
+| `$.purchase_units[].shipping.address.address_line_2` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `$.purchase_units[].shipping.email_address` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `$.purchase_units[].shipping.options` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `$.purchase_units[].shipping.phone_number` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `$.purchase_units[].shipping.trackers` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `$.purchase_units[].shipping.type` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `$.purchase_units[].supplementary_data` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
 
 ### refunds
 
@@ -340,7 +334,7 @@ Fields whose parent object was observed: **120**, from a raw difference of 813.
 | `$.seller_payable_breakdown.net_amount_breakdown` | Optional, read-only | **A conversion record on refunds, and an array of them.** Unanswered rather than absent: our refund was same-currency. A refund against the EUR capture would answer it, and Phase 3 must not assume one conversion per record. |
 | `$.seller_payable_breakdown.net_amount_in_receivable_currency` | Optional | The refund's net in settlement currency. Same cause as above - no conversion occurred. |
 | `$.seller_payable_breakdown.paypal_fee_in_receivable_currency` | Optional | Refund fee in settlement currency. Same cause. |
-| `$.seller_payable_breakdown.platform_fees` | Optional | Marketplace commission on a refund. Present through the order view for the same record, so this is a read-path artefact, not an API absence. |
+| `$.seller_payable_breakdown.platform_fees[].payee` | Optional | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
 | `$.status_details` | Optional | The reason behind a non-terminal status. Absent because every fixture reached a terminal state; it will matter for the PENDING and delayed lifecycle states of mission.md P4. |
 
 ### transactions
@@ -396,10 +390,36 @@ The reverse gap, and the direction nobody plans for: fields PayPal returned that
 
 | Record type | Observed path | Observed | What it means |
 |---|---|---|---|
-| `orders` | `$.purchase_units[].supplementary_data.risk.risk_level_indicator` | 2/4 | PayPal returned HIGH_RISK on both orders. The SDK declares the enclosing risk object but models only customer.ip_address, so a generated deserializer would drop this silently. Risk level is reconciliation-relevant and would have been invisible. |
-| `payouts` | `$.items[].links[].encType` | 4/4 | Undeclared in both source grades, yet PayPal sends it on every HATEOAS link these APIs return. |
-| `payouts` | `$.links[].encType` | 4/4 | Undeclared in both source grades, yet PayPal sends it on every HATEOAS link these APIs return. |
-| `transactions` | `$.links[].encType` | 2/2 | Undeclared in both source grades, yet PayPal sends it on every HATEOAS link these APIs return. |
+| `disbursements` | `$` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `disbursements` | `$.item_id` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `disbursements` | `$.last_response_code` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `disbursements` | `$.links` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `disbursements` | `$.links[]` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `disbursements` | `$.links[].encType` | 1/1 | Undeclared in both source grades, yet PayPal sends it on every HATEOAS link these APIs return. |
+| `disbursements` | `$.links[].href` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `disbursements` | `$.links[].method` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `disbursements` | `$.links[].rel` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `disbursements` | `$.payout_amount` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `disbursements` | `$.payout_amount.currency_code` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `disbursements` | `$.payout_amount.value` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `disbursements` | `$.payout_destination` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `disbursements` | `$.payout_transaction_id` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `disbursements` | `$.processing_state` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `disbursements` | `$.processing_state.status` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `disbursements` | `$.reference_id` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `disbursements` | `$.reference_type` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `disbursements` | `$.time_updated` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `disputes` | `$.items[].disputed_transactions` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `disputes` | `$.items[].disputed_transactions[]` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `disputes` | `$.items[].disputed_transactions[].buyer` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `disputes` | `$.items[].disputed_transactions[].buyer.payer_id` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `disputes` | `$.items[].disputed_transactions[].buyer_transaction_id` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `disputes` | `$.items[].disputed_transactions[].seller` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `disputes` | `$.items[].disputed_transactions[].seller.merchant_id` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `disputes` | `$.items[].outcome` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `orders` | `$.purchase_units[].payee.display_data` | 4/4 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `orders` | `$.purchase_units[].payee.display_data.brand_name` | 4/4 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `transactions` | `$.links[].encType` | 1/1 | Undeclared in both source grades, yet PayPal sends it on every HATEOAS link these APIs return. |
 
 This is the concrete argument against putting a generated deserializer between the wire and the evidence, which `plan.md` Group 1 step 6 forbids: APIMatic drops unknown keys, so all of these would have been invisible and `observed.json` quietly wrong. It is also the evidence Phase 7 should weigh when it chooses whether to use the SDK at all.
 

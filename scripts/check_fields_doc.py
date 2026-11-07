@@ -53,7 +53,9 @@ from typing import Any
 
 REPO = Path(__file__).resolve().parent.parent
 DOC = REPO / "specs" / "paypal-fields.md"
-ARTIFACTS = REPO / "specs" / "2026-11-05-paypal-field-discovery" / "artifacts"
+# Phase 0b's artifacts. Phase 0's describe a first-party integration, which is
+# not the model being built, so they are a historical record and not an input.
+ARTIFACTS = REPO / "specs" / "2026-11-07-multiparty-field-discovery" / "artifacts"
 
 PRESENT = "present"
 UNRELIABLE = "present-but-unreliable"
@@ -65,13 +67,17 @@ DECISION_KINDS = ("derive", "limitation", "no_action", "connector_metadata")
 # requirements.md section 7: the canonical entities, and the fx_conversion
 # fields it enumerates. A canonical field with no row is the exact failure this
 # phase exists to prevent (validation.md C4).
+# Amended for multiparty: payout_batch and payout_item are replaced by
+# disbursement, because PayPal pays the seller rather than the marketplace
+# running a payout batch, and platform_fee becomes first-class because
+# PayPal's record of the commission is independent evidence.
 REQUIRED_ENTITIES = (
     "payment",
     "capture",
+    "platform_fee",
     "refund",
     "dispute",
-    "payout_batch",
-    "payout_item",
+    "disbursement",
     "fx_conversion",
 )
 REQUIRED_FX_FIELDS = (

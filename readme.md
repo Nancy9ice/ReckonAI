@@ -140,7 +140,7 @@ Entitlement calculation itself is mode-independent — it always runs against th
 Refunds and disputes can change the financial position of a transaction after the original payment has been recorded.
 
 For example:
-- A partial refund may require a corresponding reduction in seller entitlement. It may also return part of the platform fee, but **not automatically** — the partner specifies the amount through `payment_instruction.platform_fees` on the refund call, and PayPal must enable that feature. A refund that does not reverse commission is therefore not necessarily an error.
+- A partial refund may require a corresponding reduction in seller entitlement. It also returns part of the platform fee **automatically and pro rata** — observed 2026-11-07: a 30.00 refund of a 100.00 capture returned 3.00 of a 10.00 commission with no instruction sent. So a refund that leaves commission untouched **is** an anomaly worth investigating. Overriding the reversal amount is a separate matter and needs an account enablement.
 - A dispute may introduce a financial exposure.
 - A chargeback may occur after a seller has already been disbursed — at capture under `INSTANT`, or after release under `DELAYED`. **PayPal places the liability on the seller:** "in connected integration, merchants assume financial liability and handle disputes and chargebacks." Whether the *marketplace* is exposed is governed by its own seller terms, not by PayPal, so the engine must treat any marketplace-side recovery obligation as rule-driven, never as something inferred from a PayPal record.
 - A refund may be processed by PayPal but not reflected in the marketplace ledger.
@@ -367,7 +367,7 @@ This allocation is illustrative. Actual calculations must follow the marketplace
 
 If Seller A has already received the funds — at capture under `INSTANT`, or after release under `DELAYED` — the system should identify the resulting recovery or offset obligation rather than silently changing the historical disbursement record.
 
-Two multiparty specifics apply. The reduction in marketplace commission is **not automatic**: returning part of the platform fee requires the partner to instruct it on the refund call, so a refund that leaves the commission untouched may be correct rather than wrong, and the engine must check the marketplace's policy before calling it an exception. And under `DELAYED`, a refund issued while the funds are still held does not create a recovery obligation at all — there is nothing to recover, because the seller was never paid.
+Two multiparty specifics apply. **PayPal reverses the commission itself, pro rata, without being asked** — corrected 2026-11-07, having previously been recorded here as a partner-instructed step. So the engine's expected position after a refund must already assume a proportional commission reversal, and a refund where commission did *not* come back is an exception rather than a normal case. Specifying a non-proportional reversal is possible in principle but needs a PayPal account enablement, which returns `PLATFORM_FEE_NOT_ENABLED` without it. And under `DELAYED`, a refund issued while the funds are still held creates no recovery obligation at all — there is nothing to recover, because the seller was never paid.
 
 ## 6.3 Reconciliation categories
 

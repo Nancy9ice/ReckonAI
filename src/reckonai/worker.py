@@ -29,7 +29,7 @@ from reckonai.logging import configure_logging, event
 
 # This component's share of the connection budget; the cap it is drawn against
 # is `reckonai.db.USABLE_CONNECTIONS`. See requirements.md D6.
-WORKER_POOL_SIZE = 3
+WORKER_POOL_SIZE = 2
 WORKER_MAX_OVERFLOW = 2
 
 logger = logging.getLogger("reckonai.worker")

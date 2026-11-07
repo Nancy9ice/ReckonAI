@@ -580,13 +580,15 @@ is **Hobby**, Render's free tier, where:
 web service and worker, a Postgres that does not expire, and the
 three-component connection budget above is the real one.
 
-**Costs amended 2026-11-07**, in [[roadmap]] Phase 1 Group 0, once the Postgres
-tier was actually chosen. The topology is a Starter web service, a Starter
-worker and a **Basic-1gb** Postgres (plan id `0.5c-1g`) — about **$33 a month**,
-so the credits cover roughly **1.5 months**. That is far beyond the project's
-life. This paragraph previously said about $20 a month and two and a half
-months, which assumed Basic-256mb; 256MB is cramped once the connection budget
-above is open, and the extra memory was judged worth the shorter runway.
+**Tier confirmed 2026-11-07**, in [[roadmap]] Phase 1 Group 0: a Starter web
+service, a Starter worker and a **Basic-256mb** Postgres (plan id
+`0.1c-256mb`), which is the roughly $20 a month the figures above assume.
+Basic-1gb was chosen first for memory headroom and reversed on price — $23.50 a
+month against about $6 — since the mitigation for less RAM is cheap and the
+cost difference is not. The connection pools were trimmed to a peak of 16
+accordingly, so a 256MB instance is not asked to hold fifteen idle backends.
+`plan` is reversible if Phase 11 shows the instance struggling; region and major
+version are not.
 
 Three provisioning facts worth carrying here, because two of them cannot be
 changed after the database is created and all three are easy to get wrong:

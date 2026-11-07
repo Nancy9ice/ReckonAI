@@ -26,7 +26,7 @@ Under PayPal's multiparty model the provider performs the money movement. It rou
 
 The platform fee is declared per transaction but **does not arrive per transaction**. PayPal settles partner fees once daily, consolidating a day's fees into a single next-day payment into a bank account rather than a PayPal balance. So the marketplace's commission revenue must be reconciled **many-to-one against a lagging aggregate** — a reconciliation shape that does not exist anywhere else in this product. The seller sees the same fee on their side as "Partner commissions", deducted from their funds.
 
-**One thing here is unverified, and we established on 2026-11-07 that we cannot yet verify it:** whether the platform fee is taken at capture or at release under `DELAYED` disbursement. PayPal documents neither, saying only that it "deducts fees from the seller's funds" — and under `DELAYED` those funds do not move until release. Attempting it empirically returns `403 NOT_AUTHORIZED` on both referenced-payouts endpoints, which are the `DELAYED` release mechanism; they need partner approval and a BN code. The daily consolidated settlement itself is documented; whether it is visible through any API, as distinct from the monthly SFTP partner report, is not. See `specs/multiparty-direction.md` §8.
+**One thing here is unverified and must not be designed around:** whether the platform fee is taken at capture or at release under `DELAYED` disbursement. PayPal documents neither. Whether the consolidated settlement is visible through any API is also open. Both are tracked in `specs/multiparty-direction.md` §8.
 
 The marketplace nonetheless maintains its own orders, commission rules and seller ledger. Ensuring those records agree with PayPal's across the complete transaction lifecycle is the problem this product solves. **Our application never moves money**; it verifies the financial outcomes PayPal produced against what the marketplace's own rules say should have happened.
 
@@ -181,7 +181,7 @@ The reconciliation process must account for:
 - Conversion timestamps.
 - Seller disbursement amount and currency.
 
-**Phase 0 established what PayPal actually supplies here, and two of these are not it.** PayPal returns a real conversion rate and settlement amount on a cross-currency capture, at 15 decimal places. It supplies **no per-transaction conversion fee** anywhere in its transaction APIs, and **no conversion timestamp** on any of its four declared conversion structures — the only provider-stamped conversion time is on the reporting ledger's `T0200` events, which lag by about a day. Both gaps are recorded as a labelled derivation or a stated limitation, never filled with an estimate. See `specs/paypal-fields.md`.
+**PayPal does not supply two of these.** It returns a real conversion rate and settlement amount on a cross-currency capture, but **no per-transaction conversion fee**, and **no conversion timestamp** except on reporting records that lag behind the transaction. Each gap becomes a labelled derivation or a stated limitation, never an estimate. Field-level detail: `specs/paypal-fields.md`.
 
 The system must preserve original amounts and currencies rather than replacing them with converted values.
 
@@ -519,7 +519,7 @@ Currency conversion records should preserve:
 - Original source record reference.
 - **Whether each value came from the provider or was derived by us.**
 
-The last of these is not optional. Phase 0 established that PayPal supplies the rate, source and target amounts, but **no conversion fee at all** and **no conversion timestamp** on any declared conversion structure. A timestamp is therefore either read from the reporting ledger's conversion events or derived from the capture time, and a derived value must be flagged as derived and never presented as provider evidence. A conversion record whose fee is absent must stay absent — not zero. See `specs/paypal-fields.md`.
+The last of these is not optional, because PayPal does not supply every field above. A timestamp may be provider-supplied or derived, and a derived value must be flagged as such and never presented as provider evidence. A conversion record whose fee is absent must stay absent — not zero. The money rules are in `specs/tech-stack.md` §2; the field-level evidence is in `specs/paypal-fields.md`.
 
 The system should use appropriate decimal arithmetic and currency precision rules.
 
@@ -654,28 +654,18 @@ The application must not fabricate missing settlement or conversion information.
 
 ## 11.1 What the multiparty model requires
 
-The integration reads as the **platform**, not as the merchant, which changes access as well as content.
+The integration reads as the **platform**, not as the merchant, which changes access as well as content. The endpoints, headers and auth mechanics are locked in `specs/tech-stack.md` §8; their verification status is tracked in `specs/multiparty-direction.md` §8.
 
-| Need | Mechanism | Status |
-|---|---|---|
-| Read a seller's transactions | `PayPal-Auth-Assertion` — an unsigned JWT (`alg: none`) with the platform client id as `iss` and the seller's `payer_id` or `email` in the payload | **Unverified** |
-| Platform fee on an order | `purchase_units[].payment_instruction.platform_fees`, seller onboarded with `PARTNER_FEE` | **Unverified** |
-| Delayed disbursement | `payment_instruction.disbursement_mode: DELAYED`, seller onboarded with `DELAY_FUNDS_DISBURSEMENT` | **Unverified** |
-| Release held funds | `POST /v1/payments/referenced-payouts-items`, `reference_id` = capture id, `reference_type: TRANSACTION_ID` | **`403` on our app** — needs partner approval and a BN code |
-| Partner fee cost detail | Pricing Transaction report, SFTP, **monthly** | Approved partners only |
+Two consequences belong at product level, because they bound what the MVP can do:
 
-**The capabilities are per-seller, granted at onboarding** — not account-level switches. PayPal's simpler build-your-own onboarding flow explicitly excludes Platform Fee, Delayed Disbursement, Partner Reporting and the Disputes API, so the onboarding path chosen determines which of these exist at all.
+- **Capabilities are granted per seller at onboarding**, not as account-level switches, and PayPal's simpler onboarding flow excludes Platform Fee, Delayed Disbursement, Partner Reporting and the Disputes API outright. The onboarding path a marketplace chose therefore determines which parts of this product apply to it.
+- **Several of those capabilities are unconfirmed for our own sandbox**, including the ability to read a seller's transactions at all. If that one does not hold, entitlement validation narrows to what the platform can see of its own fees. That is the largest open risk in the plan.
 
-## 11.2 What Phase 0 established about reading PayPal
+## 11.2 Reading PayPal is not uniform, and the rules are locked elsewhere
 
-Evidence, not assumption — `specs/paypal-fields.md` and the phase notes carry the detail.
+Field availability depends on which endpoint a record is read from, the reporting APIs lag behind the resource endpoints, and PayPal returns fields its own contracts do not declare. None of that is inferable from the API reference, so the resulting client rules are locked as technology decisions in **`specs/tech-stack.md` §8**, and the field-by-field evidence behind them is in **`specs/paypal-fields.md`**.
 
-- **A generated SDK is not a safe default.** Three fields were observed that neither PayPal's generated SDK contract nor its published OpenAPI documents declare. A generated deserializer discards unknown keys silently. If an SDK is used, retain the raw payload and diff against it.
-- **Read refunds through the order.** The refund endpoint omits `platform_fees`; the same record inside the order carries it. Field availability is a property of the read path, not only of the record type.
-- **The reporting APIs are eventually consistent, roughly a day behind**, and share a single snapshot. The v2 resource endpoints are authoritative for recent activity. Reporting is nonetheless the only observed source of a conversion timestamp and per-event fees, and it joins to the resources on `transaction_id` and `paypal_reference_id`.
-- **A `403` is never evidence about the API**, only about our permissions. A scope added after a token is minted does not appear in that token.
-- **A `5xx` is not reliably transient** — a malformed request produced one repeatably.
-- **Retain every raw payload.** Two observed fields stopped being returned a day later.
+The consequence for this document is only this: the integration must be built against observed behaviour, not against the contract, and any field the contract promises but PayPal does not deliver is recorded as a limitation rather than assumed.
 
 # 12. Sponsor Technology Strategy
 
@@ -746,10 +736,7 @@ The demonstration should tell a coherent financial investigation story.
 
 **Step 4 previously read "an incorrect conversion value or fee". The fee half has been removed** (amended 2026-11-06). PayPal declares no per-transaction conversion fee anywhere, so there would be no provider figure to contradict a claimed conversion fee, and the agent's only honest answer would be `insufficient_evidence`. The value half is fully supported by real provider evidence — a rate at 15 decimal places and a reported settlement amount.
 
-Two implementation constraints, both established in Phase 0 and both capable of breaking this scenario:
-
-- **Compare against PayPal's reported settlement amount, never a recomputation of gross times rate.** PayPal rounds the settlement to the cent and leaves the rate unrounded, so recomputing produces a half-cent discrepancy on every converted transaction and the demo would show a false exception on clean data.
-- **Keep the rate as a string parsed to `Decimal` at full precision.** Rounding it manufactures a difference larger than the one being demonstrated.
+Two constraints govern this scenario, and either one breaks the demo if ignored: compare against PayPal's **reported** settlement amount rather than recomputing it, and keep the rate at full precision. Both are stated as money rules in `specs/tech-stack.md` §2.
 
 All scenarios should use source records and deliberately introduced inconsistencies, not pre-written explanations that the agent simply repeats.
 

@@ -23,7 +23,7 @@ from reckonai.logging import configure_logging, event
 # This component's share of the connection budget. The cap it is drawn against
 # is `reckonai.db.USABLE_CONNECTIONS`; see that module and the phase's
 # requirements.md D6.
-WEB_POOL_SIZE = 10
+WEB_POOL_SIZE = 5
 WEB_MAX_OVERFLOW = 5
 
 logger = logging.getLogger("reckonai.web")

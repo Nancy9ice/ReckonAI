@@ -133,7 +133,7 @@ database is created.
 |---|---|---|
 | Region, all three components | `frankfurt` | **No** |
 | Postgres major version | `"16"` | **No** |
-| Postgres instance | Basic-1gb, plan id `0.5c-1g` | Yes, upward |
+| Postgres instance | Basic-256mb, plan id `0.1c-256mb` | Yes, upward |
 | `ipAllowList` | empty list — internal only | Yes |
 | `connectionPool` | `none` (the default) | Yes |
 | `diskSizeGB` | omitted, so the plan default applies | Increase only |
@@ -144,10 +144,20 @@ dashboard interaction in a live demo. It costs some latency on the backend's
 calls out to PayPal's US-hosted sandbox, which is background work nobody
 watches. The interactive path was chosen over the batch path deliberately.
 
-**Basic-1gb rather than Basic-256mb.** Not a connections decision — every Basic
-tier caps at 100. A Postgres backend costs a few MB of RAM, so 256MB is cramped
-once D6's ~21 connections are open, and the symptom would be slow queries during
-Phase 11 rather than a clear error. The cost consequence is recorded below.
+**Basic-256mb, after Basic-1gb was chosen and then reversed.** Not a connections
+decision — every Basic tier caps at 100, so this was purely RAM against price.
+
+1gb was picked first for memory headroom. Render then priced it at **$23.50 a
+month** against roughly **$6** for 256mb, which the account holder judged too
+much against credits that have to cover the whole project. Reversed, because
+the mitigation for less RAM is cheap and the cost difference is not: D6's pools
+were trimmed from a peak of 21 to **16**, so the instance is not asked to park
+fifteen idle backends. `pool_size` is what a component *holds* once used, idle
+connections included, and an idle Postgres backend still costs memory.
+
+The residual risk is honest and small: if Phase 11 shows slow queries under the
+seeded dataset, the tier can be raised later — `plan` is one of the database
+fields that *is* reversible, unlike region and major version.
 
 **`ipAllowList` empty — internal Render traffic only.** The deciding factor is
 that **the repository becomes public at hackathon submission**. `render.yaml` is
@@ -166,13 +176,15 @@ a one-way door for no benefit.
 
 ---
 
-## Amendment this phase owes to a constitution document
+## Cost, and the amendment that was made and then unmade
 
 [[tech-stack]] §11 states the topology costs "about $20 a month" and that $50 of
-credits covers "roughly two and a half months". Both assumed Basic-256mb.
-With Basic-1gb at about $19 the topology is about **$33 a month**, so the credits
-cover roughly **1.5 months** — still far beyond a one-week project, but the
-figures in §11 are now wrong as written and were amended with this phase.
+credits covers "roughly two and a half months", both assuming Basic-256mb.
+
+That was amended to about $33 and 1.5 months when Basic-1gb was chosen, then
+restored when 1gb was reversed on price. **§11's original figures stand**, and
+the episode is recorded here rather than erased because the amendment and its
+reversal both happened inside this phase.
 
 ---
 

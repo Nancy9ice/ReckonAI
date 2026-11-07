@@ -111,11 +111,15 @@ services:
 databases:
   - name: reckonai-db
 
-    # A plan id, not the display name. `Basic-1gb` is rejected; `0.5c-1g` is
-    # the same instance spelled the way the Blueprint expects. Every Basic tier
-    # caps at 100 connections regardless, so this is a memory choice: 256MB is
-    # cramped once the pools in requirements.md D6 are open.
-    plan: 0.5c-1g
+    # A plan id, not the display name. `Basic-256mb` is rejected; `0.1c-256mb`
+    # is the same instance spelled the way the Blueprint expects.
+    #
+    # Chosen on cost: Basic-1gb priced at $23.50 a month against roughly $6
+    # here, and the credits have to cover the whole project. Every Basic tier
+    # caps at 100 connections, so nothing about the budget changes - but 256MB
+    # is tight for Postgres, which is why the pools in requirements.md D6 were
+    # trimmed to a peak of 16 rather than left at 21.
+    plan: 0.1c-256mb
 
     region: frankfurt
 

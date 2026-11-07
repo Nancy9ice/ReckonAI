@@ -229,18 +229,65 @@ transaction records **where accessible**". If the platform cannot read them,
 validation 2 is not implementable as specified and the MVP narrows to what the
 platform can see of its own fees.
 
-Questions 7 and 8 were added on 2026-11-07. Both are undocumented, and an
-attempt at 7 was blocked: **both referenced-payouts endpoints return
-`403 NOT_AUTHORIZED`** for our sandbox app. They require partner approval and a
-BN code. By the rule this phase already established, a `403` is evidence about
-our permissions and not about the API — but it is a blocker to clear before
-planning around question 3.
+Questions 7 and 8 were added on 2026-11-07. Both are undocumented.
 
-**Blocked on:** a sandbox personal account onboarded as a seller under the
-platform with `PARTNER_FEE` and `DELAY_FUNDS_DISBURSEMENT`, and confirmation of
-whether partner approval and a BN code are obtainable for the sandbox. That
-account also unblocks the wallet-funded capture that twelve `unanswered` rows in
-`specs/paypal-fields.md` are waiting on.
+### 8.3 The blocker was the app, and it is now cleared
+
+Probed 2026-11-07. The original sandbox app was a **merchant** app: 33 scopes,
+not one of them partner, platform or referral. That single fact produced every
+block we hit, and a seller account alone would not have helped — without
+partner scopes the seller could not have been onboarded or charged a platform
+fee.
+
+A **business platform** sandbox account was created the same day, and its app
+carries **42 scopes including four partner scopes**:
+`customer/partner`, `customer/partner-referrals/readwrite`,
+`partners/merchant-accounts/readwrite`, and `payments/partnerfee`.
+
+Every previously blocked call now works:
+
+| Call | Merchant app | Platform app |
+|---|---|---|
+| `POST /v2/customer/partner-referrals` | `403 NOT_AUTHORIZED` | `400 MISSING_REQUIRED_PARAMETER` — permitted |
+| `GET /v1/payments/referenced-payouts-items/{id}` | `403 NOT_AUTHORIZED` | `404 INVALID_RESOURCE_ID` — permitted |
+| Order carrying `platform_fees` | `422 PLATFORM_FEES_NOT_SUPPORTED` | **`201`** |
+| Order carrying `disbursement_mode: DELAYED` | `422 DELAYED_DISBURSEMENT_NOT_SUPPORTED` | **`201`** |
+| A real seller onboarding referral | not possible | **`201`**, returning a seller `action_url` |
+
+**`PayPal-Auth-Assertion` was already confirmed working and enforced** on the
+merchant app: asserting our own merchant id returned `200`, while a bogus payer
+id, an empty one and a malformed header each returned `401`. The asserted
+identity is validated rather than ignored, so the cross-seller read path exists
+in principle.
+
+**Both credential pairs are kept.** The platform app is `PAYPAL_CLIENT_ID`;
+the original merchant app stays as `PAYPAL_MERCHANT_CLIENT_ID`, because Phase
+0's fixtures belong to account `C24NAWELTTHXJ` and would return `404` under any
+other credentials — `fixtures.md` records that happening once already, and
+`validation.md` C2 re-probes those ids.
+
+**A `201` on order creation is not evidence that capture works.** Phase 0's own
+lesson applies: success at one stage says nothing about the next. Whether the
+platform fee is actually taken, what the held-funds records look like, and
+whether a release succeeds are all still unobserved, and are Phase 0b's work.
+
+### 8.4 What remains before Phase 0b can run
+
+1. **A seller must complete onboarding.** The referral call returns an
+   `action_url` into PayPal's sandbox business signup, which a sandbox account
+   follows in a browser. Onboard with the `PARTNER_FEE` and
+   `DELAY_FUNDS_DISBURSEMENT` features.
+2. **Record the onboarded seller's merchant id** in `PAYPAL_SELLER_MERCHANT_ID`,
+   and its email in `PAYPAL_SELLER_EMAIL`. These are the `payee` on a purchase
+   unit and the `payer_id` claim in `PayPal-Auth-Assertion`.
+3. **Mint a fresh token afterwards.** A scope or capability granted after a
+   token is issued does not appear in that token, which Phase 0 established
+   while enabling Transaction Search.
+
+Independent of all of the above, a **wallet-funded capture** still unblocks the
+twelve `unanswered` rows in `specs/paypal-fields.md` and dispute creation. It
+needs only a sandbox **personal** account approving an order in a browser, and
+no partner scopes at all.
 
 ## 9. What Phase 0 still supports
 

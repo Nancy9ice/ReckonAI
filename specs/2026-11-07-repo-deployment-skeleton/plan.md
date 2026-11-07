@@ -153,16 +153,30 @@ is clean. `uv run python -c "import reckonai"` exits 0.
 
 ## Group 4 — Local Postgres and the test suite · commit
 
-1. `compose.yaml` — one service, `postgres:16`, with a named volume, a
-   healthcheck, and a non-default port if 5432 is likely occupied. Credentials
-   are local-only development values and are not secrets; say so in a comment so
-   nobody later mistakes them for a leak, and keep them out of `.env` so the
-   gitignore rules stay meaningful.
+1. `compose.yaml` — one service, `postgres:16`, with a named volume and a
+   healthcheck. **Bind 5432**: checked 2026-11-07, nothing is listening on it
+   and all three Homebrew Postgres services are stopped (`notes.md`), so the
+   non-default port this step previously hedged about is unnecessary.
+   Credentials are local-only development values and are not secrets; say so in
+   a comment so nobody later mistakes them for a leak, and keep them out of
+   `.env` so the gitignore rules stay meaningful.
 2. `tests/conftest.py` — a fixture providing a database URL from the
    environment, with a clear skip or hard failure when it is absent. Decide
    which and state it in the fixture: a silent skip means a green CI run that
    tested nothing, so prefer a hard failure in CI and an explanatory skip
    locally, keyed on an environment variable CI sets.
+
+   **A session-scoped fixture then asserts the server's major version is 16**,
+   by reading `SHOW server_version` (or `current_setting('server_version_num')`)
+   and failing with the version it actually found. This is not belt-and-braces.
+   This machine has `postgresql@16`, `@17` and `@18` installed via Homebrew, all
+   currently stopped; a stray `brew services start postgresql@17` would bind
+   5432 ahead of the compose container and the whole suite would pass against
+   the wrong major version. That is precisely the parity failure
+   `requirements.md` D3 exists to prevent, and it fails **silently** — the one
+   failure mode worth paying a fixture for. The guard runs in CI and on Render's
+   database too, where it is the cheapest possible check that
+   `postgresMajorVersion: "16"` actually took effect (D12).
 3. `tests/test_health.py` — FastAPI test client. Assert `/health` returns `200`
    and its body shape; assert `/health/ready` returns `200` against a reachable
    database. These are the "at least one real assertion" the exit criterion asks

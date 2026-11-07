@@ -18,12 +18,30 @@ account that can change.
 | `gh` | authenticated as `Nancy9ice` | needed by `validation.md` C8 to read the CI conclusion |
 | Remote | `https://github.com/Nancy9ice/ReckonAI.git` | CI in `plan.md` Group 6 runs here |
 
-**One incidental finding worth recording.** A Homebrew PostgreSQL is installed
-locally and is **17.9**, not 16. It is therefore not a substitute for the
-compose database: `requirements.md` D3 chose compose for version parity with CI
-and Render, and a 17.9 server would break exactly that parity. The `psql`
-*client* from that installation is fine for connecting to a 16 server and is
-useful for `validation.md` M3.
+**Local PostgreSQL installations — and the hazard they create.** Re-checked
+2026-11-07, correcting a first reading. `postgres --version` reports **17.9**,
+but that is only whichever version leads `PATH`: Homebrew has
+**`postgresql@16`, `@17` and `@18`** installed, and `brew services` lists all
+three as stopped. So a local 16 does exist and is a genuine fallback if Docker
+misbehaves, which the first reading of this line denied.
+
+**The real finding is the inverse of a missing version — it is three present
+ones.** Nothing is listening on 5432 right now, so `compose.yaml` can bind it
+directly and the non-default port `plan.md` Group 4 hedged about is unnecessary.
+But a stray `brew services start postgresql@17` would then bind 5432 ahead of
+the compose container, and the test suite would pass against the wrong major
+version with no error anywhere. That is exactly the parity failure
+`requirements.md` D3 exists to prevent, and it is silent.
+
+**Mitigation, folded into Group 4 step 2:** a session-scoped fixture asserts the
+server's major version is 16 and fails with whatever it actually found. It costs
+one fixture, it runs wherever the suite points, and on Render it doubles as the
+cheapest possible confirmation that `postgresMajorVersion: "16"` took effect
+(D12).
+
+Docker's two existing containers — `my-app-container` and `admiring_golick`,
+both exited two weeks ago with no port bindings — are unrelated leftovers and
+conflict with nothing.
 
 ### Step 4 — Render Cron Jobs · 2026-11-07 · AVAILABLE
 

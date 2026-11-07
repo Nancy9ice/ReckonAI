@@ -126,8 +126,18 @@ was never tested, and every later phase inherits that.
 ### C7 — The test suite is green locally
 
 ```bash
+docker compose up -d --wait
 uv run pytest -q
 ```
+
+Among what this proves, one assertion is worth naming because it guards a
+**silent** failure rather than a loud one: a session fixture checks the server's
+major version is **16**. Three Homebrew Postgres versions are installed on this
+machine (`notes.md`), so a stray `brew services start postgresql@17` would bind
+5432 ahead of the compose container and the suite would pass against the wrong
+major version — the parity failure `requirements.md` D3 exists to prevent.
+The same fixture is the cheapest check that `postgresMajorVersion: "16"` took
+effect on Render (D12), since it runs wherever the suite points.
 
 ### C8 — The test suite is green in CI
 

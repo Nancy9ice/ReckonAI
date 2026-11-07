@@ -1,0 +1,41 @@
+# Local development database.
+#
+# postgres:16 is not an arbitrary choice. It matches the CI service container
+# and the Render instance's postgresMajorVersion, and that three-way parity is
+# what specs/2026-11-07-repo-deployment-skeleton requirements.md D3 exists to
+# protect: a migration must not be able to pass locally and fail deployed on a
+# version difference.
+#
+# The credentials below are local-only development values and are NOT secrets.
+# They are in version control deliberately, so that a fresh checkout runs
+# without setup. They are kept out of .env on purpose too, so the gitignore
+# rules covering real credentials keep their meaning. Nothing here is ever
+# used against a deployed database.
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: reckonai-postgres
+    environment:
+      POSTGRES_USER: reckonai
+      POSTGRES_PASSWORD: devpassword
+      POSTGRES_DB: reckonai
+    ports:
+      # Checked 2026-11-07: nothing holds 5432 and the machine's three Homebrew
+      # postgres services are stopped. The suite does not trust that, though -
+      # a session fixture asserts the server really is major version 16, because
+      # a stray `brew services start postgresql@17` would bind this port ahead
+      # of the container and every test would pass against the wrong version.
+      - "5432:5432"
+    volumes:
+      - reckonai-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # `docker compose up -d --wait` blocks on this, so tests never race the
+      # database's startup.
+      test: ["CMD-SHELL", "pg_isready -U reckonai -d reckonai"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+volumes:
+  reckonai-pgdata:

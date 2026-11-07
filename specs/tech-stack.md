@@ -43,12 +43,28 @@ This implements [[mission]] P1 and P2 and overrides any convenience elsewhere.
 | Over JSON | Serialize amounts as **strings**, not JSON numbers — JSON numbers are IEEE-754 doubles and will silently lose precision in the browser. |
 | Shape | Every amount is a pair: `(amount: Decimal, currency: str)`. No bare amounts in any signature, column pair, or API field. |
 | Rounding | Rounding happens once, at an explicitly named boundary, with a stated mode (`ROUND_HALF_UP`) and the currency's exponent. Never implicitly. |
-| Comparison | Two amounts of different currencies raise an error rather than compare. |
+| Comparison | Two amounts of different currencies raise an error rather than compare. This governs arithmetic and ordering; equality is excluded — see below. |
 
 A single `Money` value object enforces this, and arithmetic on it refuses
 mixed-currency operands. Allocation of a refund across sellers uses a
 largest-remainder method so the parts always sum exactly to the whole — no
 rounding residue is created or discarded.
+
+**Equality is the one excluded operation** (clarified 2026-11-07, before any
+money code was written; the reasoning is in
+`specs/2026-11-07-canonical-core/requirements.md` D3). The comparison rule above
+governs the operations that would otherwise produce a wrong *financial* answer:
+`+`, `-`, and the ordering operators. `100.00 USD + 100.00 EUR` has no answer
+without a conversion record, and P3 forbids supplying an estimated one, so it
+raises rather than returning `200.00` of whichever currency came first.
+
+`==` is different, because "are these the same value?" has a correct answer
+without a rate: `10.00 USD == 10.00 EUR` is simply `False`. Equality therefore
+returns `False` across currencies rather than raising, and `NotImplemented`
+against a non-`Money` operand. This is not a convenience — a raising `__eq__`
+makes the value object unusable. SQLAlchemy's unit of work compares attribute
+values to detect a change, `money == None` appears in ordinary code, and the
+object could not be a `set` member or a `dict` key.
 
 **FX:** a conversion record stores source amount/currency, target
 amount/currency, rate, timestamp, fee, provider, and a reference to the source

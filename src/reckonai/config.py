@@ -50,6 +50,13 @@ class Settings(BaseSettings):
     # second or two).
     worker_tick_seconds: float = 30.0
 
+    # Injected by Render into web services; absent locally, in CI, and in the
+    # worker, which has no public URL. Logged on startup so a deployed service
+    # announces its own address rather than it having to be found in a
+    # dashboard - which is what makes the deployed checks in this phase's
+    # validation.md section 4 readable straight from the log stream.
+    render_external_url: str | None = None
+
     @field_validator("database_url")
     @classmethod
     def _normalise_driver(cls, value: SecretStr) -> SecretStr:

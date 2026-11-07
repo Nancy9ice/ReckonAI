@@ -25,7 +25,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 EXPECTED_REGION = "frankfurt"
 EXPECTED_POSTGRES_MAJOR = "16"
-EXPECTED_DATABASE_PLAN = "0.5c-1g"
+EXPECTED_DATABASE_PLAN = "0.1c-256mb"
 
 
 @pytest.fixture(scope="module")
@@ -98,7 +98,7 @@ def test_the_postgres_major_version_is_pinned_as_a_string(
 
 
 def test_the_database_plan_is_a_plan_id(database: dict[str, Any]) -> None:
-    """`Basic-1gb` is a display name and is rejected; `0.5c-1g` is the id."""
+    """`Basic-256mb` is a display name and is rejected; `0.1c-256mb` is the id."""
     assert database["plan"] == EXPECTED_DATABASE_PLAN
 
 

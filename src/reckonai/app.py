@@ -23,7 +23,7 @@ from reckonai.logging import configure_logging, event
 # This component's share of the connection budget. The cap it is drawn against
 # is `reckonai.db.USABLE_CONNECTIONS`; see that module and the phase's
 # requirements.md D6.
-WEB_POOL_SIZE = 10
+WEB_POOL_SIZE = 5
 WEB_MAX_OVERFLOW = 5
 
 logger = logging.getLogger("reckonai.web")
@@ -46,6 +46,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             version=__version__,
             pool_size=WEB_POOL_SIZE,
             max_overflow=WEB_MAX_OVERFLOW,
+            # Render supplies this; locally and in CI there is no external URL,
+            # and "none" is logged rather than the field being dropped, so the
+            # line's shape does not change between environments and stays
+            # parseable by the same expression.
+            url=settings.render_external_url or "none",
         )
     )
 

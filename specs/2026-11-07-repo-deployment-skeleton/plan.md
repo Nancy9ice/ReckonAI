@@ -272,8 +272,8 @@ phase-1/repo-deployment-skeleton` shows a successful conclusion.
      `uv run python -m reckonai.worker`. No pre-deploy command — the web
      service owns migrations, and two components racing to migrate is the
      problem D7 avoids.
-   - A **database**: `plan: 0.5c-1g` (Basic-1gb — a **plan id**, never the
-     display name `Basic-1gb`, which fails the apply),
+   - A **database**: `plan: 0.1c-256mb` (Basic-256mb — a **plan id**, never the
+     display name `Basic-256mb`, which fails the apply),
      `postgresMajorVersion: "16"` set explicitly because Render otherwise
      provisions the latest and the choice is irreversible, and
      `ipAllowList: []` for internal-only access per `requirements.md` D13.

@@ -734,7 +734,7 @@ reviewable. Three components, applied against `main`:
 |---|---|---|
 | Web service, FastAPI | `reckonai-api` | Starter, Frankfurt |
 | Worker, queue consumer | `reckonai-worker` | Starter, Frankfurt |
-| Managed PostgreSQL 16 | `reckonai-db` | Basic-1gb (`0.5c-1g`), Frankfurt |
+| Managed PostgreSQL 16 | `reckonai-db` | Basic-256mb (`0.1c-256mb`), Frankfurt |
 
 The job queue is tables inside that same database, not a fourth service. That
 co-location is deliberate: it lets a dedupe marker and the financial write it

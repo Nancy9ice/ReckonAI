@@ -56,10 +56,15 @@ of the facts §11 left open were answered by the account holder on 2026-11-07:
 
   **The cap being flat does not make the tiers equivalent.** Each Postgres
   backend costs a few MB of RAM, so a 256MB instance that is *permitted* 100
-  connections will feel D6's peak of roughly 21 far more than a 1GB one will.
-  The connection limit is not the constraint to choose a tier on; available
-  memory is. Record the tier actually chosen in `notes.md` (`plan.md` Group 0
-  step 2) so a later connection or latency problem can be read against it.
+  connections will feel a large pool far more than a 1GB one will. The
+  connection limit is not the constraint to choose a tier on; available memory
+  is.
+
+  **Resolved 2026-11-07 in favour of cost**, after Render priced Basic-1gb at
+  $23.50 a month against roughly $6 for Basic-256mb. The credits have to cover
+  the whole project, so 256MB it is — and because memory is now the binding
+  constraint rather than connections, D6's allocation was trimmed to a peak of
+  16 rather than left at the 21 a roomier instance would have carried.
 - **Render Cron Jobs are available on the plan.** §11 left this as the one
   genuinely open item and named the fallback: a scheduled trigger inside the
   worker loop. The fallback is not needed. **Phase 8 declares a real Render Cron
@@ -230,18 +235,26 @@ outset rather than retrofitted.
 `db.py` exposes an engine factory whose pool parameters are required, and each
 entrypoint passes its own.
 
-**Revised 2026-11-07, against a confirmed cap of 100 connections** (§2):
+**Revised twice on 2026-11-07** — once upward against a confirmed cap of 100
+connections, then back down when the database landed on Basic-256mb (§2):
 
 | Component | Pool | Overflow | Peak |
 |---|---|---|---|
-| Web service | 10 | 5 | 15 |
-| Worker | 3 | 2 | 5 |
+| Web service | 5 | 5 | 10 |
+| Worker | 2 | 2 | 4 |
 | Cron Job invocation | `NullPool` | — | 1 per invocation |
 
-Peak around 21 with a couple of Cron Jobs overlapping, against an effective 90
-once Render's 10 reserved connections are taken out (§2). The remaining headroom
-is deliberate rather than timid: a `psql` session during a demo, a pre-deploy
+Peak 16 with a couple of Cron Jobs overlapping, against an effective 90 once
+Render's 10 reserved connections are taken out (§2). The remaining headroom is
+deliberate rather than timid: a `psql` session during a demo, a pre-deploy
 migration, and Phase 9's concurrent ingestion all draw on the same cap.
+
+**The binding constraint is the instance's memory, not the cap.** 100
+connections is what Basic-256mb *permits*; it is not what 256MB comfortably
+runs. `pool_size` is the number of connections a component will *hold* once
+they have been used, idle ones included, and idle Postgres backends still cost
+memory. So the smaller pool is not timidity about the cap — it is declining to
+park fifteen idle backends on a 256MB instance.
 
 **The honest consequence of a 100-connection cap is that exhaustion is no longer
 the live risk, and this decision's justification changes with it.** SQLAlchemy's
@@ -306,15 +319,20 @@ Frankfurt is roughly 100-150ms against Oregon's 250-300ms, on every interaction
 in a live demo. The cost is latency on the backend's calls out to PayPal's
 US-hosted sandbox, which is background work nobody watches.
 
-**D12 — The Postgres is Basic-1gb, plan id `0.5c-1g`, major version `"16"`.**
+**D12 — The Postgres is Basic-256mb, plan id `0.1c-256mb`, major version
+`"16"`.**
 Both the version and the region are irreversible, so they are written into
 `render.yaml` explicitly rather than defaulted — Render otherwise provisions the
 *latest* major version, which would break the version parity with compose and CI
 that D3 exists to protect, and could not then be corrected without destroying the
-database. The tier is a memory decision, not a connection one: all Basic tiers
-cap at 100 either way, and 256MB is cramped once D6's peak of 21 backends is
-open. It moves the topology from about $20 a month to about $33, which
-[[tech-stack]] §11 was amended to record.
+database.
+
+The tier is a cost decision taken against a memory one. All Basic tiers cap at
+100 connections, so the choice was purely RAM against price: Render quoted
+Basic-1gb at $23.50 a month against roughly $6 here. 1gb was chosen first for
+headroom and then reversed, because the credits have to cover the whole project
+and the mitigation for less RAM is cheap — trim the pools, which D6 did. The
+topology stays at about $20 a month, as [[tech-stack]] §11 originally said.
 
 **D13 — `ipAllowList` is an empty list: internal Render traffic only.** The
 deciding factor is that the repository becomes public at hackathon submission,

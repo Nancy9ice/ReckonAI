@@ -1,0 +1,92 @@
+# Continuous integration.
+#
+# specs/tech-stack.md names pytest but no CI provider, so this fills a gap
+# rather than implementing a locked decision
+# (specs/2026-11-07-repo-deployment-skeleton requirements.md D2).
+#
+# The migration step runs here and not only on Render because "an empty
+# migration applies cleanly" should be checked on every future change, not
+# remembered by whoever deploys.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  # A new push supersedes an in-flight run on the same ref.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: ruff, migrations, pytest
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        # Pinned to 16 to match compose.yaml and the Render instance's
+        # postgresMajorVersion. The suite asserts the server's major version,
+        # so a drift here fails loudly rather than testing the wrong thing.
+        image: postgres:16
+        env:
+          POSTGRES_USER: reckonai
+          POSTGRES_PASSWORD: devpassword
+          POSTGRES_DB: reckonai
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U reckonai -d reckonai"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    env:
+      # Local-only throwaway credentials for the service container above; not a
+      # secret. Real credentials never enter this repository
+      # (specs/tech-stack.md section 10).
+      DATABASE_URL: postgres://reckonai:devpassword@localhost:5432/reckonai
+      ENVIRONMENT: ci
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Installed from the official script rather than a third-party action, so
+      # the toolchain here is the same uv the project uses everywhere else.
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Cache the uv cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+          restore-keys: uv-${{ runner.os }}-
+
+      - name: Install Python
+        # The version comes from .python-version, so it cannot drift from local.
+        run: uv python install
+
+      - name: Install dependencies
+        # --frozen, never a plain sync: a plain one would re-resolve and the
+        # lockfile would quietly stop being authoritative, which is the drift
+        # specs/tech-stack.md section 3 exists to prevent.
+        run: uv sync --frozen
+
+      - name: Assert the lockfile is unchanged
+        # A dependency added to pyproject.toml without re-locking fails here
+        # instead of silently installing.
+        run: git diff --exit-code uv.lock
+
+      - name: Lint
+        run: uv run ruff check
+
+      - name: Apply migrations
+        run: uv run alembic upgrade head
+
+      - name: Test
+        run: uv run pytest

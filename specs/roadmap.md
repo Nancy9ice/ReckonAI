@@ -91,7 +91,25 @@ reworking after Phase 7.
 
 ---
 
-## Phase 0b — Multiparty field discovery · 0.5 day
+## Phase 0b — Multiparty field discovery · 0.5 day · **COMPLETE 2026-11-07**
+
+> **Delivered.** `specs/paypal-fields.md` is regenerated from multiparty
+> evidence only: **69 canonical rows, 56 `present`, 6 `present-but-unreliable`,
+> 7 `absent`, none `unanswered`.** Artifacts, fixtures and findings are in
+> `specs/2026-11-07-multiparty-field-discovery/`.
+>
+> All six questions below are answered, plus two that were added. The headline
+> results: the platform fee is taken **at capture in both disbursement modes**;
+> **releasing held funds changes nothing on the capture**, so every `DELAYED`
+> transaction must be joined to its disbursement record; commission is clawed
+> back **automatically** on both refunds and lost disputes; and a conversion
+> applies to the **net, not the gross**.
+>
+> **One probe is still outstanding** and does not block anything: whether the
+> platform fee reaches the platform through a readable API. Both reporting
+> endpoints answer `200`; the snapshot simply predated the captures. See
+> `specs/2026-11-07-multiparty-field-discovery/notes.md` §5.1, which also warns
+> how to read that result when it arrives.
 
 **Added 2026-11-07.** Phase 0 answered its question against a first-party
 integration. The product targets PayPal's multiparty model

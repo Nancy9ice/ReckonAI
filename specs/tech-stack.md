@@ -565,6 +565,29 @@ account's current Render tier, and whether a free-tier Postgres instance has an
 expiry window that lands inside the project's life. Both are cheap to check on
 day one and expensive to discover on day six.
 
+**Checked 2026-11-07, and both would have failed.** The account's workspace plan
+is **Hobby**, Render's free tier, where:
+
+- **Background Workers do not exist.** Free instance types cover web services
+  only; workers start at Starter, around $7 a month.
+- **Free Postgres expires 30 days after creation**, with a 14-day grace period
+  before the data is deleted, and has no backups.
+- A free web service also **spins down after 15 minutes idle** and takes about
+  a minute to wake — which would both break an in-process worker and open a
+  judged demo on a blank page.
+
+**Resolved by $50 of Render credits**, which cover roughly two and a half months
+of the topology above: a Starter web service, a Starter worker and a Basic
+Postgres, about $20 a month. **So §11 stands as written** — separate web
+service and worker, a Postgres that does not expire, and the three-component
+connection budget above is the real one.
+
+**Provisioning is declared in `render.yaml`**, a Render Blueprint committed to
+the repository, rather than configured by hand in the dashboard. The topology
+is then version-controlled and reviewable, and matches the reproducibility rule
+in §3. Whether Render Cron Jobs are available on the plan is the one item still
+to confirm; if not, a scheduled trigger inside the worker loop replaces them.
+
 ---
 
 ## 12. Rejected alternatives

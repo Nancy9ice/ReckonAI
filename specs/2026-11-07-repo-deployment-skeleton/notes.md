@@ -176,6 +176,67 @@ figures in §11 are now wrong as written and were amended with this phase.
 
 ---
 
+## Pre-merge gate · PASSING 2026-11-07
+
+Every check in `validation.md` §3 run against this branch. CI run `42412103402`
+on `phase-1/repo-deployment-skeleton` is green in 33 seconds.
+
+| Check | Result |
+|---|---|
+| C1 frozen install from an empty `.venv` | PASS |
+| C2 lockfile authoritative | PASS |
+| C3 package imports, src layout wired | PASS |
+| C4 no `requirements.txt` tracked | PASS |
+| C5 baseline migration applies | PASS |
+| C6 baseline reverses and re-applies | PASS |
+| C7 suite green locally (45 tests) | PASS |
+| C8 suite green in CI (45 tests) | PASS |
+| C9 worker starts, logs, stays up, exits 0 on `SIGTERM` | PASS |
+| C10/C11 pools explicit, budget fits | PASS |
+| C12 no pictographs, both directions | PASS |
+| C13 no private key in a tracked file | PASS |
+| C14 money path absent, not untested | PASS |
+
+**What remains is `validation.md` §4**, which cannot run before the merge by
+`requirements.md` D4: applying the Blueprint, the deployed `/health` and
+`/health/ready` responses, the baseline migration against Render's database, and
+the worker's log stream. Phase 1 is **not complete** until those pass.
+
+### Findings from Groups 1-7
+
+Recorded because each was a wrong assumption caught cheaply, which is the same
+value Phases 0 and 0b produced.
+
+1. **SQLAlchemy resolves to 2.1 on an open constraint**, while
+   [[tech-stack]] §1 locks 2.0. Pinned `<2.1`; taking 2.1 would have been a
+   silent amendment to a locked decision.
+2. **Render's `DATABASE_URL` uses a scheme SQLAlchemy cannot use as given.**
+   `postgres://` is rejected outright by SQLAlchemy 2.0 and `postgresql://`
+   selects psycopg2, which this project does not install. `config.py` normalises
+   both to `postgresql+psycopg://`. Left alone this would have surfaced as an
+   opaque failure during the Group 8 deploy.
+3. **`plan.md` had Groups 2 and 3 in the wrong order** - Group 2's readiness
+   route reads through the engine that Group 3 was to create. `db.py` moved into
+   Group 2.
+4. **Alembic keeps `alembic_version` across `downgrade base`** and empties it.
+   `plan.md` Group 4 had said to assert an empty schema, which would have failed
+   against correct behaviour.
+5. **Alembic's revision template emits pre-3.10 typing**, which the project's
+   `UP` lint rules flag, so every future migration would have arrived
+   lint-failing. The template was rewritten and proved with a throwaway
+   revision.
+6. **The no-emoji gate flagged its own fixtures.** Four-digit `\uXXXX` escapes
+   became literal pictographs on the way to disk, and the violation was
+   invisible until the file was tracked, because the gate walks `git ls-files`.
+   Fixtures are now built with `chr()`. This is the gate working, and it is the
+   argument for CI over local runs.
+7. **A readiness-gated health check cannot converge.** Verified by stopping
+   Postgres: `/health` stayed `200` while `/health/ready` returned `503`. Had
+   Render's `healthCheckPath` pointed at readiness, connection pressure would
+   restart a service whose restart adds no connections.
+
+---
+
 ## Group 0 — gate status · CLOSED 2026-11-07
 
 All five prerequisites hold. `plan.md` Group 1 may start.

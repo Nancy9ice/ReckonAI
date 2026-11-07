@@ -4,7 +4,7 @@
     "task_group": "3",
     "probe": "scripts/probe_paypal.py",
     "generated_by": "scripts/derive_observed.py",
-    "generated_at": "2026-11-07T09:02:32.290519+00:00",
+    "generated_at": "2026-11-07T09:31:14.727413+00:00",
     "api_base": "https://api-m.sandbox.paypal.com",
     "fixtures": "fixtures.md",
     "redacted": true,
@@ -1173,6 +1173,269 @@
           "absent_on_labels": [],
           "json_type": "string",
           "sample_value": "2026-11-07T08:58:33Z"
+        }
+      }
+    },
+    "disbursements": {
+      "request_paths": [
+        "/v1/payments/referenced-payouts-items/9T5nyXMWZuuKwX6Xe_NpPu0Z-Ap-i_yLtufYV7lO2H9muq_-o2MODJpGi0ZYJbg="
+      ],
+      "http_statuses": [
+        200
+      ],
+      "samples": 1,
+      "sample_labels": [
+        "disbursements:list"
+      ],
+      "raw": "raw/disbursements.json",
+      "fields": {
+        "$": {
+          "populated_on": 1,
+          "present_empty_on": 0,
+          "of": 1,
+          "occurrences": 1,
+          "populated_on_labels": [
+            "disbursements:list"
+          ],
+          "empty_on_labels": [],
+          "absent_on_labels": [],
+          "json_type": "object",
+          "sample_value": null
+        },
+        "$.item_id": {
+          "populated_on": 1,
+          "present_empty_on": 0,
+          "of": 1,
+          "occurrences": 1,
+          "populated_on_labels": [
+            "disbursements:list"
+          ],
+          "empty_on_labels": [],
+          "absent_on_labels": [],
+          "json_type": "string",
+          "sample_value": "<redacted:id>"
+        },
+        "$.last_response_code": {
+          "populated_on": 1,
+          "present_empty_on": 0,
+          "of": 1,
+          "occurrences": 1,
+          "populated_on_labels": [
+            "disbursements:list"
+          ],
+          "empty_on_labels": [],
+          "absent_on_labels": [],
+          "json_type": "int",
+          "sample_value": 0
+        },
+        "$.links": {
+          "populated_on": 1,
+          "present_empty_on": 0,
+          "of": 1,
+          "occurrences": 1,
+          "populated_on_labels": [
+            "disbursements:list"
+          ],
+          "empty_on_labels": [],
+          "absent_on_labels": [],
+          "json_type": "array",
+          "sample_value": null
+        },
+        "$.links[]": {
+          "populated_on": 1,
+          "present_empty_on": 0,
+          "of": 1,
+          "occurrences": 1,
+          "populated_on_labels": [
+            "disbursements:list"
+          ],
+          "empty_on_labels": [],
+          "absent_on_labels": [],
+          "json_type": "object",
+          "sample_value": null
+        },
+        "$.links[].encType": {
+          "populated_on": 1,
+          "present_empty_on": 0,
+          "of": 1,
+          "occurrences": 1,
+          "populated_on_labels": [
+            "disbursements:list"
+          ],
+          "empty_on_labels": [],
+          "absent_on_labels": [],
+          "json_type": "string",
+          "sample_value": "application/json"
+        },
+        "$.links[].href": {
+          "populated_on": 1,
+          "present_empty_on": 0,
+          "of": 1,
+          "occurrences": 1,
+          "populated_on_labels": [
+            "disbursements:list"
+          ],
+          "empty_on_labels": [],
+          "absent_on_labels": [],
+          "json_type": "string",
+          "sample_value": "https://api.sandbox.paypal.com/v1/payments/referenced-payouts-items/9T5nyXMWZuuKwX6Xe_NpPu0Z-Ap-i_yLtufYV7lO2H9muq_-o2MODJpGi0ZYJbg="
+        },
+        "$.links[].method": {
+          "populated_on": 1,
+          "present_empty_on": 0,
+          "of": 1,
+          "occurrences": 1,
+          "populated_on_labels": [
+            "disbursements:list"
+          ],
+          "empty_on_labels": [],
+          "absent_on_labels": [],
+          "json_type": "string",
+          "sample_value": "GET"
+        },
+        "$.links[].rel": {
+          "populated_on": 1,
+          "present_empty_on": 0,
+          "of": 1,
+          "occurrences": 1,
+          "populated_on_labels": [
+            "disbursements:list"
+          ],
+          "empty_on_labels": [],
+          "absent_on_labels": [],
+          "json_type": "string",
+          "sample_value": "self"
+        },
+        "$.payout_amount": {
+          "populated_on": 1,
+          "present_empty_on": 0,
+          "of": 1,
+          "occurrences": 1,
+          "populated_on_labels": [
+            "disbursements:list"
+          ],
+          "empty_on_labels": [],
+          "absent_on_labels": [],
+          "json_type": "object",
+          "sample_value": null,
+          "money_envelope": "currency_code"
+        },
+        "$.payout_amount.currency_code": {
+          "populated_on": 1,
+          "present_empty_on": 0,
+          "of": 1,
+          "occurrences": 1,
+          "populated_on_labels": [
+            "disbursements:list"
+          ],
+          "empty_on_labels": [],
+          "absent_on_labels": [],
+          "json_type": "string",
+          "sample_value": "USD"
+        },
+        "$.payout_amount.value": {
+          "populated_on": 1,
+          "present_empty_on": 0,
+          "of": 1,
+          "occurrences": 1,
+          "populated_on_labels": [
+            "disbursements:list"
+          ],
+          "empty_on_labels": [],
+          "absent_on_labels": [],
+          "json_type": "string",
+          "sample_value": "86.02"
+        },
+        "$.payout_destination": {
+          "populated_on": 1,
+          "present_empty_on": 0,
+          "of": 1,
+          "occurrences": 1,
+          "populated_on_labels": [
+            "disbursements:list"
+          ],
+          "empty_on_labels": [],
+          "absent_on_labels": [],
+          "json_type": "string",
+          "sample_value": "C24NAWELTTHXJ"
+        },
+        "$.payout_transaction_id": {
+          "populated_on": 1,
+          "present_empty_on": 0,
+          "of": 1,
+          "occurrences": 1,
+          "populated_on_labels": [
+            "disbursements:list"
+          ],
+          "empty_on_labels": [],
+          "absent_on_labels": [],
+          "json_type": "string",
+          "sample_value": "<redacted:id>"
+        },
+        "$.processing_state": {
+          "populated_on": 1,
+          "present_empty_on": 0,
+          "of": 1,
+          "occurrences": 1,
+          "populated_on_labels": [
+            "disbursements:list"
+          ],
+          "empty_on_labels": [],
+          "absent_on_labels": [],
+          "json_type": "object",
+          "sample_value": null
+        },
+        "$.processing_state.status": {
+          "populated_on": 1,
+          "present_empty_on": 0,
+          "of": 1,
+          "occurrences": 1,
+          "populated_on_labels": [
+            "disbursements:list"
+          ],
+          "empty_on_labels": [],
+          "absent_on_labels": [],
+          "json_type": "string",
+          "sample_value": "SUCCESS"
+        },
+        "$.reference_id": {
+          "populated_on": 1,
+          "present_empty_on": 0,
+          "of": 1,
+          "occurrences": 1,
+          "populated_on_labels": [
+            "disbursements:list"
+          ],
+          "empty_on_labels": [],
+          "absent_on_labels": [],
+          "json_type": "string",
+          "sample_value": "<redacted:id>"
+        },
+        "$.reference_type": {
+          "populated_on": 1,
+          "present_empty_on": 0,
+          "of": 1,
+          "occurrences": 1,
+          "populated_on_labels": [
+            "disbursements:list"
+          ],
+          "empty_on_labels": [],
+          "absent_on_labels": [],
+          "json_type": "string",
+          "sample_value": "TRANSACTION_ID"
+        },
+        "$.time_updated": {
+          "populated_on": 1,
+          "present_empty_on": 0,
+          "of": 1,
+          "occurrences": 1,
+          "populated_on_labels": [
+            "disbursements:list"
+          ],
+          "empty_on_labels": [],
+          "absent_on_labels": [],
+          "json_type": "int",
+          "sample_value": 0
         }
       }
     },

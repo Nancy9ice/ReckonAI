@@ -39,11 +39,11 @@ A cell marked **gated** is not a raw lookup. A few canonical fields are only mea
 
 | Verdict | Canonical fields |
 |---|---|
-| `present` | 44 |
+| `present` | 51 |
 | `present-but-unreliable` | 12 |
-| `absent` | 5 |
-| `unanswered` | 4 |
-| **total** | **65** |
+| `absent` | 6 |
+| `unanswered` | 0 |
+| **total** | **69** |
 
 No blank verdicts, and no canonical field without a row (`validation.md` C4, C5).
 
@@ -138,14 +138,20 @@ Read from `GET /v2/payments/refunds/{id}`, except where the order view carries m
 
 ## 6. Disbursement
 
-**Every row here is `unanswered`.** Under `DELAYED`, release is `POST /v1/payments/referenced-payouts-items`, and both referenced-payouts endpoints answer `403` for this app - they need partner approval and a BN code. Under `INSTANT` the seller is paid at capture and there is no separate disbursement record to read.
+Under `DELAYED`, release is `POST /v1/payments/referenced-payouts-items` and produces the record below. Under `INSTANT` the seller is paid at capture and no such record exists.
+
+**Two things make this the most dangerous entity in the model.** First, releasing funds changes **nothing** on the capture - status, mode and breakdown are identical before and after - so the capture can never tell you whether a seller was paid, and every `DELAYED` transaction must be joined to its disbursement. Second, PayPal publishes **no contract at all** for referenced payouts, in neither the SDK nor its OpenAPI documents, so every field here is known from observation alone and a change would arrive without warning.
 
 | Canonical field | PayPal path | Declared | Observed | Verdict | Condition / note |
 |---|---|---|---|---|---|
-| `disbursement_id` | none | **not declared** | no path | `unanswered` | **the referenced-payouts endpoints answer 403 for this app, so no release could be made or read.** Under `DELAYED`, release is `POST /v1/payments/referenced-payouts-items`. |
-| `status` | none | **not declared** | no path | `unanswered` | **no release could be made; referenced payouts answer 403.** |
-| `released_at` | none | **not declared** | no path | `unanswered` | **no release could be made; referenced payouts answer 403.** PayPal auto-releases held funds after 28 days with no instruction, so absence of a release does not mean funds are stuck. |
-| `capture_linkage` | none | **not declared** | no path | `unanswered` | **no release could be made; referenced payouts answer 403.** Declared as `reference_id` on the payout item, with `reference_type: TRANSACTION_ID`. |
+| `disbursement_id` | `disbursements` `$.item_id` | **not declared** | 1/1 | `present` | Returned by `POST /v1/payments/referenced-payouts-items`. The release is idempotent per reference: a second attempt answers `422 PAYOUT_ALREADY_COMPLETED_FOR_REFERENCE`, so a retry cannot double-pay. |
+| `status` | `disbursements` `$.processing_state.status` | **not declared** | 1/1 | `present` | `SUCCESS` observed. **This is the only evidence a seller was paid** - the capture does not change when funds are released. |
+| `amount` | `disbursements` `$.payout_amount.value` | **not declared** | 1/1 | `present` | `86.02` - the capture's **net**. Fees were already taken at capture, which confirms the fee timing from a second direction. |
+| `currency` | `disbursements` `$.payout_amount.currency_code` | **not declared** | 1/1 | `present` | - |
+| `recipient` | `disbursements` `$.payout_destination` | **not declared** | 1/1 | `present` | The seller's merchant id, so the disbursement attributes to a seller without a join. |
+| `capture_linkage` | `disbursements` `$.reference_id` | **not declared** | 1/1 | `present` | **Provider-supplied, and the capture id itself** - with `reference_type: TRANSACTION_ID`. Unlike refund-to-capture, this linkage needs no parsing. |
+| `payout_transaction_id` | `disbursements` `$.payout_transaction_id` | **not declared** | 1/1 | `present` | The money movement itself, distinct from the release instruction. |
+| `released_at` | none | **not declared** | no path | `absent` | **No usable timestamp on the release record.** `time_updated` is the integer `0`, not a date. So when a seller was paid is not readable from the disbursement, and must come from the reporting ledger or be recorded at ingestion. PayPal also auto-releases after 28 days with no instruction, so absence of a release does not mean funds are stuck. |
 
 ## 7. FX conversion
 
@@ -176,7 +182,7 @@ Every `absent` and every `present-but-unreliable` field carries one of four deci
 | `no_action` | The conditional availability is correct for the domain. Nothing is derived and nothing is lost; the entry says why the condition is right. |
 | `connector_metadata` | Not a PayPal field at all, and in this table only because `requirements.md` section 7 lists it. |
 
-17 fields need a decision: 2 `connector_metadata`, 1 `derive`, 9 `limitation`, 5 `no_action`.
+18 fields need a decision: 2 `connector_metadata`, 1 `derive`, 10 `limitation`, 5 `no_action`.
 
 | Field | Verdict | Decision | `is_derived` | Detail |
 |---|---|---|---|---|
@@ -188,6 +194,7 @@ Every `absent` and every `present-but-unreliable` field carries one of four deci
 | `platform_fee.currency` | `present-but-unreliable` | `limitation` | no | **A capture loses its entire `seller_receivable_breakdown` while pending, and a dispute puts it there.** The disputed fixture reverted from `COMPLETED` to `PENDING` and the breakdown vanished - fee, net and platform fee with it. The SDK model documents this ("not available for transactions that are in pending state") but it had never been observed. So these values must be captured at ingestion and retained; re-reading later can return nothing, and the absence is not evidence that no fee was charged. |
 | `platform_fee.payee` | `present-but-unreliable` | `limitation` | no | **A capture loses its entire `seller_receivable_breakdown` while pending, and a dispute puts it there.** The disputed fixture reverted from `COMPLETED` to `PENDING` and the breakdown vanished - fee, net and platform fee with it. The SDK model documents this ("not available for transactions that are in pending state") but it had never been observed. So these values must be captured at ingestion and retained; re-reading later can return nothing, and the absence is not evidence that no fee was charged. |
 | `platform_fee.settlement_reference` | `absent` | `limitation` | no | Partner fees arrive as a single next-day consolidated bank payment, and no per-transaction settlement reference is exposed. The per-transaction fee comparison is in scope; reconciling the aggregate is settlement-account work, deferred by `mission.md` section 7. A `platform_fee` row should still be able to carry a settlement reference later. |
+| `disbursement.released_at` | `absent` | `limitation` | no | The release record carries no usable timestamp - `time_updated` is the integer `0`. So the moment a seller was paid cannot be read back from the disbursement. Record the time at ingestion, or take it from the reporting ledger once that catches up, and never present an ingestion time as a provider timestamp. |
 | `fx_conversion.source_amount` | `present-but-unreliable` | `no_action` | no | Populated only where a conversion occurred, which is right: a same-currency transaction has no conversion and must carry no `fx_conversion` row at all. Nothing is derived and nothing is lost. |
 | `fx_conversion.source_currency` | `present-but-unreliable` | `no_action` | no | Populated only where a conversion occurred, which is right: a same-currency transaction has no conversion and must carry no `fx_conversion` row at all. Nothing is derived and nothing is lost. |
 | `fx_conversion.target_amount` | `present-but-unreliable` | `no_action` | no | Populated only where a conversion occurred, which is right: a same-currency transaction has no conversion and must carry no `fx_conversion` row at all. Nothing is derived and nothing is lost. |
@@ -204,14 +211,10 @@ Every `absent` and every `present-but-unreliable` field carries one of four deci
 
 ## Pending answers
 
-The 4 `unanswered` fields get an interim handling and the fixture that would settle them - **not** a decision. A decision implies the evidence is in; for these it is not, and recording a limitation would overstate what we know.
+The 0 `unanswered` fields get an interim handling and the fixture that would settle them - **not** a decision. A decision implies the evidence is in; for these it is not, and recording a limitation would overstate what we know.
 
 | Field | What would answer it | Interim handling |
 |---|---|---|
-| `disbursement.disbursement_id` | partner approval and a BN code, which the referenced-payouts endpoints require; they answer 403 for this app | Model the disbursement states from the declared contract but mark nothing required, and do not infer that a seller was paid from a capture's `COMPLETED` status. Under `DELAYED` that status is reached while funds are still held. |
-| `disbursement.status` | partner approval and a BN code, which the referenced-payouts endpoints require; they answer 403 for this app | Model the disbursement states from the declared contract but mark nothing required, and do not infer that a seller was paid from a capture's `COMPLETED` status. Under `DELAYED` that status is reached while funds are still held. |
-| `disbursement.released_at` | partner approval and a BN code, which the referenced-payouts endpoints require; they answer 403 for this app | Model the disbursement states from the declared contract but mark nothing required, and do not infer that a seller was paid from a capture's `COMPLETED` status. Under `DELAYED` that status is reached while funds are still held. |
-| `disbursement.capture_linkage` | partner approval and a BN code, which the referenced-payouts endpoints require; they answer 403 for this app | Model the disbursement states from the declared contract but mark nothing required, and do not infer that a seller was paid from a capture's `COMPLETED` status. Under `DELAYED` that status is reached while funds are still held. |
 
 Both fixtures need the same thing: **a wallet-funded capture**, which requires a sandbox personal account to approve an order in a browser. That one fixture would answer eleven rows, and would also let a cross-currency refund and payout settle the two unobserved conversion sites. It is the highest-value follow-up this phase produces and it is cheap.
 
@@ -221,7 +224,7 @@ Both fixtures need the same thing: **a wallet-funded capture**, which requires a
 
 The highest-value output of this phase (`plan.md` Group 5 step 4): fields PayPal's contract promises that our sandbox never delivered. Each gets a line on what its absence means for the canonical model.
 
-**Scoped deliberately.** The contract declares 1148 paths and we observed 356, so the raw difference runs to hundreds - most of it alternative payment methods and optional reporting blocks nested under objects that never appeared at all. Listing those would bury the findings. This section lists the fields whose **parent object was observed**: PayPal returned the enclosing structure and left this member out. That is the set where an absence is informative. The full difference is derivable from the two artifacts at any time.
+**Scoped deliberately.** The contract declares 1148 paths and we observed 375, so the raw difference runs to hundreds - most of it alternative payment methods and optional reporting blocks nested under objects that never appeared at all. Listing those would bury the findings. This section lists the fields whose **parent object was observed**: PayPal returned the enclosing structure and left this member out. That is the set where an absence is informative. The full difference is derivable from the two artifacts at any time.
 
 Fields whose parent object was observed: **126**, from a raw difference of 717.
 
@@ -389,6 +392,25 @@ The reverse gap, and the direction nobody plans for: fields PayPal returned that
 
 | Record type | Observed path | Observed | What it means |
 |---|---|---|---|
+| `disbursements` | `$` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `disbursements` | `$.item_id` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `disbursements` | `$.last_response_code` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `disbursements` | `$.links` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `disbursements` | `$.links[]` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `disbursements` | `$.links[].encType` | 1/1 | Undeclared in both source grades, yet PayPal sends it on every HATEOAS link these APIs return. |
+| `disbursements` | `$.links[].href` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `disbursements` | `$.links[].method` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `disbursements` | `$.links[].rel` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `disbursements` | `$.payout_amount` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `disbursements` | `$.payout_amount.currency_code` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `disbursements` | `$.payout_amount.value` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `disbursements` | `$.payout_destination` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `disbursements` | `$.payout_transaction_id` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `disbursements` | `$.processing_state` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `disbursements` | `$.processing_state.status` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `disbursements` | `$.reference_id` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `disbursements` | `$.reference_type` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
+| `disbursements` | `$.time_updated` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
 | `disputes` | `$.items[].disputed_transactions` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
 | `disputes` | `$.items[].disputed_transactions[]` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |
 | `disputes` | `$.items[].disputed_transactions[].buyer` | 1/1 | Declared optional and not populated for our fixtures. The canonical model must not depend on it without a fixture that exercises it. |

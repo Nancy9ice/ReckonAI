@@ -177,23 +177,77 @@ returns the dispute, `dispute_state=UNDER_PAYPAL_REVIEW` returns it, and
 `dispute_state=OPEN_INQUIRIES` does not — despite the lifecycle stage being
 `INQUIRY`.
 
+### 4.9 The release works, and it was never blocked
+
+An earlier reading of a `403` concluded that referenced payouts were
+unavailable to this app. **That was wrong, and the mistake is instructive**: the
+`403` came from the *list* form, `GET /v1/payments/referenced-payouts-items
+?reference_id=`, and was generalised to the whole API without testing the
+others. Probing each shape separately:
+
+| Call | Result |
+|---|---|
+| `GET item/{id}` | `404 INVALID_RESOURCE_ID` — permitted |
+| `POST item` | `400 VALIDATION_ERROR` on a malformed id — permitted |
+| `GET list ?reference_id=` | `403 FORBIDDEN` — the only blocked shape |
+
+This is the same error the phase warns about, committed by the phase itself: a
+`403` is evidence about one endpoint and one caller, never about an API.
+
+The release succeeded. `POST /v1/payments/referenced-payouts-items` with
+`reference_id` set to the capture id returned a record with `item_id`,
+`processing_state.status: SUCCESS`, `payout_transaction_id`, `payout_amount`
+and `payout_destination`. **It is idempotent per reference** — a second attempt
+answers `422 PAYOUT_ALREADY_COMPLETED_FOR_REFERENCE`, so a retry cannot
+double-pay.
+
+`payout_amount` is `86.02`, the capture's **net**. Fees were already taken at
+capture, confirming the fee-timing answer of §4.2 from a second direction.
+
+### 4.10 Releasing funds changes nothing on the capture
+
+Read immediately before and after the release:
+
+| | before | after |
+|---|---|---|
+| `status` | `COMPLETED` | `COMPLETED` |
+| `disbursement_mode` | `DELAYED` | `DELAYED` |
+| breakdown | gross, net, `paypal_fee`, `platform_fees` | identical |
+
+**So a capture cannot tell you whether the seller was paid.** Phase 11 must
+join every `DELAYED` transaction to its disbursement record, or it will report
+unpaid sellers as paid and vice versa — silently, because nothing in the
+capture looks wrong.
+
+### 4.11 The disbursement record has no contract, and no timestamp
+
+**PayPal publishes nothing for referenced payouts** — no SDK model, no path in
+any of its OpenAPI documents. Confirmed by searching both. So the single record
+that proves a seller was paid is known from observation alone, and a change to
+it would arrive with no warning. `declared.json` records this as a third source
+grade, `undeclared_by_paypal`, rather than leaving the declared column
+mysteriously empty.
+
+It also carries **no usable timestamp**: `time_updated` is the integer `0`, and
+`last_response_code` likewise. When a seller was paid must therefore be
+recorded at ingestion or taken from the reporting ledger, and an ingestion time
+must never be presented as a provider timestamp.
+
 ## 5. Still unanswered
 
 | Question | Why |
 |---|---|
-| What a `DELAYED` release produces | Both referenced-payouts endpoints answer `403`; they need partner approval and a BN code |
-| Whether the platform fee is charged differently on release | Same blocker |
 | What a dispute does to the platform fee | The dispute is open; no resolution yet |
 | Whether the consolidated daily fee settlement is visible via any API | Only a monthly SFTP partner report is documented |
+| What the `403` list endpoint would give | Not needed: reading an item by id works, and the capture links to it |
 
-The four `disbursement` rows are `unanswered` for the first of these, with the
-reason recorded on each.
+No canonical field is left `unanswered`.
 
 ## 6. Status
 
-`specs/paypal-fields.md` is regenerated from multiparty evidence only: 65
-canonical rows, 44 `present`, 12 `present-but-unreliable`, 5 `absent`, 4
-`unanswered`. `scripts/check_fields_doc.py --all` passes, including C2
+`specs/paypal-fields.md` is regenerated from multiparty evidence only: 69
+canonical rows, 51 `present`, 12 `present-but-unreliable`, 6 `absent` and
+no `unanswered`. `scripts/check_fields_doc.py --all` passes, including C2
 reproducibility against a fresh probe.
 
 Phase 0's directory is left as the record of that phase, accurate for the

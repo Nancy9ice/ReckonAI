@@ -57,6 +57,23 @@ from typing import Any
 
 SDK_GRADE = "sdk_generated_contract"
 OPENAPI_GRADE = "openapi_specification"
+# A third grade, added 2026-11-07. Some record types have no published contract
+# at all - neither a generated SDK model nor an OpenAPI document. Recording
+# that explicitly is the point: an empty declared column must mean "PayPal
+# publishes nothing", never "we did not look".
+UNDECLARED_GRADE = "undeclared_by_paypal"
+
+# Record types observed with no contract anywhere, and why that matters.
+UNDECLARED_ROOTS: dict[str, tuple[str, str]] = {
+    "disbursements": (
+        "/v1/payments/referenced-payouts-items/{id}",
+        "Referenced payouts appear in neither the generated SDK nor PayPal's "
+        "published OpenAPI documents. Under DELAYED disbursement this record is "
+        "the only evidence that a seller was actually paid, so the single most "
+        "load-bearing record in the model has no declared contract and its "
+        "shape is known from observation alone.",
+    ),
+}
 
 # Record type -> (root model class, the endpoint the probe actually called).
 # The root model is the controller's own deserializer for that endpoint; see
@@ -563,6 +580,15 @@ def main() -> int:
             "fields": dict(sorted(fields.items())),
         }
 
+    for record_type, (endpoint, reason) in UNDECLARED_ROOTS.items():
+        record_types[record_type] = {
+            "source_grade": UNDECLARED_GRADE,
+            "endpoint": endpoint,
+            "why_undeclared": reason,
+            "field_count": 0,
+            "fields": {},
+        }
+
     sdk_commit = git_fact(args.sdk, "rev-parse", "HEAD")
     sdk_tag = git_fact(args.sdk, "describe", "--tags")
     openapi_commit = git_fact(args.openapi, "rev-parse", "HEAD")
@@ -632,6 +658,12 @@ def main() -> int:
                     "3.0.3 document at a pinned commit. Authoritative and "
                     "pinnable, but not the contract the tested SDK generates, "
                     "and it may lag the deployed API. See notes.md, Group 4."
+                ),
+                UNDECLARED_GRADE: (
+                    "No published contract exists - not in the generated SDK, "
+                    "not in PayPal's OpenAPI documents. The shape is known from "
+                    "observation alone, so there is nothing to diff the observed "
+                    "column against and no warning if PayPal changes it."
                 ),
             },
         },

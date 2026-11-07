@@ -3,7 +3,7 @@
     "phase": "0",
     "task_group": "4",
     "generated_by": "scripts/extract_declared.py",
-    "generated_at": "2026-11-07T09:02:32.245907+00:00",
+    "generated_at": "2026-11-07T09:32:35.718048+00:00",
     "max_depth": 8,
     "keyed_on": "API property names - the value side of each SDK model's _names map, and the property key in the OpenAPI documents. Never the Python attribute name, which the generator renames (plan.md group 4 step 4).",
     "path_syntax": "Same as observed.json: $ is the record root and [] is an array element, so the two artifacts diff mechanically.",
@@ -37,6 +37,7 @@
     "source_grade_by_record_type": {
       "balances": "sdk_generated_contract",
       "captures": "sdk_generated_contract",
+      "disbursements": "undeclared_by_paypal",
       "disputes": "openapi_specification",
       "orders": "sdk_generated_contract",
       "payouts": "openapi_specification",
@@ -45,7 +46,8 @@
     },
     "source_grades": {
       "sdk_generated_contract": "Machine-extracted from the APIMatic-generated SDK at a pinned tag. The contract the SDK would enforce.",
-      "openapi_specification": "Machine-extracted from PayPal's own published OpenAPI 3.0.3 document at a pinned commit. Authoritative and pinnable, but not the contract the tested SDK generates, and it may lag the deployed API. See notes.md, Group 4."
+      "openapi_specification": "Machine-extracted from PayPal's own published OpenAPI 3.0.3 document at a pinned commit. Authoritative and pinnable, but not the contract the tested SDK generates, and it may lag the deployed API. See notes.md, Group 4.",
+      "undeclared_by_paypal": "No published contract exists - not in the generated SDK, not in PayPal's OpenAPI documents. The shape is known from observation alone, so there is nothing to diff the observed column against and no warning if PayPal changes it."
     }
   },
   "record_types": {
@@ -1228,6 +1230,13 @@
           "python_attr": "update_time"
         }
       }
+    },
+    "disbursements": {
+      "source_grade": "undeclared_by_paypal",
+      "endpoint": "/v1/payments/referenced-payouts-items/{id}",
+      "why_undeclared": "Referenced payouts appear in neither the generated SDK nor PayPal's published OpenAPI documents. Under DELAYED disbursement this record is the only evidence that a seller was actually paid, so the single most load-bearing record in the model has no declared contract and its shape is known from observation alone.",
+      "field_count": 0,
+      "fields": {}
     },
     "disputes": {
       "source_grade": "openapi_specification",

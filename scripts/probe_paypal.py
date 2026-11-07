@@ -67,6 +67,11 @@ RECORD_TYPES: dict[str, tuple[str, bool, str]] = {
     "disputes": ("/v1/customer/disputes", False, "dispute list, lifecycle states"),
     "dispute": ("/v1/customer/disputes/{id}", True, "single dispute detail"),
     "payouts": ("/v1/payments/payouts/{id}", True, "batch header and items"),
+    "disbursements": (
+        "/v1/payments/referenced-payouts-items/{id}",
+        True,
+        "a DELAYED release: the record proving a seller was actually paid",
+    ),
     "transactions": (
         "/v1/reporting/transactions",
         False,

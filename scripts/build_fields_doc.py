@@ -248,21 +248,39 @@ CANONICAL: list[dict[str, Any]] = [
      "have not established. Filtering by `disputed_transaction_id` does accept "
      "the capture id."},
     # ----------------------------------------------------------- disbursement
-    {"entity": "disbursement", "field": "disbursement_id", "sources": [],
-     "unobserved_reason": "the referenced-payouts endpoints answer 403 for this "
-     "app, so no release could be made or read",
-     "note": "Under `DELAYED`, release is "
-     "`POST /v1/payments/referenced-payouts-items`."},
-    {"entity": "disbursement", "field": "status", "sources": [],
-     "unobserved_reason": "no release could be made; referenced payouts answer 403"},
+    {"entity": "disbursement", "field": "disbursement_id",
+     "sources": [("disbursements", "$.item_id")],
+     "note": "Returned by `POST /v1/payments/referenced-payouts-items`. The "
+     "release is idempotent per reference: a second attempt answers "
+     "`422 PAYOUT_ALREADY_COMPLETED_FOR_REFERENCE`, so a retry cannot double-pay."},
+    {"entity": "disbursement", "field": "status",
+     "sources": [("disbursements", "$.processing_state.status")],
+     "note": "`SUCCESS` observed. **This is the only evidence a seller was "
+     "paid** - the capture does not change when funds are released."},
+    {"entity": "disbursement", "field": "amount",
+     "sources": [("disbursements", "$.payout_amount.value")],
+     "note": "`86.02` - the capture's **net**. Fees were already taken at "
+     "capture, which confirms the fee timing from a second direction."},
+    {"entity": "disbursement", "field": "currency",
+     "sources": [("disbursements", "$.payout_amount.currency_code")]},
+    {"entity": "disbursement", "field": "recipient",
+     "sources": [("disbursements", "$.payout_destination")],
+     "note": "The seller's merchant id, so the disbursement attributes to a "
+     "seller without a join."},
+    {"entity": "disbursement", "field": "capture_linkage",
+     "sources": [("disbursements", "$.reference_id")],
+     "note": "**Provider-supplied, and the capture id itself** - with "
+     "`reference_type: TRANSACTION_ID`. Unlike refund-to-capture, this linkage "
+     "needs no parsing."},
+    {"entity": "disbursement", "field": "payout_transaction_id",
+     "sources": [("disbursements", "$.payout_transaction_id")],
+     "note": "The money movement itself, distinct from the release instruction."},
     {"entity": "disbursement", "field": "released_at", "sources": [],
-     "unobserved_reason": "no release could be made; referenced payouts answer 403",
-     "note": "PayPal auto-releases held funds after 28 days with no instruction, "
-     "so absence of a release does not mean funds are stuck."},
-    {"entity": "disbursement", "field": "capture_linkage", "sources": [],
-     "unobserved_reason": "no release could be made; referenced payouts answer 403",
-     "note": "Declared as `reference_id` on the payout item, with "
-     "`reference_type: TRANSACTION_ID`."},
+     "note": "**No usable timestamp on the release record.** `time_updated` is "
+     "the integer `0`, not a date. So when a seller was paid is not readable "
+     "from the disbursement, and must come from the reporting ledger or be "
+     "recorded at ingestion. PayPal also auto-releases after 28 days with no "
+     "instruction, so absence of a release does not mean funds are stuck."},
     # --------------------------------------------------------- fx_conversion
     {"entity": "fx_conversion", "field": "source_amount",
      "sources": [("captures", "$.seller_receivable_breakdown.net_amount.value",
@@ -364,16 +382,15 @@ for _field in ("amount", "currency", "payee"):
     DECISIONS[("platform_fee", _field)] = _BREAKDOWN_GONE_WHILE_PENDING
 
 PENDING: dict[tuple[str, str], dict[str, str]] = {}
-_DISBURSEMENT_PENDING = {
-    "answered_by": "partner approval and a BN code, which the referenced-payouts "
-    "endpoints require; they answer 403 for this app",
-    "interim": "Model the disbursement states from the declared contract but "
-    "mark nothing required, and do not infer that a seller was paid from a "
-    "capture's `COMPLETED` status. Under `DELAYED` that status is reached while "
-    "funds are still held.",
+
+DECISIONS[("disbursement", "released_at")] = {
+    "kind": "limitation", "is_derived": False,
+    "text": "The release record carries no usable timestamp - `time_updated` is "
+    "the integer `0`. So the moment a seller was paid cannot be read back from "
+    "the disbursement. Record the time at ingestion, or take it from the "
+    "reporting ledger once that catches up, and never present an ingestion time "
+    "as a provider timestamp.",
 }
-for _field in ("disbursement_id", "status", "released_at", "capture_linkage"):
-    PENDING[("disbursement", _field)] = _DISBURSEMENT_PENDING
 
 GAP_MEANING: dict[str, str] = {
     "$.seller_receivable_breakdown.paypal_fee": "The capture fee. See the capture.paypal_fee row - the one place our evidence is weaker than the format suggests.",
@@ -751,11 +768,18 @@ def build(
         "took. Under multiparty this is independent evidence against the "
         "marketplace's rules - in the merchant-of-record model the commission was "
         "merely whatever the marketplace kept, with nothing to check it against.",
-        "disbursement": "**Every row here is `unanswered`.** Under `DELAYED`, "
-        "release is `POST /v1/payments/referenced-payouts-items`, and both "
-        "referenced-payouts endpoints answer `403` for this app - they need "
-        "partner approval and a BN code. Under `INSTANT` the seller is paid at "
-        "capture and there is no separate disbursement record to read.",
+        "disbursement": "Under `DELAYED`, release is "
+        "`POST /v1/payments/referenced-payouts-items` and produces the record "
+        "below. Under `INSTANT` the seller is paid at capture and no such "
+        "record exists.\n\n"
+        "**Two things make this the most dangerous entity in the model.** "
+        "First, releasing funds changes **nothing** on the capture - status, "
+        "mode and breakdown are identical before and after - so the capture can "
+        "never tell you whether a seller was paid, and every `DELAYED` "
+        "transaction must be joined to its disbursement. Second, PayPal "
+        "publishes **no contract at all** for referenced payouts, in neither the "
+        "SDK nor its OpenAPI documents, so every field here is known from "
+        "observation alone and a change would arrive without warning.",
         "fx_conversion": "**The reason this phase ran first.** `mission.md` P3 "
         "forbids substituting an estimate for a provider record, so the model "
         "may only carry what PayPal actually supplies. Rows are gated on a real "

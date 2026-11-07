@@ -55,6 +55,19 @@ amount/currency, rate, timestamp, fee, provider, and a reference to the source
 payload. Per [[mission]] P3, a rate we computed ourselves is tagged as derived
 and is never written into a field that implies PayPal supplied it.
 
+PayPal supplies the rate and both amounts, but **no conversion fee and no
+conversion timestamp**. Three rules follow:
+
+- `fee` stays `NULL`. **Absent, never zero** — the §9.6 rule against defaulting
+  money applies with particular force, and `paypal_fee` is not a conversion fee.
+- `timestamp` records whether its value came from the provider or was derived.
+- **Compare against PayPal's reported settlement amount; never recompute it.**
+  PayPal rounds the settlement and leaves the rate unrounded, so `gross * rate`
+  disagrees with the reported figure on every converted transaction. Store rates
+  at full precision; `NUMERIC(20, 10)` above is the floor, not a target.
+
+Field-level evidence: `specs/paypal-fields.md`.
+
 ---
 
 ## 3. Backend
@@ -83,8 +96,9 @@ request validation, the canonical model, and the LLM's structured output
 contracts.
 
 **SQLAlchemy 2.0 with typed `Mapped[]` declarative models, plus Alembic.**
-Reconciliation is relational-join work across orders, items, ledger entries and
-payouts; raw SQL for that volume of joins becomes unmaintainable inside a week.
+Reconciliation is relational-join work across orders, items, ledger entries,
+platform fees and disbursements; raw SQL for that volume of joins becomes
+unmaintainable inside a week.
 Alembic is non-optional because the canonical schema will change during Phase 2
 and 3 and the database must stay reproducible.
 
@@ -277,7 +291,22 @@ core work is already finished — it is not permitted to displace any phase in
 
 Sandbox throughout. PayPal REST APIs plus webhooks, using the PayPal MCP
 toolkit where its exposed capabilities genuinely fit: transaction retrieval,
-dispute retrieval, refunds, payout batch and item data, merchant insights.
+dispute retrieval, refunds, disbursement data, merchant insights.
+
+**The integration model is multiparty** (amended 2026-11-06). We read as the
+**platform** in a PayPal *connected integration*, not as the merchant, and both
+disbursement modes are supported. That changes access as much as content:
+
+| Need | Mechanism |
+|---|---|
+| Read a seller's transactions | `PayPal-Auth-Assertion`: an unsigned JWT (`alg: none`), platform client id as `iss`, the seller's `payer_id` or `email` in the payload |
+| Platform fee on an order | `purchase_units[].payment_instruction.platform_fees`; seller onboarded with `PARTNER_FEE` |
+| Delayed disbursement | `payment_instruction.disbursement_mode: DELAYED`; seller onboarded with `DELAY_FUNDS_DISBURSEMENT` |
+| Release held funds | `POST /v1/payments/referenced-payouts-items`, `reference_id` = capture id, `reference_type: TRANSACTION_ID`. **We never call this** ([[mission]] P6) |
+
+Capabilities are granted **per seller at onboarding**, not as account-level
+switches, so the onboarding path determines which of these exist at all.
+[[roadmap]] Phase 0b verifies them; until it does, none may be designed around.
 
 Two standing rules, both from [[mission]] P3:
 
@@ -286,6 +315,24 @@ Two standing rules, both from [[mission]] P3:
    specifically to find out before the canonical model is built.
 2. **Where PayPal does not supply a figure, record the gap as a limitation.**
    Never infer, estimate or fill it.
+
+Five client rules, all of them non-obvious enough to be worth locking here:
+
+- **Field availability depends on the read path, not only the record type.**
+  Read refunds through the order, which carries fields the refund endpoint
+  omits.
+- **The reporting APIs are eventually consistent and share one snapshot.** The
+  v2 resource endpoints are authoritative for recent activity. Reporting is
+  still read — it carries conversion timestamps and per-event fees the resource
+  endpoints do not — and joins on `transaction_id` and `paypal_reference_id`.
+- **A `403` is never recorded as an absent field.** It describes our
+  permissions, and a scope added after a token is minted does not appear in that
+  token.
+- **A `5xx` is not reliably transient**, so blind retry is wrong.
+- **Retain every raw payload.** The contract is neither a complete nor a stable
+  description of what arrives.
+
+Each rests on evidence in `specs/paypal-fields.md` and the Phase 0 notes.
 
 Webhook handling: verify signatures where supported, dedupe on event id via the
 unique constraint in §4, process idempotently, and backfill on a schedule to
@@ -342,6 +389,12 @@ Two consequences worth stating, because they are easy to get wrong:
   Phase 7 uses the SDK for the three covered record types is an open decision,
   recorded in `specs/2026-11-05-paypal-field-discovery/notes.md`, and it carries
   a submission dimension as well as an architectural one.
+
+  The decision stays open, but it now carries a condition: **a generated client
+  must retain the raw payload and diff it against the model.** PayPal returns
+  fields its own published contracts do not declare, and a generator discards
+  what it does not know, silently. Without the diff, the integration inherits
+  whatever the generator left out.
 
 **Setup is a prerequisite for Phase 0**, not an optional extra — see
 [[roadmap]] Phase 0. The APIMatic resource page covers installation; the
@@ -409,6 +462,14 @@ numbers across currencies and report confident nonsense. The validation gate
 therefore treats an amount without a resolved currency as a **hard failure**,
 not a warning.
 
+**One provider can spell money more than one way, and PayPal does.** It uses
+both `{currency_code, value}` and `{currency, value}` across its APIs, and also
+has a plain currency string named `currency`. So a provider adapter matches
+every declared envelope spelling and **must not assume a key named `currency` is
+a money envelope** — treating a bare string as one produces an amount with no
+value, silently. Where a source states amounts as integer minor units, that is
+scaled on the way in, never parsed as a decimal string.
+
 Transforms are a closed, named set — decimal parsing, currency extraction,
 timestamp with timezone, enum translation. Not arbitrary expressions: a mapping
 is configuration and must not become an execution surface.
@@ -435,7 +496,16 @@ half-activates.
 
 Field mapping alone is insufficient — the connector must also know how records
 relate across endpoints: item to order, item to seller, payment to order, ledger
-entry to transaction, payout item to obligation.
+entry to transaction, disbursement to obligation.
+
+Two relationships are load-bearing enough to name here:
+
+- **Seller attribution is the `payee` on the PayPal purchase unit.** Under the
+  multiparty model (§8) that identifies the seller, not the marketplace, and it
+  is the join the whole reconciliation rests on.
+- **Refund to capture is derived, not provider-supplied.** PayPal exposes no
+  capture identifier on a refund; the link exists only inside a URL. A derived
+  linkage is recorded as derived and falls under the confidence rules below.
 
 Where a direct identifier exists, it is declared and validated as above. Where
 one does not, a relationship may be **inferred** from other evidence, and then:

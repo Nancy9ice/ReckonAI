@@ -9,14 +9,20 @@ The specs in `specs/` are the constitution. Read them before implementing:
 - `specs/tech-stack.md` — locked technology decisions
 - `specs/roadmap.md` — phase order and exit criteria
 
-**Read `specs/multiparty-direction.md` first — it supersedes parts of the
-others.** Decided 2026-11-06: the product targets PayPal Complete Payments
-Platform for Marketplaces, with both `INSTANT` and `DELAYED` disbursement. The
-three documents above still describe the marketplace as merchant of record,
-collecting centrally and disbursing through the Payouts API. **That model is no
-longer the target.** Where they disagree with `multiparty-direction.md`, it
-wins. The amendments it lists in §6 are not yet applied, so do not treat
-`readme.md` §6.1, §3.2 or §3.3 as current.
+Also read, and in this order:
+
+- `specs/multiparty-direction.md` — the integration model everything assumes.
+  The product targets PayPal Complete Payments Platform for Marketplaces, with
+  both `INSTANT` and `DELAYED` disbursement. The amendments it called for were
+  applied on 2026-11-07, so the three documents above are current; §8 lists what
+  is **still unverified** and may not be designed around.
+- `specs/paypal-fields.md` — what PayPal actually returns, per field, with the
+  evidence. The root specs state rules and point here; they do not repeat it.
+
+**Phase 0 is complete.** Its observed evidence was captured against a
+**first-party** integration, so it does not cover platform fees, disbursement
+modes or any seller-level view. Phase 0b closes that gap and runs before
+Phase 3.
 
 ## Hard rules
 

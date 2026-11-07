@@ -3,8 +3,16 @@
 
 **Document status:** Updated product direction and MVP scope  
 **Target audience:** Marketplace finance and financial operations teams  
-**Primary payment integration:** PayPal  
+**Primary payment integration:** PayPal Complete Payments Platform for Marketplaces and Platforms (multiparty), both `INSTANT` and `DELAYED` disbursement  
 **Product name:** Not yet decided
+
+> **Amended 2026-11-06.** This document previously described the marketplace as
+> merchant of record — collecting payments centrally and paying sellers through
+> the PayPal Payouts API. The target is PayPal's **multiparty** model, where
+> PayPal distributes funds to sellers and remits the marketplace's platform fee
+> to the marketplace. The decision and its full consequences are in
+> `specs/multiparty-direction.md`. Phase 0 established this before any
+> implementation existed.
 
 ---
 
@@ -12,9 +20,15 @@
 
 Marketplaces operate complex financial systems involving customers, independent sellers, payment service providers and internal financial records.
 
-A single customer payment can create multiple financial obligations: seller entitlements, marketplace commissions, payment processing fees, refunds, adjustments and eventual seller payouts.
+A single customer payment can create multiple financial obligations: seller entitlements, marketplace commissions, payment processing fees, refunds, adjustments and the eventual disbursement of funds to sellers.
 
-Although payment providers process transactions and marketplaces maintain their own financial records, ensuring that these records agree across the complete transaction lifecycle remains challenging.
+Under PayPal's multiparty model the provider performs the money movement. It routes each seller's share to that seller — **immediately at capture under `INSTANT` disbursement, or after holding it until the marketplace releases it under `DELAYED`** — **remits the marketplace's platform fee to the marketplace**, and executes refunds. Under `DELAYED`, PayPal releases held funds automatically after 28 days if the marketplace has not instructed their release.
+
+The platform fee is declared per transaction but **does not arrive per transaction**. PayPal settles partner fees once daily, consolidating a day's fees into a single next-day payment into a bank account rather than a PayPal balance. So the marketplace's commission revenue must be reconciled **many-to-one against a lagging aggregate** — a reconciliation shape that does not exist anywhere else in this product. The seller sees the same fee on their side as "Partner commissions", deducted from their funds.
+
+**One thing here is unverified and must not be designed around:** whether the platform fee is taken at capture or at release under `DELAYED` disbursement. PayPal documents neither. Whether the consolidated settlement is visible through any API is also open. Both are tracked in `specs/multiparty-direction.md` §8.
+
+The marketplace nonetheless maintains its own orders, commission rules and seller ledger. Ensuring those records agree with PayPal's across the complete transaction lifecycle is the problem this product solves. **Our application never moves money**; it verifies the financial outcomes PayPal produced against what the marketplace's own rules say should have happened.
 
 The proposed solution is an AI-powered financial reconciliation agent designed specifically for marketplace operators.
 
@@ -24,7 +38,7 @@ The system will support:
 
 - **Historical reconciliation:** Reconcile previously recorded transactions over a selected period.
 - **Event-driven reconciliation:** Process and update reconciliation records as new financial events occur.
-- **Multi-currency reconciliation:** Account for original transaction currencies, settlement currencies, exchange rates, conversion fees and seller payout currencies.
+- **Multi-currency reconciliation:** Account for original transaction currencies, settlement currencies, exchange rates and seller disbursement currencies. PayPal supplies a real conversion rate and settlement amount but **no per-transaction conversion fee** — see §8.1 and `specs/paypal-fields.md`.
 - **AI-powered exception investigation:** Investigate discrepancies, identify probable root causes, present supporting evidence and recommend resolutions.
 
 The product will prioritise financial accuracy, traceability and human oversight. Monetary calculations and reconciliation decisions will be grounded in deterministic rules and verifiable records, while AI will handle investigation, explanation and recommendations.
@@ -35,13 +49,20 @@ The MVP will focus on one marketplace connector, PayPal integration and a unifie
 
 ## Marketplace operators
 
-The primary target customers are online marketplaces that facilitate transactions between buyers and independent sellers.
+The primary target customers are online marketplaces that facilitate transactions between buyers and independent sellers, **running on PayPal Complete Payments Platform for Marketplaces and Platforms** — PayPal's multiparty model.
 
 Examples include:
 - Multi-vendor e-commerce marketplaces.
 - Digital product marketplaces.
 - Service marketplaces.
 - Platforms connecting independent merchants with customers.
+
+**The integration model is part of the target definition, not an implementation detail.** It determines who holds the money and therefore what reconciliation means. A marketplace that is its own merchant of record — collecting centrally and paying sellers through the Payouts API — has a different problem and is explicitly **not** the target. Both PayPal disbursement modes are in scope:
+
+| Mode | Who holds the seller's funds | What the marketplace owes the seller |
+|---|---|---|
+| `INSTANT` | nobody; PayPal pays the seller at capture | nothing — already settled |
+| `DELAYED` | PayPal, until release or the 28-day automatic disbursement | the release itself |
 
 The initial users within these organisations are:
 
@@ -95,24 +116,36 @@ Connecting them and establishing their relationships can require significant man
 
 ## 3.2 Seller entitlement discrepancies
 
-A marketplace must calculate what each seller is owed based on its commercial rules.
+A marketplace must calculate what each seller is owed based on its commercial rules, and then check that PayPal's record of what the seller actually received agrees with it.
 
 A discrepancy can occur when:
-- Commission calculations are incorrect.
+- Commission calculations are incorrect, or the platform fee PayPal actually took differs from the commission the marketplace's rules specify.
 - Seller balances are not updated after refunds.
 - Ledger entries are duplicated.
-- Transactions are assigned to the wrong seller.
-- Payout amounts do not agree with recorded seller obligations.
+- Transactions are assigned to the wrong seller — the `payee` on the PayPal purchase unit does not match the marketplace's own seller attribution.
+- The amount PayPal credited the seller does not agree with the recorded seller obligation.
+- **Under `DELAYED` disbursement only:** funds were captured and held but never released, or released for the wrong amount.
+
+The comparison target differs by disbursement mode, and both are in scope:
+
+| Mode | Expected entitlement is compared against |
+|---|---|
+| `INSTANT` | the seller-level transaction PayPal created at capture |
+| `DELAYED` | the captured transaction first, then the release instruction and the actual disbursement |
+
+Entitlement calculation itself is mode-independent — it always runs against the captured transaction. `DELAYED` adds a second stage rather than replacing the first.
 
 ## 3.3 Refunds and disputes
 
 Refunds and disputes can change the financial position of a transaction after the original payment has been recorded.
 
 For example:
-- A partial refund may require a corresponding reduction in seller entitlement.
+- A partial refund may require a corresponding reduction in seller entitlement. It may also return part of the platform fee, but **not automatically** — the partner specifies the amount through `payment_instruction.platform_fees` on the refund call, and PayPal must enable that feature. A refund that does not reverse commission is therefore not necessarily an error.
 - A dispute may introduce a financial exposure.
-- A chargeback may occur after a seller has already received a payout.
+- A chargeback may occur after a seller has already been disbursed — at capture under `INSTANT`, or after release under `DELAYED`. **PayPal places the liability on the seller:** "in connected integration, merchants assume financial liability and handle disputes and chargebacks." Whether the *marketplace* is exposed is governed by its own seller terms, not by PayPal, so the engine must treat any marketplace-side recovery obligation as rule-driven, never as something inferred from a PayPal record.
 - A refund may be processed by PayPal but not reflected in the marketplace ledger.
+
+PayPal calls this model a **connected integration**. What happens to the platform fee when a dispute or chargeback occurs is **not documented** and is a Phase 0b question.
 
 The system must understand these events in the context of the original transaction and the marketplace's financial rules.
 
@@ -146,8 +179,9 @@ The reconciliation process must account for:
 - Settlement amount and currency.
 - Exchange rates.
 - Conversion timestamps.
-- Conversion fees.
-- Seller payout amount and currency.
+- Seller disbursement amount and currency.
+
+**PayPal does not supply two of these.** It returns a real conversion rate and settlement amount on a cross-currency capture, but **no per-transaction conversion fee**, and **no conversion timestamp** except on reporting records that lag behind the transaction. Each gap becomes a labelled derivation or a stated limitation, never an estimate. Field-level detail: `specs/paypal-fields.md`.
 
 The system must preserve original amounts and currencies rather than replacing them with converted values.
 
@@ -260,9 +294,11 @@ The reconciliation engine must preserve the original amount and currency alongsi
 It must account for available exchange-rate and conversion-fee evidence when validating transactions.
 
 For the MVP, the primary demonstration will cover:
-- Same-currency payment and payout.
+- Same-currency payment and disbursement.
 - Customer payment in one currency with settlement in another.
-- Exchange-rate and conversion-fee differences.
+- Exchange-rate differences.
+
+**Not conversion-fee differences.** PayPal declares no per-transaction conversion fee, so there is no provider figure to contradict a marketplace's claimed conversion fee. The demonstration injects an incorrect **rate or settlement value**, which is backed by real provider evidence. See §13 Scenario 3.
 
 Different seller and marketplace functional currencies will be supported by the data model, with a focused demonstration if implementation time permits.
 
@@ -299,7 +335,14 @@ The example excludes processor fees, taxes and other adjustments.
 
 The engine should independently calculate expected entitlements using the marketplace's commission rules.
 
-It should then compare the results with recorded seller ledger entries.
+It should then compare the results against **two independent sets of records**:
+
+1. The marketplace's own seller ledger entries.
+2. **PayPal's records of what actually happened** — the seller-level transaction for each `payee`, the platform fee PayPal actually took, and under `DELAYED` the release instruction and the resulting disbursement.
+
+The second is what makes the check independent. Under the multiparty model PayPal splits the USD 160 itself: USD 90 to Seller A, USD 54 to Seller B, and the USD 16 commission to the marketplace as a platform fee. So the marketplace's commission is no longer merely whatever it kept — there is a provider figure to compare it against, and a disagreement is evidence rather than an internal inconsistency.
+
+**Note the settlement shape.** Those USD 16 do not arrive with the transaction; they arrive inside the next day's consolidated partner fee settlement, together with every other fee from the same day. Validating commission therefore happens at two levels: per transaction against the platform fee PayPal recorded, and in aggregate against what actually settled.
 
 ## 6.2 Partial refund handling
 
@@ -322,7 +365,9 @@ The final financial position is:
 
 This allocation is illustrative. Actual calculations must follow the marketplace's configured refund and commission policies.
 
-If Seller A has already received the original payout, the system should identify the resulting recovery or offset obligation rather than silently changing the historical payout record.
+If Seller A has already received the funds — at capture under `INSTANT`, or after release under `DELAYED` — the system should identify the resulting recovery or offset obligation rather than silently changing the historical disbursement record.
+
+Two multiparty specifics apply. The reduction in marketplace commission is **not automatic**: returning part of the platform fee requires the partner to instruct it on the refund call, so a refund that leaves the commission untouched may be correct rather than wrong, and the engine must check the marketplace's policy before calling it an exception. And under `DELAYED`, a refund issued while the funds are still held does not create a recovery obligation at all — there is nothing to recover, because the seller was never paid.
 
 ## 6.3 Reconciliation categories
 
@@ -334,10 +379,17 @@ The MVP should identify:
 - Incorrect commission calculations.
 - Incorrect seller entitlements.
 - Refunds not reflected in seller balances.
-- Payout amounts that differ from expected obligations.
 - Disputed transactions with outstanding financial impact.
 - Currency conversion discrepancies.
 - Delayed or incomplete transaction lifecycles.
+
+Plus the categories the multiparty model introduces:
+
+- **Platform fee mismatch** — the fee PayPal actually took differs from the commission the marketplace's rules specify.
+- **Platform fee settlement mismatch** — the daily consolidated settlement does not equal the sum of the fees it should cover. **Deferred past the MVP**: this is settlement-account reconciliation, which `specs/mission.md` §7 excludes, and the partner fee cost detail arrives only as a monthly SFTP report. Listed here so the canonical model leaves room for it.
+- **Seller attribution mismatch** — the `payee` on PayPal's purchase unit does not match the marketplace's own seller for that order.
+- **Disbursement amount mismatch** (`DELAYED`) — the released amount differs from the recorded obligation.
+- **Unreleased held funds** (`DELAYED`) — captured and held beyond the marketplace's expected release window, with the 28-day automatic disbursement approaching.
 
 ## 6.4 Financial lifecycle tracking
 
@@ -348,16 +400,25 @@ Transactions should move through meaningful financial states, including:
 - Partially refunded.
 - Refunded.
 - Disputed.
-- Pending seller payout.
-- Payout initiated.
-- Paid.
 - Failed.
 - Delayed.
 - Unmatched.
 - Under investigation.
 - Resolved.
 
+Plus the disbursement states, which differ by mode:
+
+| State | Applies to |
+|---|---|
+| Disbursed at capture | `INSTANT` |
+| Seller funds held by PayPal | `DELAYED` |
+| Disbursement requested by the marketplace | `DELAYED` |
+| Disbursement completed | `DELAYED` |
+| Disbursement failed or still pending | `DELAYED` |
+
 The system must distinguish incomplete transactions from genuine financial discrepancies.
+
+**Held funds are not an unpaid obligation.** Under `DELAYED`, "seller funds held by PayPal" and "disbursement requested" are the expected intermediate states of a healthy transaction, not a marketplace failure to pay. An engine that classifies them as discrepancies turns every delayed transaction into an exception. PayPal also releases held funds **automatically after 28 days**, so the absence of a marketplace instruction does not mean the funds are stuck.
 
 # 7. Marketplace Connector and Data Acquisition
 
@@ -456,6 +517,9 @@ Currency conversion records should preserve:
 - Conversion fee, where available.
 - Conversion source or provider.
 - Original source record reference.
+- **Whether each value came from the provider or was derived by us.**
+
+The last of these is not optional, because PayPal does not supply every field above. A timestamp may be provider-supplied or derived, and a derived value must be flagged as such and never presented as provider evidence. A conversion record whose fee is absent must stay absent — not zero. The money rules are in `specs/tech-stack.md` §2; the field-level evidence is in `specs/paypal-fields.md`.
 
 The system should use appropriate decimal arithmetic and currency precision rules.
 
@@ -588,6 +652,21 @@ Where the toolkit does not expose sufficient settlement, balance or FX informati
 
 The application must not fabricate missing settlement or conversion information.
 
+## 11.1 What the multiparty model requires
+
+The integration reads as the **platform**, not as the merchant, which changes access as well as content. The endpoints, headers and auth mechanics are locked in `specs/tech-stack.md` §8; their verification status is tracked in `specs/multiparty-direction.md` §8.
+
+Two consequences belong at product level, because they bound what the MVP can do:
+
+- **Capabilities are granted per seller at onboarding**, not as account-level switches, and PayPal's simpler onboarding flow excludes Platform Fee, Delayed Disbursement, Partner Reporting and the Disputes API outright. The onboarding path a marketplace chose therefore determines which parts of this product apply to it.
+- **Several of those capabilities are unconfirmed for our own sandbox**, including the ability to read a seller's transactions at all. If that one does not hold, entitlement validation narrows to what the platform can see of its own fees. That is the largest open risk in the plan.
+
+## 11.2 Reading PayPal is not uniform, and the rules are locked elsewhere
+
+Field availability depends on which endpoint a record is read from, the reporting APIs lag behind the resource endpoints, and PayPal returns fields its own contracts do not declare. None of that is inferable from the API reference, so the resulting client rules are locked as technology decisions in **`specs/tech-stack.md` §8**, and the field-by-field evidence behind them is in **`specs/paypal-fields.md`**.
+
+The consequence for this document is only this: the integration must be built against observed behaviour, not against the contract, and any field the contract promises but PayPal does not deliver is recorded as a limitation rather than assumed.
+
 # 12. Sponsor Technology Strategy
 
 Sponsor tools should contribute meaningfully to the solution rather than being included merely to increase the number of integrations.
@@ -651,9 +730,13 @@ The demonstration should tell a coherent financial investigation story.
 1. Customer pays in EUR.
 2. PayPal records the original transaction.
 3. Settlement occurs in USD.
-4. The marketplace records an expected settlement using an incorrect conversion value or fee.
+4. The marketplace records an expected settlement using an incorrect conversion **value**.
 5. Reconciliation engine compares the recorded conversion evidence against the expected financial position.
 6. AI explains the discrepancy.
+
+**Step 4 previously read "an incorrect conversion value or fee". The fee half has been removed** (amended 2026-11-06). PayPal declares no per-transaction conversion fee anywhere, so there would be no provider figure to contradict a claimed conversion fee, and the agent's only honest answer would be `insufficient_evidence`. The value half is fully supported by real provider evidence — a rate at 15 decimal places and a reported settlement amount.
+
+Two constraints govern this scenario, and either one breaks the demo if ignored: compare against PayPal's **reported** settlement amount rather than recomputing it, and keep the rate at full precision. Both are stated as money rules in `specs/tech-stack.md` §2.
 
 All scenarios should use source records and deliberately introduced inconsistencies, not pre-written explanations that the agent simply repeats.
 
@@ -732,7 +815,7 @@ It should understand:
 - Which commercial rule determines the entitlement.
 - How refunds and disputes affect that obligation.
 - Whether the marketplace ledger reflects the correct financial position.
-- Whether seller payouts agree with recorded obligations.
+- Whether what PayPal actually paid each seller, and the platform fee it took, agree with those obligations.
 - How currency conversion affects the financial outcome.
 - Why a discrepancy occurred and what evidence supports the conclusion.
 

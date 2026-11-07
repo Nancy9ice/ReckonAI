@@ -84,7 +84,14 @@ is clean. `uv run python -c "import reckonai"` exits 0.
 
 ---
 
-## Group 2 — Configuration, logging, and the FastAPI app · commit
+## Group 2 — Configuration, logging, the engine, and the FastAPI app · commit
+
+**Resequenced 2026-11-07, while starting it.** `db.py` moved here from Group 3,
+because Group 2's `/health/ready` reads through the engine and Group 3 cannot
+supply it afterwards. The real dependency order is
+`config.py` → `db.py` → `app.py` → Alembic, so Group 3 is now Alembic alone.
+Each group still stands on its own, which is the property the resequencing
+protects.
 
 1. `src/reckonai/config.py` — a `pydantic-settings` `Settings` model reading
    `DATABASE_URL`, `LOG_LEVEL`, `ENVIRONMENT`. No default for `DATABASE_URL`: a
@@ -114,21 +121,11 @@ is clean. `uv run python -c "import reckonai"` exits 0.
 
 ---
 
-## Group 3 — Database engine, explicit pools, and Alembic · commit
+## Group 3 — Alembic and the baseline migration · commit
 
-1. `src/reckonai/db.py` — an engine factory whose pool parameters are
-   **required arguments**, not defaults:
-   `create_app_engine(url, *, pool_size, max_overflow, pool_timeout, pool_pre_ping)`,
-   plus a separate `create_short_lived_engine(url)` using `NullPool` for a Cron
-   Job invocation. `pool_pre_ping=True` on the pooled engines, because a managed
-   Postgres closes idle connections and a stale pooled connection otherwise
-   surfaces as a failed request rather than a reconnect.
-2. Each entrypoint passes its own allocation, per `requirements.md` D6: web
-   `pool_size=10, max_overflow=5`, worker `pool_size=3, max_overflow=2`. The
-   numbers live next to the entrypoint that claims them, so a future reader can
-   see the budget without reading three files, and each carries a one-line
-   comment naming the 100-connection cap it is drawn against.
-3. `alembic init` into `src/reckonai/migrations`, then edit it down:
+Steps 1 and 2 moved to Group 2 — see the note there.
+
+1. `alembic init` into `src/reckonai/migrations`, then edit it down:
    - `env.py` reads the URL from `Settings`, never from `alembic.ini`. The
      `sqlalchemy.url` key in `alembic.ini` stays empty so a stale value cannot
      point a migration at the wrong database.

@@ -12,10 +12,15 @@ Groups 1–7 run pre-merge. Group 8 runs **after** the merge, per
 
 ---
 
-## Group 0 — Prerequisite gate · no commit
+## Group 0 — Prerequisite gate · no commit · CLOSED 2026-11-07
 
 Not implementation. Five facts to establish before anything is written, because
 each one changes a file in a later group.
+
+**All five hold. Findings and the provisioning decisions are in `notes.md`**;
+`requirements.md` D11–D13 carry the three that needed deciding rather than
+merely recording. The steps below are kept as written, so a later reader can see
+what was asked as well as what came back.
 
 1. **Render workspace access and credits.** Confirm the $50 of credits are
    applied to the workspace and that the plan permits Background Workers.
@@ -171,6 +176,17 @@ is clean. `uv run python -c "import reckonai"` exits 0.
    non-ASCII: typographic punctuation, box-drawing characters and currency
    symbols must pass. Walk `git ls-files` rather than the working tree, so build
    output and `.venv` are out of scope by construction.
+
+   **Two traps, the first found by hitting it on 2026-11-07.** Do not test
+   `unicodedata.category(ch) == "So"`: box-drawing characters are category `So`,
+   and a draft check written that way flagged the six in [[tech-stack]] §4's
+   topology diagram, which §13 permits by name. The usable test is
+   Unicode's `Extended_Pictographic` property, and `unicodedata` does not expose
+   it — so use explicit codepoint ranges rather than adding the `regex`
+   package, which is not in [[tech-stack]] §1 and would need that document
+   amended. Second, this repository's own `specs/` are tracked files and are
+   full of legitimate non-ASCII; the gate must pass over them unchanged, which
+   makes them a useful fixture rather than an exclusion.
 6. Add a pool-allocation assertion: the web and worker engines expose the pool
    sizes Group 3 set, and their sum stays under the cap Group 0 recorded. This
    is what turns "pool sizes set explicitly" from a claim into a check.
@@ -226,8 +242,9 @@ phase-1/repo-deployment-skeleton` shows a successful conclusion.
 
 ## Group 7 — The Render Blueprint · commit
 
-1. `render.yaml` declaring exactly three components
-   ([[tech-stack]] §11), using the plan identifiers Group 0 step 2 recorded:
+1. `render.yaml` declaring exactly three components ([[tech-stack]] §11), with
+   the values Group 0 settled (`notes.md`). **`region: frankfurt` on all
+   three** — per `requirements.md` D11, and irreversible on the database.
    - A **web service**: Python runtime, Starter plan, build
      `pip install uv && uv sync --frozen`, start
      `uv run uvicorn reckonai.app:app --host 0.0.0.0 --port $PORT`,
@@ -237,8 +254,12 @@ phase-1/repo-deployment-skeleton` shows a successful conclusion.
      `uv run python -m reckonai.worker`. No pre-deploy command — the web
      service owns migrations, and two components racing to migrate is the
      problem D7 avoids.
-   - A **database**: the recorded Basic plan identifier,
-     `postgresMajorVersion: "16"`.
+   - A **database**: `plan: 0.5c-1g` (Basic-1gb — a **plan id**, never the
+     display name `Basic-1gb`, which fails the apply),
+     `postgresMajorVersion: "16"` set explicitly because Render otherwise
+     provisions the latest and the choice is irreversible, and
+     `ipAllowList: []` for internal-only access per `requirements.md` D13.
+     Leave `diskSizeGB` unset: it can be increased but never decreased.
 2. `DATABASE_URL` on both services via `fromDatabase`, so the credential is
    never written into a tracked file ([[tech-stack]] §10 and
    `requirements.md` D10). `LOG_LEVEL` and `ENVIRONMENT` as literal values.

@@ -299,6 +299,37 @@ template, and Phase 0's rule that no credential-shaped string reaches a tracked
 file carries forward into this phase's validation unchanged
 ([[tech-stack]] §10).
 
+**D11 — Region is `frankfurt`, for all three components.** Settled in Group 0
+and **not changeable after the database is created**. Chosen on the interactive
+path rather than the batch one: the dashboard is operated from West Africa, so
+Frankfurt is roughly 100-150ms against Oregon's 250-300ms, on every interaction
+in a live demo. The cost is latency on the backend's calls out to PayPal's
+US-hosted sandbox, which is background work nobody watches.
+
+**D12 — The Postgres is Basic-1gb, plan id `0.5c-1g`, major version `"16"`.**
+Both the version and the region are irreversible, so they are written into
+`render.yaml` explicitly rather than defaulted — Render otherwise provisions the
+*latest* major version, which would break the version parity with compose and CI
+that D3 exists to protect, and could not then be corrected without destroying the
+database. The tier is a memory decision, not a connection one: all Basic tiers
+cap at 100 either way, and 256MB is cramped once D6's peak of 21 backends is
+open. It moves the topology from about $20 a month to about $33, which
+[[tech-stack]] §11 was amended to record.
+
+**D13 — `ipAllowList` is an empty list: internal Render traffic only.** The
+deciding factor is that the repository becomes public at hackathon submission,
+and `render.yaml` is committed. An allowlisted CIDR would publish which IP may
+reach a database whose name, user and region are in the same file; credentials
+still gate it, but it is a stale artefact that outlives the project. An empty
+list is safe to publish and **fails closed** — an IP added in the dashboard for
+one debugging session is removed again by the next Blueprint sync. Access to
+deployed data goes through Render's dashboard psql, which authenticates as the
+account holder rather than opening a network path ([[tech-stack]] §10).
+
+Note what this rules out: omitting the field. On a **new** database Render reads
+an absent `ipAllowList` as *allow every IP*, so the secure posture here is
+written down, not inherited.
+
 ## 6. Context a later reader needs
 
 **What the repository already contains.** `specs/` with the five constitution

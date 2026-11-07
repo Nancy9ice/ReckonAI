@@ -1869,3 +1869,195 @@ signed entries, and a per-event fee — and under the multiparty direction it is
 also the most likely place to find platform fee and disbursement events. It was
 treated in Groups 1 to 6 as a secondary, stale source; that was correct at the
 time and is no longer.
+
+---
+
+# Handoff — Group 8, 2026-11-07
+
+**Read this section alone and you have what Phases 3, 7 and 11 need.** Everything
+above is the working record; this is the conclusion.
+
+## The headline: the canonical model needs amendment, and so does the product definition
+
+`plan.md` Group 8 step 2 asks plainly whether the canonical model survives
+contact with the real API. **It does not, on two levels.**
+
+1. **The product was specified for the wrong PayPal integration model.** The
+   specs describe a marketplace as merchant of record — collecting centrally and
+   disbursing to sellers through the Payouts API. The product targets PayPal's
+   multiparty platform, where PayPal splits funds at capture and the marketplace
+   takes a platform fee. The full decision, the two disbursement modes, the
+   five-state disbursement lifecycle and the amendments required to `readme.md`,
+   [[mission]] and [[roadmap]] are in **`specs/multiparty-direction.md`**. Read it
+   before Phase 3.
+2. **The money rules survive untouched.** `float` appears zero times across all
+   373 generated model pages and all 369 model modules; every monetary field is
+   `Money{currency_code, value}` with the value a string. [[tech-stack]] §2 needs
+   no change.
+
+Phase 0 ran first so that (1) would surface before Phases 2 and 3 built on it.
+It surfaced. That is this phase succeeding.
+
+## For Phase 3 — canonical event tables
+
+**Money.** Amounts arrive as strings carrying their own currency. Parse straight
+to `Decimal`, store `NUMERIC`, never let a `float` exist. Unchanged from
+[[tech-stack]] §2.
+
+**One money shape, two provider spellings.** Every API uses
+`{currency_code, value}` except **Payouts v1**, which uses `{currency, value}`.
+A third trap: `balances[].currency` is a bare currency string sitting beside
+money objects that use `currency_code`. The adapter must match both spellings
+and must not assume a key named `currency` is a money envelope.
+
+**`fx_conversion`.** Five of the eight provider-sourced fields are real
+(`source_amount`, `source_currency`, `target_amount`, `target_currency`, `rate`)
+and exist **only where a conversion occurred**. Create a row only when PayPal
+reports an `exchange_rate`, so an empty row can never be mistaken for a
+conversion with missing fields. `timestamp` comes from the reporting ledger's
+`T0200` event or is derived from the capture's `create_time` with `is_derived`
+true — so the table must record which. `fee` has no source at all. The rate
+carries **15 decimal places**; store it at full precision.
+
+**A conversion can be more than one record.** A refund declares
+`seller_payable_breakdown.net_amount_breakdown[]` — an **array** of conversion
+entries, where a capture carries a single `exchange_rate` object. Do not model
+one conversion per record.
+
+**Refunds are not captures with a sign flipped.** A capture carries
+`seller_receivable_breakdown`; a refund carries `seller_payable_breakdown`, with
+`total_refunded_amount` and no `receivable_amount`. There is **no `capture_id`
+field on a refund** — the only link back is `links[rel=up]`, whose href must be
+parsed. Store that linkage as derived, never as a provider-supplied foreign key.
+
+**Payout items.** `time_processed` is populated on **failed** items too, so it
+proves an attempt and not a payment. `transaction_id` and `activity_id` appear
+only on success. `errors` appears only on failure and is **account-dependent** —
+a different sandbox account denied identical requests with it empty. Make all of
+these nullable.
+
+**Lifecycle states.** The five disbursement states in
+`multiparty-direction.md` §4, plus PayPal's own `PENDING` and the
+`disbursement_mode` enum (`INSTANT` / `DELAYED`, declared and unobserved).
+States 2 through 5 are **non-error** states.
+
+**Payer identity may not exist.** A card-funded order carries no `payer` at all,
+and a refund's `payer` block carries the **merchant**, not the buyer. Do not make
+payer identity required, and do not map a refund's `payer` to a buyer.
+
+**Retain every raw payload.** Not a formality. Three fields were observed that
+neither of PayPal's published contracts declares, and two of them stopped being
+returned a day later. The contract is not a complete description of the payload,
+and the payload is not stable.
+
+**The reporting ledger deserves its own tables.** It is the only observed source
+carrying a conversion timestamp, a conversion as discrete signed entries, and a
+per-event fee, and it joins to the v2 resources on `transaction_id` and
+`paypal_reference_id`.
+
+## For Phase 7 — PayPal ingestion
+
+**Decide about the SDK with this evidence in hand.** Three fields were observed
+that neither the generated SDK contract nor PayPal's OpenAPI documents declare —
+`supplementary_data.risk.risk_level_indicator` (`HIGH_RISK`, reconciliation-
+relevant) and `encType` on HATEOAS links. APIMatic drops unknown keys, so an
+SDK-based client would never have seen them and nothing would have errored. If
+the SDK is used, retain raw payloads and diff against the model.
+
+**Read refunds through the order.** `GET /v2/payments/refunds/{id}` omits
+`platform_fees`; the same record inside `GET /v2/checkout/orders/{id}` carries
+it. Field presence is a property of the **read path**, not only of the record
+type.
+
+**`Prefer: return=representation` matters on writes, not reads.** Tested: a
+capture `GET` returns a byte-identical breakdown with and without it. Since
+nothing in this product moves money ([[mission]] P6), it only matters if a write
+is ever added.
+
+**Treat reporting as eventually consistent, with a day-scale horizon.** Both
+`/v1/reporting/*` endpoints share one snapshot; it was ~21 hours stale and then
+caught up. The v2 resource endpoints are authoritative for anything recent.
+Reporting is nonetheless the **only** source for conversion timestamps and
+per-event fees.
+
+**A `403` is never evidence about the API**, only about the app's permissions. A
+scope added after a token is minted does not appear in that token — mint fresh
+to observe a permission change. Tokens last about nine hours.
+
+**A `5xx` is not reliably transient.** A malformed dispute payload drew
+`500 INTERNAL_SERVER_ERROR` repeatably. Do not retry blindly.
+
+**Read `items[].errors`.** It is the only machine-readable account of why a
+disbursement failed. When absent, the honest answer is `insufficient_evidence`.
+
+**Unverified for multiparty.** Whether the platform can read a seller's
+transactions via `PayPal-Auth-Assertion` is **not established** and is the
+highest-risk unknown in the direction change. See
+`multiparty-direction.md` §8.
+
+## For Phase 11 — matching and currency comparison
+
+**Two ways to fail the false-positive gate, both avoidable.** The exit criterion
+"the clean Phase 4 baseline produces zero exceptions" is breached by arithmetic
+unless both are handled.
+
+1. **FX rounding.** PayPal rounds the settlement to the cent and leaves the rate
+   unrounded:
+
+   ```
+   95.50 * 1.089477173902071 = 104.04507010764778050
+   PayPal receivable_amount  = 104.05
+   residue                   =  -0.00492989235221950
+   ```
+
+   **Compare against the reported `receivable_amount`, never a recomputation of
+   gross times rate.** Record the tolerance as an explicit decision.
+2. **Delayed disbursement.** Held funds are the expected intermediate state of a
+   `DELAYED` transaction, not an unmet obligation. Classifying states 2 and 3 as
+   discrepancies makes every such transaction an exception.
+
+**A reported rate may not be the capture-time rate.**
+`payment_instruction.payee_receivable_fx_rate_id` lets a caller pin a previously
+quoted rate. An unexplained rate difference may be that, not an error.
+
+**Payout fees reconcile only on success.** On a `SUCCESS` batch,
+`batch_header.fees` equals the sum of `payout_item_fee`. On a `DENIED` batch the
+two disagree and the figure is **not** what would have been charged — observed
+wrong by a factor of 2.6. Never carry a denied batch's fee forward as the
+expected cost of a retry.
+
+**Dispute matching is unavailable** until a dispute fixture exists.
+**Refund-to-capture matching rests on a derived linkage**; an exception resting
+on it must say so.
+
+**Never substitute a public or quoted FX rate.** The app holds scopes that can
+read exchange-rate *quotes*. A quote is not a conversion record, and using one
+would be the substitution [[mission]] P3 forbids.
+
+## What is still open
+
+| Open item | Blocks | Owner |
+|---|---|---|
+| A sandbox personal/seller account | 12 `unanswered` rows, and all six multiparty questions | User |
+| Whether the sandbox app can enable the Marketplaces capability | `platform_fees`, validation 3 | User |
+| The simulated-data boundary in `multiparty-direction.md` §7 | Phases 4, 5 | User |
+| `capture.paypal_fee` against production | Phase 10 fee handling | Phase 7 |
+| A cross-currency refund and payout | the two unobserved conversion sites | Phase 0b |
+
+One fixture — a **wallet-funded capture** — unblocks twelve of those rows and
+dispute creation, and the same account enables the cross-currency refund and
+payout. It is the highest-value follow-up this phase produces.
+
+## Where the evidence lives
+
+| Artifact | What it is |
+|---|---|
+| `specs/paypal-fields.md` | the field table: 73 canonical rows, 108-entry gap section, decisions, pending answers |
+| `artifacts/observed.json` | what PayPal returned, two probe sessions, machine-derived |
+| `artifacts/declared.json` | what PayPal declares, 1148 paths, pinned to SDK `2.4.0` and an OpenAPI commit |
+| `artifacts/raw/` | the redacted responses behind all of it |
+| `fixtures.md` | the sandbox ids, and the exact commands to re-probe |
+| `specs/multiparty-direction.md` | the direction change and its consequences |
+
+Every number in the table is reproducible from the artifacts, and
+`scripts/check_fields_doc.py --all` proves it.

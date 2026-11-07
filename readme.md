@@ -386,7 +386,7 @@ The MVP should identify:
 Plus the categories the multiparty model introduces:
 
 - **Platform fee mismatch** — the fee PayPal actually took differs from the commission the marketplace's rules specify.
-- **Platform fee settlement mismatch** — the daily consolidated settlement does not equal the sum of the fees it should cover.
+- **Platform fee settlement mismatch** — the daily consolidated settlement does not equal the sum of the fees it should cover. **Deferred past the MVP**: this is settlement-account reconciliation, which `specs/mission.md` §7 excludes, and the partner fee cost detail arrives only as a monthly SFTP report. Listed here so the canonical model leaves room for it.
 - **Seller attribution mismatch** — the `payee` on PayPal's purchase unit does not match the marketplace's own seller for that order.
 - **Disbursement amount mismatch** (`DELAYED`) — the released amount differs from the recorded obligation.
 - **Unreleased held funds** (`DELAYED`) — captured and held beyond the marketplace's expected release window, with the 28-day automatic disbursement approaching.

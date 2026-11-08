@@ -296,9 +296,19 @@ body, which a real provider response carries anyway.
    because the manifest needs them, and reconciling the two is Block C's first
    task. They are deliberately not drawn from anything this block defines, so
    the manifest is not a restatement of the seeder.
-2. **No `_synthetic` payload may survive into the demo tenant** once Block D's
-   replay ingester has run (D12). That is this block's debt, named here rather
-   than left for Block D to notice.
+2. **D12's synthetic PayPal side is retired by the capture block, not managed.**
+   *Revised 2026-11-08 after the replan's R16.* The original entry here said no
+   `_synthetic` payload may survive into the demo tenant once the replay
+   ingester has run, and assigned that to Block D.
+
+   R16 moved the capture ahead of Block B instead, which removes these rows
+   rather than scheduling their removal. The reasoning is worth keeping: a
+   fabricated provider figure that must be *remembered about* is worse than one
+   that never exists, and [[mission]] P3 is about not fabricating them at all.
+
+   What survives as a check: after the capture block, **no `paypal`-source
+   payload in any tenant carries `_synthetic`**. That is a one-query assertion,
+   and it belongs to the capture block's own validation.
 3. **An open dispute reverting its capture to `PENDING`** is a real
    false-positive trap — the capture loses its whole
    `seller_receivable_breakdown` — and is a good Block C case. It is
@@ -323,12 +333,40 @@ body, which a real provider response carries anyway.
    session-scoped guard — a fixture that refuses to run `test_migrations` while
    any tenant rows exist, which fails loudly instead of depending on
    collection order. Block B is the cheapest place to add it.
-5. **Nothing can seed the deployed environment.** See §10. R15 makes the live
-   demo the deliverable and Block G rehearses against the deployed app, so
-   something has to put rows in the production database — and the database is
-   not reachable from a developer machine. Needs a CLI entry point or a
-   one-off Render job. **Block D is the natural place**, since it already adds
-   the Render Cron Job and a replay ingester that writes rows.
+5. **Nothing can seed the deployed environment.** See §10.
+
+   *Revised 2026-11-08. The original entry gave the wrong reason and the wrong
+   owner, and both are worth correcting rather than quietly replacing.* It
+   argued from R15 and Block G's rehearsal — but R15's "live" means a live
+   **PayPal sandbox call**, not a deployed app, and none of Phase 15's three
+   exit criteria mentions deployment. Reasoning from them overstated the
+   obligation while missing the actual one.
+
+   **The real reason is Phase 14.** Its goal is "the interface the demo is
+   given through" and its exit criterion is "deployed and reachable on Render".
+   The dashboard is a static site with no data of its own — it renders what the
+   API returns. So *reachable and empty is a dashboard with no rows in it*, and
+   a judge sees the product fail to demonstrate anything.
+
+   **Owner: Block F**, which is the block whose exit criterion depends on it,
+   rather than Block D which merely happens to write rows.
+
+   Needs a CLI entry point — `seed.build()` has none — plus a Render one-off
+   job, since the database accepts internal Render traffic only
+   (`ipAllowList: []`). `render jobs create <srv-id> --start-command "uv run
+   --no-sync python -m reckonai.sim.seed ..."` runs inside the service, where
+   `DATABASE_URL` arrives from the `fromDatabase` wiring. `--no-sync` is
+   required: without it `uv run` syncs first and undoes the build's `--no-dev`.
+
+   Two things it must handle. **Idempotence:** `build()` creates a tenant and
+   assumes it absent, so a second run violates `UNIQUE (slug)` partway and
+   leaves a half-seeded database — it needs a `--reset` that deletes children
+   before parents, since every foreign key is `ondelete="RESTRICT"` and there
+   is no cascade. `tests/test_sim_api.py::_drop_tenant` already has that
+   ordering and should move into the seed module rather than be written twice.
+   And **Phase 14's own criterion** that the exception queue groups, sorts and
+   filters — which is a statement about how much data is there, not only that
+   some is.
 
 ## 10. The deployed state, verified 2026-11-08
 
@@ -353,9 +391,21 @@ for it. `seed.build()` is a Python function with no CLI entry point, and
 (`ipAllowList: []`), so seeding has to run from inside Render — a one-off job,
 a `render exec`, or a guarded admin route.
 
-This matters because **R15 makes the live demo the deliverable and Block G
-rehearses against the deployed environment.** Recorded in §8 as a debt rather
-than left for Block G to discover the evening before.
+This matters because **Phase 14's dashboard renders what the API returns** and
+has no data of its own, so a reachable-but-empty deployment demonstrates
+nothing. Recorded in §8 debt 5, owned by Block F.
+
+*An earlier draft of this paragraph argued from R15 and Block G's rehearsal.
+That was wrong in a way worth recording: R15's "live" refers to a live PayPal
+sandbox call, not to the deployed app, and none of Phase 15's exit criteria
+mentions deployment at all.*
+
+**Separately, the service index should stop advertising the sim.**
+`GET /` now lists `marketplace: "/sim/marketplace"`, added by this block.
+`/sim/marketplace/*` is the **marketplace's** backend — the system the product
+integrates against, standing in for a customer's own — not the product. Listing
+it in our own service index invites mistaking the scaffolding for the thing we
+built. Worth removing in Block F regardless of whether production is seeded.
 
 ## Related
 

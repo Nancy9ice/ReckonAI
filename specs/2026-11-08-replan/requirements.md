@@ -251,6 +251,79 @@ Settlement-account reconciliation, seller-facing views and the rest of
 technology doing real grouping and drill-down, and it is the dashboard's primary
 surface.
 
+**R16. The PayPal capture runs *before* Block B, not inside Block D.**
+2026-11-08, after Block A merged.
+
+The capture script, the fixtures and the replay ingester — old Block D's
+"7-lite" — move to the front of the remaining work. The rest of Block D (the
+`jobs` table, SKIP LOCKED, `processed_events`, the Cron Job and the
+date-windowed run) stays where it was.
+
+*Why.* Block C compares the marketplace's records against **PayPal's reported**
+figures, and Block F's dashboard renders them. Block A had to invent a
+synthetic PayPal side (its D12) so Block C was not blocked on Day 2 work — and
+building Block C and Block F on invented provider rows means re-validating both
+when the real ones land. Capturing first means the seed is re-pointed at real
+provider data **once**, before anything is built on it.
+
+*It also retires D12 entirely*, which is the stronger reason. Those rows
+fabricate provider figures. They are labelled `_synthetic` and a debt was
+recorded to remove them, but a fabricated provider figure that must be
+remembered-about is worse than one that never exists. [[mission]] P3 is the
+principle; this removes the exposure rather than managing it.
+
+*Block B is unaffected* and does not move. It is pure functions over
+hand-computed fixtures, so it needs no provider record at all — which is why
+the capture can go ahead of it for free.
+
+**New order:**
+
+```
+capture (script, fixtures, replay ingester)   <- retires D12
+B   entitlement engine (Phase 10)
+C   matching and classification (Phase 11)     <- now on real provider records
+D   queue, Cron Job, date-windowed run          (the rest of old Block D)
+E   investigation agent (Phase 12)
+F   queue, approval, dashboard (13 + 14)
+G   eval harness, demo, rehearsal, limitations
+```
+
+**R6 is unchanged.** The reconciliation run still replays from captured
+responses rather than calling PayPal during the demo. Only the capture's
+*position* in the sequence moves.
+
+**Hand-checkability survives, and that is not an accident.** The clean
+baseline's expected figures stay hand-derivable because **we choose what to
+push to the sandbox**: a real order of USD 160 across two sellers at a 10%
+platform fee produces a genuine PayPal response carrying 160 and 16, while
+90 / 54 / 16 remain derivable on paper. Real provider data and a hand-tabulated
+baseline are compatible as long as the inputs are chosen rather than arbitrary.
+Phase 11's zero-false-positive gate is unaffected.
+
+*Two things this creates, named so neither is discovered:*
+
+**It needs operator time, which no other block does.** The capture needs live
+sandbox credentials and decisions about what to push — which orders, which
+sellers, which currencies. Every other block is work that can proceed
+unattended.
+
+**A shape the sandbox cannot produce keeps a hand-authored provider record, and
+stays marked.** Phase 0b confirmed platform fees, delayed disbursement and FX
+under a seller payee are all reachable, but the FX case needs a seller
+onboarded in another currency and the `DELAYED` case needs
+`DELAY_FUNDS_DISBURSEMENT` granted at onboarding. If a sandbox seller lacks
+either, that one record stays authored and labelled the way D12's rows are, and
+the readme's limitations section states it. Honest and labelled beats silently
+synthetic.
+*Limitation to record, only if it occurs:* named provider records are
+hand-authored because the sandbox could not produce that shape.
+
+**What this costs in rework.** If the sandbox amounts differ from the literals
+in `reckonai/sim/data.py`, that module is re-pointed at the captured figures
+and `validation.md` §2's table re-derived with it. `seed.verify()` is what makes
+that safe: it recomputes every stated figure, so a re-pointing that misses one
+fails rather than passing quietly.
+
 ## Not cut under any pressure
 
 - **P1** — every number from the deterministic engine; the LLM computes nothing.
@@ -385,8 +458,12 @@ new session reads, so it is kept current rather than left as a record of when
 the replan was written.
 
 Phases 0, 0b, 1, 2, 3 and **Block A (4 + 5 + 6) are complete and merged** — PR
-#14, merge commit `2d002b1`, CI green. **Block B is next** (Phase 10, the
-entitlement engine, ~3 h).
+#14, merge commit `2d002b1`, CI green.
+
+**The PayPal capture is next, then Block B** — see R16, which moved the capture
+ahead of the remaining blocks and retired Block A's synthetic PayPal side. The
+capture needs live sandbox credentials and operator decisions about what to
+push, so it is the one piece of remaining work that cannot proceed unattended.
 
 Before starting it, read
 `specs/2026-11-08-block-a-marketplace-connector/requirements.md` §3 — Block A's

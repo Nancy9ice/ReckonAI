@@ -29,7 +29,6 @@ from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import Session
 
 from reckonai.models import (
-    Base,
     CommissionRule,
     Order,
     OrderItem,
@@ -41,23 +40,16 @@ from reckonai.money import InvalidAmount, Money, supported_currencies
 PLACED_AT = datetime(2026, 11, 7, 12, 0, tzinfo=UTC)
 
 
-@pytest.fixture(scope="module")
-def schema(engine: Engine) -> Iterator[Engine]:
-    """Create the catalogue schema, and drop it afterwards.
-
-    Built from `Base.metadata` rather than by running Alembic: this module is
-    testing the models, and `tests/test_migrations.py` tests that the migration
-    matches them. Keeping the two separate means a failure here points at a
-    model and a failure there points at a revision.
-    """
-    Base.metadata.create_all(engine)
-    yield engine
-    Base.metadata.drop_all(engine)
-
-
 @pytest.fixture
-def session(schema: Engine) -> Iterator[Session]:
+def session(migrated_database: Engine) -> Iterator[Session]:
     """A session whose work is always rolled back.
+
+    The schema comes from `migrated_database` - the Alembic revision, not
+    `Base.metadata.create_all`. See that fixture in `conftest.py` for why,
+    including the test-isolation failure that made the difference matter. The
+    useful consequence here is that these constraint tests now exercise the DDL
+    a migration produced, so a `CHECK` lost in autogenerate fails this module
+    too.
 
     `join_transaction_mode="create_savepoint"` is load-bearing, not decoration.
     Many tests here provoke an `IntegrityError`, which rolls the session's
@@ -68,7 +60,7 @@ def session(schema: Engine) -> Iterator[Session]:
     to the savepoint and the enclosing transaction survives to be rolled back
     here.
     """
-    connection = schema.connect()
+    connection = migrated_database.connect()
     transaction = connection.begin()
     with Session(bind=connection, join_transaction_mode="create_savepoint") as session:
         yield session

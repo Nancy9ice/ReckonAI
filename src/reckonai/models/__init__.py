@@ -34,6 +34,7 @@ from reckonai.models.catalogue import (
     Tenant,
 )
 from reckonai.models.conversions import FxConversion
+from reckonai.models.disbursements import Disbursement
 from reckonai.models.disputes import Dispute
 from reckonai.models.events import Capture, Payment, Refund
 from reckonai.models.fees import PlatformFee
@@ -64,6 +65,7 @@ __all__ = [
     "Base",
     "Capture",
     "CommissionRule",
+    "Disbursement",
     "Dispute",
     "FxConversion",
     "LifecycleMixin",

@@ -31,6 +31,7 @@ CATALOGUE_TABLES: tuple[str, ...] = (
 #: lands each table.
 EVENT_TABLES: tuple[str, ...] = (
     "capture",
+    "disbursement",
     "dispute",
     "fx_conversion",
     "payment",

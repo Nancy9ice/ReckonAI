@@ -1,8 +1,8 @@
 """canonical financial events and raw payload store
 
-Revision ID: 9722ab303470
+Revision ID: bc67de04d868
 Revises: b5f8485e802e
-Create Date: 2026-11-08 08:55:16.866809
+Create Date: 2026-11-08 08:57:51.143516
 
 """
 
@@ -13,7 +13,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = '9722ab303470'
+revision: str = 'bc67de04d868'
 down_revision: str | Sequence[str] | None = 'b5f8485e802e'
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
@@ -118,6 +118,39 @@ def upgrade() -> None:
     op.create_index(op.f('ix_capture_reconciliation_state'), 'capture', ['reconciliation_state'], unique=False)
     op.create_index(op.f('ix_capture_seller_id'), 'capture', ['seller_id'], unique=False)
     op.create_index(op.f('ix_capture_tenant_id'), 'capture', ['tenant_id'], unique=False)
+    op.create_table('disbursement',
+    sa.Column('id', sa.Uuid(), nullable=False),
+    sa.Column('external_id', sa.String(length=128), nullable=False),
+    sa.Column('capture_id', sa.Uuid(), nullable=True),
+    sa.Column('seller_id', sa.Uuid(), nullable=True),
+    sa.Column('recipient_reference', sa.String(length=64), nullable=True),
+    sa.Column('payout_transaction_id', sa.String(length=128), nullable=True),
+    sa.Column('amount_amount', sa.Numeric(precision=20, scale=6), nullable=False),
+    sa.Column('amount_currency', sa.String(length=3), nullable=False),
+    sa.Column('provider_status', sa.String(length=32), nullable=True),
+    sa.Column('state', sa.String(length=32), nullable=False),
+    sa.Column('released_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('provider_errors', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('raw_payload_id', sa.Uuid(), nullable=False),
+    sa.Column('reconciliation_state', sa.String(length=32), server_default='ingested', nullable=False),
+    sa.Column('tenant_id', sa.Uuid(), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.CheckConstraint("reconciliation_state IN ('ingested', 'matched', 'unmatched', 'delayed', 'awaiting_evidence')", name=op.f('ck_disbursement_reconciliation_state')),
+    sa.CheckConstraint("state IN ('disbursed_at_capture', 'funds_held', 'release_requested', 'disbursement_completed', 'disbursement_pending', 'disbursement_failed')", name=op.f('ck_disbursement_state')),
+    sa.ForeignKeyConstraint(['tenant_id', 'capture_id'], ['capture.tenant_id', 'capture.id'], name=op.f('fk_disbursement_tenant_id_capture_id_capture'), ondelete='RESTRICT'),
+    sa.ForeignKeyConstraint(['tenant_id', 'raw_payload_id'], ['raw_payload.tenant_id', 'raw_payload.id'], name=op.f('fk_disbursement_tenant_id_raw_payload_id_raw_payload'), ondelete='RESTRICT'),
+    sa.ForeignKeyConstraint(['tenant_id', 'seller_id'], ['seller.tenant_id', 'seller.id'], name=op.f('fk_disbursement_tenant_id_seller_id_seller'), ondelete='RESTRICT'),
+    sa.ForeignKeyConstraint(['tenant_id'], ['tenant.id'], name=op.f('fk_disbursement_tenant_id_tenant'), ondelete='RESTRICT'),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_disbursement')),
+    sa.UniqueConstraint('tenant_id', 'external_id', name=op.f('uq_disbursement_tenant_id_external_id')),
+    sa.UniqueConstraint('tenant_id', 'id', name=op.f('uq_disbursement_tenant_id_id'))
+    )
+    op.create_index(op.f('ix_disbursement_capture_id'), 'disbursement', ['capture_id'], unique=False)
+    op.create_index(op.f('ix_disbursement_raw_payload_id'), 'disbursement', ['raw_payload_id'], unique=False)
+    op.create_index(op.f('ix_disbursement_reconciliation_state'), 'disbursement', ['reconciliation_state'], unique=False)
+    op.create_index(op.f('ix_disbursement_seller_id'), 'disbursement', ['seller_id'], unique=False)
+    op.create_index(op.f('ix_disbursement_state'), 'disbursement', ['state'], unique=False)
+    op.create_index(op.f('ix_disbursement_tenant_id'), 'disbursement', ['tenant_id'], unique=False)
     op.create_table('dispute',
     sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('external_id', sa.String(length=128), nullable=False),
@@ -300,6 +333,13 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_dispute_capture_id'), table_name='dispute')
     op.drop_index(op.f('ix_dispute_buyer_transaction_id'), table_name='dispute')
     op.drop_table('dispute')
+    op.drop_index(op.f('ix_disbursement_tenant_id'), table_name='disbursement')
+    op.drop_index(op.f('ix_disbursement_state'), table_name='disbursement')
+    op.drop_index(op.f('ix_disbursement_seller_id'), table_name='disbursement')
+    op.drop_index(op.f('ix_disbursement_reconciliation_state'), table_name='disbursement')
+    op.drop_index(op.f('ix_disbursement_raw_payload_id'), table_name='disbursement')
+    op.drop_index(op.f('ix_disbursement_capture_id'), table_name='disbursement')
+    op.drop_table('disbursement')
     op.drop_index(op.f('ix_capture_tenant_id'), table_name='capture')
     op.drop_index(op.f('ix_capture_seller_id'), table_name='capture')
     op.drop_index(op.f('ix_capture_reconciliation_state'), table_name='capture')

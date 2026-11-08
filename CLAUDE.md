@@ -19,7 +19,7 @@ Also read, and in this order:
 - `specs/paypal-fields.md` — what PayPal actually returns, per field, with the
   evidence. The root specs state rules and point here; they do not repeat it.
 
-**Phases 0, 0b, 1 and 2 are complete. Phase 3 is next.**
+**Phases 0, 0b, 1, 2 and 3 are complete. Phase 4 is next.**
 
 Phase 0's observed evidence was captured against a **first-party** integration,
 so it does not cover platform fees, disbursement modes or any seller-level view.
@@ -34,11 +34,18 @@ them.
 
 Phase 2 delivered the canonical core — `Money`, largest-remainder allocation,
 and the `tenant`, `seller`, `order`, `order_item` and `commission_rule` tables,
-with the `float` and tenant gates enforcing the rules below. Its handoff to
-Phases 3, 4, 6, 10 and 14 is under Phase 2 in `specs/roadmap.md`, and
-`readme.md` §0.1 is the short version of the money rules. **Phase 3 should read
-that handoff before writing a model**, particularly the note on adding modules
-to `reckonai/models/__init__.py` and the Alembic enum trap.
+with the `float` and tenant gates enforcing the rules below. `readme.md` §0.1 is
+the short version of the money rules.
+
+Phase 3 delivered the event side — `raw_payload`, `payment`, `capture`,
+`refund`, `dispute`, `platform_fee`, `disbursement`, `fx_conversion` and
+`seller_ledger_entry`, plus the two lifecycle state vocabularies in
+`reckonai/models/lifecycle.py`. Its handoff to Phases 4, 5, 6, 7, 10, 11 and 12
+is under Phase 3 in `specs/roadmap.md`, and the decisions are in
+`specs/2026-11-08-canonical-events/requirements.md`. **Phase 4 should read that
+handoff before writing a seed builder** — the `raw_payload` link is `NOT NULL`,
+the ledger amount is unsigned, and SQLAlchemy's flush order between unrelated
+mappers is not derived from foreign keys.
 
 ## Hard rules
 
@@ -58,6 +65,12 @@ investigates; it does not compute. (`mission.md` P1)
 **Never fabricate a financial value.** If PayPal does not supply a settlement,
 rate or fee, record the gap as a limitation. Do not estimate, infer, or
 substitute a public FX rate for a provider conversion record. (`mission.md` P3)
+
+In the schema this is why `fx_conversion.fee` is `NULL` and never zero — **an
+absent fee and a measured fee of nothing are different claims**, and a `CHECK`
+refuses the zero. The same reasoning keeps `disbursement.released_at` free of
+any default: PayPal's release record carries no usable timestamp, so writing an
+ingestion time there would present our clock as a provider timestamp.
 
 **Nothing moves money.** No tool and no code path alters a seller balance,
 issues a refund or initiates a payout without human approval. (`mission.md` P6)
@@ -81,6 +94,13 @@ trimming of earlier tool results. See `specs/tech-stack.md` §5.2.
 - Retain raw source payloads; never discard the evidence for a decision.
 - Every table carrying marketplace data has a `tenant_id`, and every query
   filters by it.
+- **Every financial record links to its `raw_payload` row, `NOT NULL`.** One
+  central JSONB store, referenced compositely with `tenant_id`; a record cannot
+  exist without the evidence behind it.
+- **A new model module must be added to `reckonai/models/__init__.py`.** A
+  module that is never imported is absent from `Base.metadata`, and
+  autogenerate reads its table as one to **drop**.
+  `tests/test_model_registry.py` fails if one is missing.
 - **The Render CLI is available** (`brew install render`) for reading deploy
   logs, deploy status and service state — which is how Phase 2's post-merge gate
   was verified. The workspace and resource ids, and three mechanics that each

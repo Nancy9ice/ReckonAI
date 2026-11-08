@@ -24,7 +24,12 @@ import uuid
 from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import ForeignKeyConstraint, String, UniqueConstraint
+from sqlalchemy import (
+    CheckConstraint,
+    ForeignKeyConstraint,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, declared_attr, mapped_column
 
@@ -138,4 +143,45 @@ def raw_payload_fk() -> ForeignKeyConstraint:
         ["tenant_id", "raw_payload_id"],
         ["raw_payload.tenant_id", "raw_payload.id"],
         ondelete="RESTRICT",
+    )
+
+
+def capture_or_refund_parent() -> tuple[object, ...]:
+    """The `(capture_id, refund_id)` parent pair, with exactly one required.
+
+    `platform_fee` and `fx_conversion` both hang off whichever record they came
+    from. A capture carries platform fees and may carry a conversion; a refund
+    carries the pro-rata fee reversal and declares an **array** of conversion
+    entries. So each table carries both parent columns, nullable, and a `CHECK`
+    that exactly one is populated
+    (specs/2026-11-08-canonical-events/requirements.md D5).
+
+    Emitted from one call so the two tables cannot spell it differently, and
+    returned as a tuple to splice into `__table_args__`.
+
+    Considered and rejected: a generic `(parent_type, parent_id)` pair. It
+    extends to a new parent with no migration, and gives up both referential
+    integrity and tenant isolation at the database level - the two guarantees
+    Phase 2's D7 built the composite keys to get. Adding a third parent site
+    here instead costs one column, one foreign key and a rewritten `CHECK`.
+
+    `specs/paypal-fields.md` warns that a *third* site probably exists: a
+    refund's `net_amount_breakdown` is recorded **unanswered rather than
+    absent**, since no cross-currency refund fixture was creatable.
+    """
+    return (
+        ForeignKeyConstraint(
+            ["tenant_id", "capture_id"],
+            ["capture.tenant_id", "capture.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id", "refund_id"],
+            ["refund.tenant_id", "refund.id"],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "num_nonnulls(capture_id, refund_id) = 1",
+            name="one_parent",
+        ),
     )

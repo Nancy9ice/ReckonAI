@@ -1,8 +1,8 @@
 """canonical financial events and raw payload store
 
-Revision ID: 1e2e3b57f220
+Revision ID: 9722ab303470
 Revises: b5f8485e802e
-Create Date: 2026-11-08 08:52:50.098708
+Create Date: 2026-11-08 08:55:16.866809
 
 """
 
@@ -13,7 +13,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = '1e2e3b57f220'
+revision: str = '9722ab303470'
 down_revision: str | Sequence[str] | None = 'b5f8485e802e'
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
@@ -196,6 +196,74 @@ def upgrade() -> None:
     op.create_index(op.f('ix_refund_reconciliation_state'), 'refund', ['reconciliation_state'], unique=False)
     op.create_index(op.f('ix_refund_seller_id'), 'refund', ['seller_id'], unique=False)
     op.create_index(op.f('ix_refund_tenant_id'), 'refund', ['tenant_id'], unique=False)
+    op.create_table('fx_conversion',
+    sa.Column('id', sa.Uuid(), nullable=False),
+    sa.Column('capture_id', sa.Uuid(), nullable=True),
+    sa.Column('refund_id', sa.Uuid(), nullable=True),
+    sa.Column('source_amount', sa.Numeric(precision=20, scale=6), nullable=False),
+    sa.Column('source_currency', sa.String(length=3), nullable=False),
+    sa.Column('target_amount', sa.Numeric(precision=20, scale=6), nullable=False),
+    sa.Column('target_currency', sa.String(length=3), nullable=False),
+    sa.Column('rate', sa.Numeric(precision=20, scale=10), nullable=False),
+    sa.Column('converted_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('is_derived', sa.Boolean(), nullable=False),
+    sa.Column('fee_amount', sa.Numeric(precision=20, scale=6), nullable=True),
+    sa.Column('fee_currency', sa.String(length=3), nullable=True),
+    sa.Column('provider', sa.String(length=32), nullable=False),
+    sa.Column('raw_payload_id', sa.Uuid(), nullable=False),
+    sa.Column('reconciliation_state', sa.String(length=32), server_default='ingested', nullable=False),
+    sa.Column('tenant_id', sa.Uuid(), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.CheckConstraint("reconciliation_state IN ('ingested', 'matched', 'unmatched', 'delayed', 'awaiting_evidence')", name=op.f('ck_fx_conversion_reconciliation_state')),
+    sa.CheckConstraint('(fee_amount IS NULL) = (fee_currency IS NULL)', name=op.f('ck_fx_conversion_fee_pair')),
+    sa.CheckConstraint('fee_amount IS NULL OR fee_amount <> 0', name=op.f('ck_fx_conversion_fee_not_zero')),
+    sa.CheckConstraint('num_nonnulls(capture_id, refund_id) = 1', name=op.f('ck_fx_conversion_one_parent')),
+    sa.CheckConstraint('rate > 0', name=op.f('ck_fx_conversion_rate_positive')),
+    sa.CheckConstraint('source_currency <> target_currency', name=op.f('ck_fx_conversion_currencies_differ')),
+    sa.ForeignKeyConstraint(['tenant_id', 'capture_id'], ['capture.tenant_id', 'capture.id'], name=op.f('fk_fx_conversion_tenant_id_capture_id_capture'), ondelete='RESTRICT'),
+    sa.ForeignKeyConstraint(['tenant_id', 'raw_payload_id'], ['raw_payload.tenant_id', 'raw_payload.id'], name=op.f('fk_fx_conversion_tenant_id_raw_payload_id_raw_payload'), ondelete='RESTRICT'),
+    sa.ForeignKeyConstraint(['tenant_id', 'refund_id'], ['refund.tenant_id', 'refund.id'], name=op.f('fk_fx_conversion_tenant_id_refund_id_refund'), ondelete='RESTRICT'),
+    sa.ForeignKeyConstraint(['tenant_id'], ['tenant.id'], name=op.f('fk_fx_conversion_tenant_id_tenant'), ondelete='RESTRICT'),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_fx_conversion')),
+    sa.UniqueConstraint('tenant_id', 'id', name=op.f('uq_fx_conversion_tenant_id_id'))
+    )
+    op.create_index(op.f('ix_fx_conversion_capture_id'), 'fx_conversion', ['capture_id'], unique=False)
+    op.create_index(op.f('ix_fx_conversion_raw_payload_id'), 'fx_conversion', ['raw_payload_id'], unique=False)
+    op.create_index(op.f('ix_fx_conversion_reconciliation_state'), 'fx_conversion', ['reconciliation_state'], unique=False)
+    op.create_index(op.f('ix_fx_conversion_refund_id'), 'fx_conversion', ['refund_id'], unique=False)
+    op.create_index(op.f('ix_fx_conversion_tenant_id'), 'fx_conversion', ['tenant_id'], unique=False)
+    op.create_table('platform_fee',
+    sa.Column('id', sa.Uuid(), nullable=False),
+    sa.Column('external_id', sa.String(length=128), nullable=False),
+    sa.Column('capture_id', sa.Uuid(), nullable=True),
+    sa.Column('refund_id', sa.Uuid(), nullable=True),
+    sa.Column('seller_id', sa.Uuid(), nullable=True),
+    sa.Column('payee_reference', sa.String(length=64), nullable=True),
+    sa.Column('amount_amount', sa.Numeric(precision=20, scale=6), nullable=False),
+    sa.Column('amount_currency', sa.String(length=3), nullable=False),
+    sa.Column('settlement_reference', sa.String(length=128), nullable=True),
+    sa.Column('occurred_at', sa.DateTime(timezone=True), nullable=False),
+    sa.Column('raw_payload_id', sa.Uuid(), nullable=False),
+    sa.Column('reconciliation_state', sa.String(length=32), server_default='ingested', nullable=False),
+    sa.Column('tenant_id', sa.Uuid(), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.CheckConstraint("reconciliation_state IN ('ingested', 'matched', 'unmatched', 'delayed', 'awaiting_evidence')", name=op.f('ck_platform_fee_reconciliation_state')),
+    sa.CheckConstraint('num_nonnulls(capture_id, refund_id) = 1', name=op.f('ck_platform_fee_one_parent')),
+    sa.ForeignKeyConstraint(['tenant_id', 'capture_id'], ['capture.tenant_id', 'capture.id'], name=op.f('fk_platform_fee_tenant_id_capture_id_capture'), ondelete='RESTRICT'),
+    sa.ForeignKeyConstraint(['tenant_id', 'raw_payload_id'], ['raw_payload.tenant_id', 'raw_payload.id'], name=op.f('fk_platform_fee_tenant_id_raw_payload_id_raw_payload'), ondelete='RESTRICT'),
+    sa.ForeignKeyConstraint(['tenant_id', 'refund_id'], ['refund.tenant_id', 'refund.id'], name=op.f('fk_platform_fee_tenant_id_refund_id_refund'), ondelete='RESTRICT'),
+    sa.ForeignKeyConstraint(['tenant_id', 'seller_id'], ['seller.tenant_id', 'seller.id'], name=op.f('fk_platform_fee_tenant_id_seller_id_seller'), ondelete='RESTRICT'),
+    sa.ForeignKeyConstraint(['tenant_id'], ['tenant.id'], name=op.f('fk_platform_fee_tenant_id_tenant'), ondelete='RESTRICT'),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_platform_fee')),
+    sa.UniqueConstraint('tenant_id', 'external_id', name=op.f('uq_platform_fee_tenant_id_external_id')),
+    sa.UniqueConstraint('tenant_id', 'id', name=op.f('uq_platform_fee_tenant_id_id'))
+    )
+    op.create_index(op.f('ix_platform_fee_capture_id'), 'platform_fee', ['capture_id'], unique=False)
+    op.create_index(op.f('ix_platform_fee_raw_payload_id'), 'platform_fee', ['raw_payload_id'], unique=False)
+    op.create_index(op.f('ix_platform_fee_reconciliation_state'), 'platform_fee', ['reconciliation_state'], unique=False)
+    op.create_index(op.f('ix_platform_fee_refund_id'), 'platform_fee', ['refund_id'], unique=False)
+    op.create_index(op.f('ix_platform_fee_seller_id'), 'platform_fee', ['seller_id'], unique=False)
+    op.create_index(op.f('ix_platform_fee_tenant_id'), 'platform_fee', ['tenant_id'], unique=False)
     # ### end Alembic commands ###
 
 
@@ -206,6 +274,19 @@ def downgrade() -> None:
     reversed is one that was never tested against a copy of production.
     """
     # ### commands auto generated by Alembic - please adjust! ###
+    op.drop_index(op.f('ix_platform_fee_tenant_id'), table_name='platform_fee')
+    op.drop_index(op.f('ix_platform_fee_seller_id'), table_name='platform_fee')
+    op.drop_index(op.f('ix_platform_fee_refund_id'), table_name='platform_fee')
+    op.drop_index(op.f('ix_platform_fee_reconciliation_state'), table_name='platform_fee')
+    op.drop_index(op.f('ix_platform_fee_raw_payload_id'), table_name='platform_fee')
+    op.drop_index(op.f('ix_platform_fee_capture_id'), table_name='platform_fee')
+    op.drop_table('platform_fee')
+    op.drop_index(op.f('ix_fx_conversion_tenant_id'), table_name='fx_conversion')
+    op.drop_index(op.f('ix_fx_conversion_refund_id'), table_name='fx_conversion')
+    op.drop_index(op.f('ix_fx_conversion_reconciliation_state'), table_name='fx_conversion')
+    op.drop_index(op.f('ix_fx_conversion_raw_payload_id'), table_name='fx_conversion')
+    op.drop_index(op.f('ix_fx_conversion_capture_id'), table_name='fx_conversion')
+    op.drop_table('fx_conversion')
     op.drop_index(op.f('ix_refund_tenant_id'), table_name='refund')
     op.drop_index(op.f('ix_refund_seller_id'), table_name='refund')
     op.drop_index(op.f('ix_refund_reconciliation_state'), table_name='refund')

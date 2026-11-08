@@ -32,7 +32,9 @@ CATALOGUE_TABLES: tuple[str, ...] = (
 EVENT_TABLES: tuple[str, ...] = (
     "capture",
     "dispute",
+    "fx_conversion",
     "payment",
+    "platform_fee",
     "raw_payload",
     "refund",
 )

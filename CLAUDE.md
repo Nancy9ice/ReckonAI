@@ -81,3 +81,10 @@ trimming of earlier tool results. See `specs/tech-stack.md` §5.2.
 - Retain raw source payloads; never discard the evidence for a decision.
 - Every table carrying marketplace data has a `tenant_id`, and every query
   filters by it.
+- **The Render CLI is available** (`brew install render`) for reading deploy
+  logs, deploy status and service state — which is how Phase 2's post-merge gate
+  was verified. The workspace and resource ids, and three mechanics that each
+  cost a round trip to discover, are in
+  `specs/2026-11-07-canonical-core/notes.md` §"Render CLI setup". The database
+  is **not** reachable externally (`ipAllowList: []`), so a schema check runs
+  from inside Render, not from a developer machine.

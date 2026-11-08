@@ -451,6 +451,10 @@ Phase 2 (`Money`).
 
 ## Phase 4 — Simulated marketplace API: clean data · 0.5 day
 
+> **Replanned 2026-11-08: this is Block A**, together with Phase 5 (R4) and
+> Phase 6 (R3) — one session, three commits, three spec entries. Phase 4's own
+> scope is unchanged. Start here.
+
 **Goal:** A marketplace to integrate against, with correct records only.
 
 Endpoints for sellers, orders, order items, commission rules, payments, refunds,
@@ -775,6 +779,14 @@ Three further matching constraints from Phase 0:
 
 ## Phase 12 — AI investigation agent · 0.5 day
 
+> **Kept entire by the replan (R11), with nothing reduced.** Stated here because
+> it was conflated twice with the separate, deferred Haiku **field-name**
+> mapping pass ([[tech-stack]] §9.2 pass 3), which is a connector-setup concern
+> that never reads a financial record. This phase — ranked candidate causes,
+> per-cause cited record ids, confidence values, the `insufficient_evidence`
+> branch, persisted reasoning, model-id comparison — is the LLM that produces
+> evidence-backed recommendations, and it is not in scope for any cut.
+
 **→ Demo becomes viable at the end of this phase.**
 
 **Goal:** Investigate an exception and produce an evidence-backed report.
@@ -860,6 +872,12 @@ from strings per [[tech-stack]] §7.
 ---
 
 ## Phase 15 — Demo script and eval harness · 0.5 day
+
+> **Kept by the replan (R12), against the cutline below**, which names the
+> harness as the second thing to drop. The reasoning inverts at two days:
+> hand-scoring costs hours that are not available, so the harness *replaces* a
+> manual pass rather than adding one. It also gains a rehearsal against the
+> deployed environment, since R15 makes a live demo the deliverable.
 
 **Goal:** Prove the numbers in [[mission]] §6 rather than assert them.
 

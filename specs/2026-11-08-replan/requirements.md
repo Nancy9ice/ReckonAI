@@ -353,7 +353,10 @@ R9's schedule, rather than on a webhook.
 **Never dropped:** Block B, Block C's false-positive gate, Block E's
 `insufficient_evidence` branch, approve/reject.
 
-## Documents this replan edits
+## Documents this replan edited — **all applied 2026-11-08, commit `aba4a8f`**
+
+Do not re-apply these. Each document carries its own dated amendment note, and
+the notes are the authority on what changed; this list is only the index.
 
 Not the five existing `specs/2026-*` directories — those are the historical
 record of completed phases and record what was true when written.
@@ -373,6 +376,13 @@ record of completed phases and record what was true when written.
    globally; editing all twelve webhook references is not worth the tokens.
 5. **`CLAUDE.md`** — phase status, and a pointer making this directory the
    session entry point.
+
+## State when this was written
+
+2026-11-08. Phases 0, 0b, 1, 2 and 3 complete and merged. **No block below has
+been started** — the replan and the document amendments are the only work done
+on this branch. Block A is next, and reads Phase 3's handoff in [[roadmap]]
+first, particularly the three things that bite a seed builder.
 
 ## Related
 

@@ -77,6 +77,14 @@ be putting the violation into the schema every later phase builds on.
 
 Run in order, from a clean checkout of the branch. Every one must exit 0.
 
+**Every check must also report a non-zero passed count.** This is not pedantry:
+`pytest -k <expression>` exits **0** when the expression deselects every test,
+so a check whose keyword no longer matches anything passes while testing
+nothing. That happened during this phase's own gate run — C3's selector read
+`sums_exactly` against a test named `test_parts_sum_exactly_to_the_total`, and
+reported `541 deselected` and success. The counts below are therefore recorded
+alongside each check, and a check reporting `0 passed` has failed.
+
 ### C1 — The suite runs without a database, for the pure modules
 
 ```bash
@@ -92,7 +100,8 @@ than merely unused.
 ### C2 — Mixed-currency arithmetic and ordering raise; equality does not
 
 ```bash
-uv run pytest tests/test_money.py -k "mismatch or ordering or equality"
+uv run pytest tests/test_money.py \
+  -k "mismatch or ordering or equality or divided or multiplied"
 ```
 
 Exits 0. Covers, as separate assertions: `+` and `-` raising
@@ -106,7 +115,7 @@ The equality half is the one that would otherwise be missed, and
 ### C3 — Allocation sums exactly, as a property
 
 ```bash
-uv run pytest tests/test_allocation.py -k "sums_exactly"
+uv run pytest tests/test_allocation.py -k "sum_exactly"
 ```
 
 Exits 0 across every parameterised combination of total, currency and weight
@@ -122,7 +131,8 @@ only ever seen green has not been tested, which is the lesson
 ### C4 — The residue cases and the tie-break order
 
 ```bash
-uv run pytest tests/test_allocation.py -k "residue or tie_break or mirror"
+uv run pytest tests/test_allocation.py \
+  -k "cent_case or three_case or tie or mirror or zero_weight or lopsided"
 ```
 
 Exits 0. Pins the cases where largest-remainder actually does work:
@@ -179,7 +189,8 @@ observed failing.
 ### C8 — No column anywhere is a float, and every money column is typed correctly
 
 ```bash
-uv run pytest tests/test_models_schema.py -k "numeric or currency_column"
+uv run pytest tests/test_models_schema.py \
+  -k "float or amount or rate or currency"
 ```
 
 Exits 0 over `Base.metadata.sorted_tables`: no `Float`, `REAL` or
@@ -209,7 +220,7 @@ time the assertion runs, `json` has already turned a bare `160.00` into a
 ### C10 — `Money` survives a real database round-trip, in every currency
 
 ```bash
-uv run pytest tests/test_catalogue_constraints.py -k "round_trip"
+uv run pytest tests/test_catalogue_constraints.py -k "round_trip or reads_back or columns"
 ```
 
 Exits 0 against the compose database for every currency in the registry. This is
@@ -237,7 +248,7 @@ rule that holds under time pressure.
 ### C12 — The database rejects what the schema promised
 
 ```bash
-uv run pytest tests/test_catalogue_constraints.py -k "rejects"
+uv run pytest tests/test_catalogue_constraints.py -k "rejected"
 ```
 
 Exits 0. Each assertion is a write the database must refuse:
@@ -322,11 +333,17 @@ state — and the database-backed tests in this phase share a schema.
 ### C18 — Phase 1's C14 is gone, and S4 points here
 
 ```bash
-grep -c "C14" specs/2026-11-07-repo-deployment-skeleton/validation.md
+# The deleted command, not the string "C14" - the heading is kept on purpose.
+grep -c "Decimal..NUMERIC" specs/2026-11-07-repo-deployment-skeleton/validation.md
 ```
 
-Returns 0 occurrences in a check-definition position, and Phase 1's S4 row names
-this phase's gate instead of "Not applicable".
+Returns **0 occurrences** of the deleted command, and Phase 1's S4 row names
+this phase's C7 and C8 instead of "Not applicable".
+
+Grep for the deleted *command*, not for the string `C14`: the heading is kept so
+C1-C13 keep their numbering and a reader following a reference finds out what
+became of it. Grepping for `C14` matches that heading and reports a false
+failure, and grepping for `git ls-files` matches C4, which legitimately uses it.
 
 Verified by reading, not only by grep: Phase 1's C14 asserted that the money path
 was *absent*, as an explicit statement that its green suite was not evidence of

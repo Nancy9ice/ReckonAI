@@ -353,3 +353,62 @@ would make the gate meaningless rather than strict.
 `test_the_models_package_is_deliberately_not_pure` asserts both halves of that,
 so the asymmetry is a decision on the record rather than something a later
 reader "fixes".
+
+## Groups 8 and 9 — Documentation and the pre-merge gate run · 2026-11-08
+
+Phase 2 marked complete in `specs/roadmap.md` with its handoff to Phases 3, 4,
+6, 10 and 14. `readme.md` gained a section 0.1 on the money rules,
+`src/reckonai/migrations/README` gained the autogenerate review checklist and
+the enum trap, and `CLAUDE.md` now points Phase 3 at the handoff.
+
+The `tech-stack.md` section 2 amendment that `requirements.md` D3 depends on was
+applied before Group 1 rather than here, because a constitution document is
+amended ahead of the divergence it authorises, not after it.
+
+### The whole gate, run from an empty database
+
+| Check | Result |
+|---|---|
+| C1 pure modules, no database | pass, 689 tests |
+| C2 mixed-currency raises, equality does not | pass, 12 |
+| C3 allocation sums exactly (property) | pass, 511 |
+| C4 residue cases and tie-break order | pass, 6 |
+| C5 3-decimal round-trip, exponent edges | pass, 26 |
+| C6 unknown currency raises | pass, 1 |
+| C7 float gate and purity gate | pass, 48 |
+| C8 no float column, money column types | pass, 27 |
+| C9 amounts cross JSON as strings | pass, 25 |
+| C10 Money round-trips the real database | pass, 10 |
+| C11 every table tenant-scoped | pass, 21 |
+| C12 the database rejects what it promised | pass, 12 |
+| C13 rule ambiguity and absence raise | pass, 25 |
+| C14 no pictographs in tracked files | pass, 17 |
+| C15 migration up / down / up, plus its tests | pass, 6 |
+| C16 no model/migration drift | "No new upgrade operations detected." |
+| C17 `ruff check` and the whole suite | pass, 858 |
+| C18 Phase 1's C14 deleted, S4 repointed | 0 occurrences of the deleted command |
+
+### A gate that passed while testing nothing
+
+Found during the gate run itself, and the most useful finding of the group.
+
+**C3's selector matched no tests and the check still exited 0.** It read
+`-k "sums_exactly"` against a test named `test_parts_sum_exactly_to_the_total`.
+`pytest` exits **0** when a `-k` expression deselects everything - it reported
+`541 deselected` and success - so the phase's single most important
+guarantee was being reported as verified by a command that ran none of it.
+
+Three selectors were wrong this way or close to it: C3 (`sums_exactly`),
+C12 (`rejects` against `..._is_rejected`), and C8 (`currency_column` against
+`..._currency_columns_...`).
+
+Fixed, and `validation.md` section 3 now states that **a check reporting
+`0 passed` has failed**, with the counts recorded per check above so a future
+run has something to compare against. C18's own selector was also wrong in the
+opposite direction: grepping for the string `C14` matched the heading that is
+deliberately kept, and grepping for `git ls-files` matched C4, which
+legitimately uses it. It now greps for the deleted command itself.
+
+This is the failure mode `validation.md` section 5 warns about - "a gate that
+has only ever been seen green is not a gate" - arriving through the *runner*
+rather than through the assertion.

@@ -35,6 +35,23 @@ def test_the_root_route_is_not_a_404(client: TestClient) -> None:
         assert client.get(path).status_code == 200
 
 
+def test_the_money_probe_is_gone(client: TestClient) -> None:
+    """specs/roadmap.md Phase 4: `GET /money/example` is removed, and the
+    service index no longer lists it.
+
+    It was a serialization probe, not product. Leaving it means a deployed demo
+    URL that answers `104.05` for no reason. The property it proved is now
+    asserted against the simulated marketplace's endpoints - see
+    `tests/strict_json.py`.
+
+    **Both halves are checked**, because the route and the index entry are
+    separate deletions and removing only one is the likelier mistake: a dead
+    advertised path, or a live route nothing advertises.
+    """
+    assert client.get("/money/example").status_code == 404
+    assert "money_example" not in client.get("/").json()
+
+
 def test_health_reports_ok(client: TestClient) -> None:
     response = client.get("/health")
 

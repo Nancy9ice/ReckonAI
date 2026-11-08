@@ -50,6 +50,23 @@ class Settings(BaseSettings):
     # second or two).
     worker_tick_seconds: float = 30.0
 
+    # Where the marketplace connector reads records from
+    # (specs/2026-11-08-block-a-marketplace-connector/requirements.md D10).
+    #
+    # **No default, deliberately**, and for a different reason than
+    # DATABASE_URL's. A default here would be a plausible-looking host - a
+    # localhost, or this service's own URL - and a deployed connector that fell
+    # back to one would reconcile a tenant's books against the wrong
+    # marketplace's records and report every difference as a discrepancy. That
+    # is a wrong financial answer produced confidently, which specs/mission.md
+    # P3 forbids. Absent means the connector refuses to run, and refusing is
+    # the only safe failure for this one.
+    #
+    # Optional rather than required because the web service and the worker both
+    # read this Settings object and neither needs it; the connector asserts it
+    # is set at the point of use.
+    marketplace_base_url: str | None = None
+
     # Injected by Render into web services; absent locally, in CI, and in the
     # worker, which has no public URL. Logged on startup so a deployed service
     # announces its own address rather than it having to be found in a

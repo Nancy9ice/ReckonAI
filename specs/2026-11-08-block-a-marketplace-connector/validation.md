@@ -107,12 +107,20 @@ they are not flagged; this block proves they are **present and clean**.
 | Gate | Command | Result |
 |---|---|---|
 | Full suite, compose database, `DATABASE_URL` exported | `uv run pytest` | |
-| Lint and format | `uv run ruff check` and `ruff format --check` | |
-| Types | `uv run mypy src` | |
+| Lint | `uv run ruff check` | |
+| Lockfile unchanged | `git diff --exit-code uv.lock` | |
 | New model module registered | `tests/test_model_registry.py` | |
 | Migration reverses | `alembic upgrade head`, `downgrade -1`, `upgrade head` on a clean database | |
 | Autogenerate is empty after upgrade | `alembic revision --autogenerate` produces no operations | |
 | CI green on the branch | GitHub Actions | |
+
+These are the gates this project actually has. `ruff format --check` and `mypy`
+are **not** among them — an earlier draft of this document listed both, which
+would have been a merge condition no one could meet: `ruff format` reports 30
+pre-existing files it would rewrite, and `mypy` is not a dependency. `ruff`
+lints with `E`, `F`, `I`, `UP` and `B` selected, and `scripts/` is excluded
+because those PEP 723 probes produced the committed evidence in
+`specs/paypal-fields.md`.
 
 ## 7. Merge conditions
 

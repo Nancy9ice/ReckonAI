@@ -262,3 +262,54 @@ applies to any narrow checked column, which in this phase means every
 Once against the model and once against the reflected schema. A model with no
 default and a migration that added one would both pass the model-level
 assertion, and the schema is what a query runs against.
+
+---
+
+## Group 9 — The pre-merge gate · 2026-11-08
+
+Every check in `validation.md` section 3, run with the compose database up and
+`DATABASE_URL` exported. A check that was not run is not a passing one.
+
+| # | Check | Command | Result |
+|---|---|---|---|
+| C1 | `float` and `NUMERIC` metadata gates over nine new tables | `pytest tests/test_models_schema.py tests/test_money_purity.py` | **Pass** — 190 |
+| C2 | Every money value declared as a pair | `pytest tests/test_models_schema.py -k "money_pair or matching_currency"` | **Pass** — 28 |
+| C3 | Every financial table links to `raw_payload`, NOT NULL | `pytest tests/test_model_registry.py -k raw_payload` | **Pass** — 8 |
+| C4 | A record cannot be inserted without its payload | `pytest tests/test_raw_payload.py` | **Pass** — 7 |
+| C5 | `fx_conversion` carries all nine fields at the right types | `pytest tests/test_conversions.py -k columns` | **Pass** |
+| C6 | A zero conversion fee rejected; NULL inserts | `pytest tests/test_conversions.py -k fee` | **Pass** |
+| C7 | Same-currency conversion rejected; exactly-one parent | `pytest tests/test_conversions.py` | **Pass** — 12 |
+| C8 | Two conversions against one refund insert | `pytest tests/test_conversions.py -k multiple` | **Pass** |
+| C9 | State vocabularies contain what the roadmap requires | `pytest tests/test_lifecycle_states.py` | **Pass** — 28 |
+| C10 | A state outside its vocabulary rejected by the database | `pytest tests/test_events_capture.py -k state` | **Pass** |
+| C11 | A dispute inserts with every optional column NULL | `pytest tests/test_events_refund.py -k all_null` | **Pass** |
+| C12 | A capture inserts with its whole breakdown NULL | `pytest tests/test_events_capture.py` | **Pass** — 20 |
+| C13 | Refund linkage nullable, provenance not | `pytest tests/test_events_refund.py -k linkage` | **Pass** — 11 total |
+| C14 | Tenant gate over nine new tables | `pytest tests/test_models_schema.py -k tenant` | **Pass** — 48 |
+| C15 | A cross-tenant link rejected by the database | `pytest -k cross_tenant` | **Pass** — 3 |
+| C16 | A half-populated money pair rejected | `pytest -k half_populated` | **Pass** — 2 |
+| C17 | `float` AST gate and purity gate over the new modules | `pytest tests/test_money_purity.py` | **Pass** — 57 |
+| C18 | JSONB round-trip; re-read stores nothing | `pytest tests/test_raw_payload.py` | **Pass** — 7 |
+| C19 | `disbursement.released_at` has no default | `pytest tests/test_disbursements.py` | **Pass** — 10 |
+| C20 | No pictographs in any tracked file | `pytest tests/test_conventions.py` | **Pass** — 17 |
+| C21 | Migration clean, applies, reverses | `pytest tests/test_migrations.py` + `alembic check` | **Pass** — 6, no diff |
+| C22 | Every model module registered | `pytest tests/test_model_registry.py` | **Pass** — 55 |
+| C23 | Ledger unsigned, positive, unconstrained across its two type columns | `pytest tests/test_ledger.py tests/test_platform_fee.py` | **Pass** — 26 |
+| C24 | The whole suite is green | `uv run pytest` | **Pass** — **1117** |
+| — | Lint, as CI runs it | `uv run ruff check` | **Pass** |
+
+Phase 2 finished at 858 tests; this phase adds 259.
+
+**The migration round-trip, run explicitly as well as by test:**
+
+    alembic downgrade b5f8485e802e   ->  33b2f40099eb -> b5f8485e802e
+    alembic upgrade head             ->  b5f8485e802e -> 33b2f40099eb
+    alembic current                  ->  33b2f40099eb (head)
+    alembic check                    ->  No new upgrade operations detected.
+
+**One thing deliberately not fixed.** `uv run ruff check scripts` reports six
+E501s in Phase 0's probe scripts. `pyproject.toml` excludes `scripts` from ruff
+with the reason written beside it — they produced the committed evidence in
+`specs/paypal-fields.md` and Phase 0's validation re-runs them, so reformatting
+them now would edit evidence-producing code for no benefit. CI runs bare
+`uv run ruff check`, which honours the exclusion, and that passes.

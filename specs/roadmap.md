@@ -25,8 +25,9 @@ found the product specified against the wrong PayPal integration model
 (`specs/multiparty-direction.md`). So 0.5 day is spent and 0.5 added: the
 remaining work is 8 days, and the overflow is unchanged.
 
-**Phases 0, 0b, 1 and 2 are complete.** Phase 3 is next, and reads Phase 2's
-handoff below before starting.
+**Phases 0, 0b, 1, 2 and 3 are complete.** Phase 4 is next, and reads Phase 3's
+handoff below before starting — particularly the three things that bite a seed
+builder.
 
 ---
 
@@ -320,7 +321,84 @@ remainder allocation helper, and tables for `tenant`, `seller`, `order`,
 
 ---
 
-## Phase 3 — Canonical financial events and raw payload store · 0.5 day
+## Phase 3 — Canonical financial events and raw payload store · 0.5 day · **COMPLETE 2026-11-08**
+
+> **Delivered.** Nine tables — the eight financial record types below plus the
+> `raw_payload` store each links to — the two lifecycle state vocabularies, and
+> one reversible Alembic revision. Spec, plan, merge gate and findings are in
+> `specs/2026-11-08-canonical-events/`.
+>
+> Every exit criterion below passes. The pre-merge gate is 24 automated checks
+> and **1117 tests**; the post-merge deployed checks are tabled in that
+> directory's `notes.md`.
+>
+> **What later phases inherit, so none of it is rediscovered:**
+>
+> - **Phase 4** seeds these tables. Three things bite it. The `raw_payload`
+>   link is **`NOT NULL`**, so a seed builder cannot insert a financial row
+>   without a payload row to point at. `seller_ledger_entry.amount` is
+>   **unsigned** with `CHECK (> 0)` and needs a `transaction_type` of `debit`
+>   or `credit`. And **flush order between unrelated mappers is not derived
+>   from foreign keys** — this project declares no `relationship()`, so
+>   SQLAlchemy can insert a child before its parent; a seed builder that
+>   constructs an object graph in memory must flush in dependency order. It
+>   also still owes its own order-total consistency check (Phase 2 D13) and
+>   must delete `GET /money/example`.
+> - **Phase 5** gets two of its non-faults as legal schema values: `funds_held`
+>   and `release_requested` are ordinary `DISBURSEMENT_STATES` members, so
+>   seeding them is not seeding a fault. And there is **no conversion `fee` to
+>   make incorrect** — `CHECK (fee_amount IS NULL OR fee_amount <> 0)` refuses
+>   a zero one — so the FX fault must be an incorrect rate or settlement value.
+> - **Phase 6** normalises marketplace records into these same tables. One
+>   table per record type holds **both** sources, told apart only by their
+>   payload's `source`, and `UNIQUE (tenant_id, external_id)` is what makes its
+>   re-run idempotent.
+> - **Phase 7** inherits three rules it cannot read off the schema: **never
+>   overwrite a populated capture breakdown with `NULL`** on a later read, since
+>   a capture loses its whole `seller_receivable_breakdown` while `PENDING`;
+>   `raw_payload.endpoint` exists because **field availability depends on the
+>   read path**; and `disbursement.released_at` stays `NULL`, never an ingestion
+>   time. Changed payloads are retained as additional rows, which is the
+>   mechanism for its "raw payloads are retained and diffed against the model".
+> - **Phase 10** consumes `signed()` and `position()` from
+>   `reckonai/engine/ledger.py` — the one place a ledger direction becomes a
+>   sign. The platform fee reversal is **automatic**, so the expected position
+>   assumes it happened rather than instructing it, and a capture fee is never
+>   defaulted to zero because `NULL` makes "unknown" representable.
+> - **Phase 11** owns matching and adds the cross-source link this phase
+>   deliberately omits — there is no `matched_*_id` column anywhere, pinned by
+>   test. `reconciliation_state` is where its non-error outcomes land, and
+>   **`disbursement_completed` needs no `release_requested` before it**, because
+>   PayPal auto-releases after 28 days.
+> - **Phase 12** cites records by these ids, and every citation resolves through
+>   `raw_payload`. `refund.capture_linkage_href` is what lets an investigation
+>   state that a refund-to-capture link was derived.
+>
+> **Four findings worth not relearning.**
+>
+> **A gate whose own setup performs the action it checks cannot fail.** The
+> first model-import gate called `importlib.import_module` and then asserted
+> `hasattr(package, module)` — but importing a submodule *binds* it on its
+> parent, so the assertion passed because the test had just done the thing it
+> was checking for, and the same import repaired `Base.metadata` for every
+> later assertion. It passed with the import commented out. It now runs a
+> subprocess importing only `reckonai.models`, which is what `env.py` does.
+>
+> **Flush order between unrelated mappers is not derived from foreign keys.**
+> With no `relationship()` declared anywhere, SQLAlchemy's unit of work has no
+> mapper dependency to sort on and inserted a seller before its tenant, despite
+> `sorted_tables` ordering them correctly. Phase 2 had solved this per-fixture
+> with flushes and never wrote down why.
+>
+> **A narrow checked column rejects an over-long value before its `CHECK`.**
+> `transaction_type` is `VARCHAR(6)`; probing its `CHECK` with an 8-character
+> value raises `DataError` from the width and **would keep passing if the
+> `CHECK` were dropped**.
+>
+> **A generated constraint name reached 62 of Postgres's 63 characters.**
+> `uq_raw_payload_tenant_id_source_source_record_type_body_sha256`. One more
+> column in that unique constraint and the name truncates silently, which is
+> the failure where `downgrade()` cannot drop what `upgrade()` created.
 
 **Goal:** The event side of the model, shaped by Phase 0's findings.
 

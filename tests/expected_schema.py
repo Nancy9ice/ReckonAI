@@ -38,6 +38,7 @@ EVENT_TABLES: tuple[str, ...] = (
     "platform_fee",
     "raw_payload",
     "refund",
+    "seller_ledger_entry",
 )
 
 #: Every table in `Base.metadata`. Excludes `alembic_version`, which Alembic

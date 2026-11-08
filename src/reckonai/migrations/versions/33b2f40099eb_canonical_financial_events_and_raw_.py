@@ -1,8 +1,8 @@
 """canonical financial events and raw payload store
 
-Revision ID: bc67de04d868
+Revision ID: 33b2f40099eb
 Revises: b5f8485e802e
-Create Date: 2026-11-08 08:57:51.143516
+Create Date: 2026-11-08 09:00:07.975997
 
 """
 
@@ -13,7 +13,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = 'bc67de04d868'
+revision: str = '33b2f40099eb'
 down_revision: str | Sequence[str] | None = 'b5f8485e802e'
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
@@ -73,6 +73,38 @@ def upgrade() -> None:
     op.create_index(op.f('ix_payment_reconciliation_state'), 'payment', ['reconciliation_state'], unique=False)
     op.create_index(op.f('ix_payment_seller_id'), 'payment', ['seller_id'], unique=False)
     op.create_index(op.f('ix_payment_tenant_id'), 'payment', ['tenant_id'], unique=False)
+    op.create_table('seller_ledger_entry',
+    sa.Column('id', sa.Uuid(), nullable=False),
+    sa.Column('seller_id', sa.Uuid(), nullable=False),
+    sa.Column('order_id', sa.Uuid(), nullable=True),
+    sa.Column('entry_category', sa.String(length=32), nullable=False),
+    sa.Column('transaction_type', sa.String(length=6), nullable=False),
+    sa.Column('amount_amount', sa.Numeric(precision=20, scale=6), nullable=False),
+    sa.Column('amount_currency', sa.String(length=3), nullable=False),
+    sa.Column('occurred_at', sa.DateTime(timezone=True), nullable=False),
+    sa.Column('external_ref', sa.String(length=128), nullable=False),
+    sa.Column('raw_payload_id', sa.Uuid(), nullable=False),
+    sa.Column('reconciliation_state', sa.String(length=32), server_default='ingested', nullable=False),
+    sa.Column('tenant_id', sa.Uuid(), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.CheckConstraint("entry_category IN ('sale', 'commission', 'commission_reversal', 'refund', 'dispute', 'adjustment', 'fee')", name=op.f('ck_seller_ledger_entry_entry_category')),
+    sa.CheckConstraint("reconciliation_state IN ('ingested', 'matched', 'unmatched', 'delayed', 'awaiting_evidence')", name=op.f('ck_seller_ledger_entry_reconciliation_state')),
+    sa.CheckConstraint("transaction_type IN ('debit', 'credit')", name=op.f('ck_seller_ledger_entry_transaction_type')),
+    sa.CheckConstraint('amount_amount > 0', name=op.f('ck_seller_ledger_entry_amount_positive')),
+    sa.ForeignKeyConstraint(['tenant_id', 'order_id'], ['order.tenant_id', 'order.id'], name=op.f('fk_seller_ledger_entry_tenant_id_order_id_order'), ondelete='RESTRICT'),
+    sa.ForeignKeyConstraint(['tenant_id', 'raw_payload_id'], ['raw_payload.tenant_id', 'raw_payload.id'], name=op.f('fk_seller_ledger_entry_tenant_id_raw_payload_id_raw_payload'), ondelete='RESTRICT'),
+    sa.ForeignKeyConstraint(['tenant_id', 'seller_id'], ['seller.tenant_id', 'seller.id'], name=op.f('fk_seller_ledger_entry_tenant_id_seller_id_seller'), ondelete='RESTRICT'),
+    sa.ForeignKeyConstraint(['tenant_id'], ['tenant.id'], name=op.f('fk_seller_ledger_entry_tenant_id_tenant'), ondelete='RESTRICT'),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_seller_ledger_entry')),
+    sa.UniqueConstraint('tenant_id', 'external_ref', name=op.f('uq_seller_ledger_entry_tenant_id_external_ref')),
+    sa.UniqueConstraint('tenant_id', 'id', name=op.f('uq_seller_ledger_entry_tenant_id_id'))
+    )
+    op.create_index(op.f('ix_seller_ledger_entry_entry_category'), 'seller_ledger_entry', ['entry_category'], unique=False)
+    op.create_index(op.f('ix_seller_ledger_entry_order_id'), 'seller_ledger_entry', ['order_id'], unique=False)
+    op.create_index(op.f('ix_seller_ledger_entry_raw_payload_id'), 'seller_ledger_entry', ['raw_payload_id'], unique=False)
+    op.create_index(op.f('ix_seller_ledger_entry_reconciliation_state'), 'seller_ledger_entry', ['reconciliation_state'], unique=False)
+    op.create_index(op.f('ix_seller_ledger_entry_seller_id'), 'seller_ledger_entry', ['seller_id'], unique=False)
+    op.create_index(op.f('ix_seller_ledger_entry_tenant_id'), 'seller_ledger_entry', ['tenant_id'], unique=False)
     op.create_table('capture',
     sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('external_id', sa.String(length=128), nullable=False),
@@ -347,6 +379,13 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_capture_payment_id'), table_name='capture')
     op.drop_index(op.f('ix_capture_disbursement_state'), table_name='capture')
     op.drop_table('capture')
+    op.drop_index(op.f('ix_seller_ledger_entry_tenant_id'), table_name='seller_ledger_entry')
+    op.drop_index(op.f('ix_seller_ledger_entry_seller_id'), table_name='seller_ledger_entry')
+    op.drop_index(op.f('ix_seller_ledger_entry_reconciliation_state'), table_name='seller_ledger_entry')
+    op.drop_index(op.f('ix_seller_ledger_entry_raw_payload_id'), table_name='seller_ledger_entry')
+    op.drop_index(op.f('ix_seller_ledger_entry_order_id'), table_name='seller_ledger_entry')
+    op.drop_index(op.f('ix_seller_ledger_entry_entry_category'), table_name='seller_ledger_entry')
+    op.drop_table('seller_ledger_entry')
     op.drop_index(op.f('ix_payment_tenant_id'), table_name='payment')
     op.drop_index(op.f('ix_payment_seller_id'), table_name='payment')
     op.drop_index(op.f('ix_payment_reconciliation_state'), table_name='payment')

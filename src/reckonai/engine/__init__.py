@@ -23,13 +23,22 @@ This is also why the AI agent can safely call this code as a tool
 (specs/tech-stack.md section 5): the agent cannot produce a number the engine
 would not produce, because it is the same function.
 
-Phase 2 establishes the package with commission-rule resolution. Phase 10 adds
-expected entitlement, proportional refund allocation, commission adjustment and
-the multi-currency position.
+Phase 2 establishes the package with commission-rule resolution. Phase 3 adds
+`signed` and `position`, the one place a ledger direction becomes a sign - see
+`ledger.py`. Phase 10 adds expected entitlement, proportional refund
+allocation and commission adjustment.
 """
 
 from __future__ import annotations
 
+from .ledger import (
+    CREDIT,
+    DEBIT,
+    LedgerEntry,
+    UnknownTransactionType,
+    position,
+    signed,
+)
 from .rules import (
     CommissionRuleAmbiguity,
     CommissionRuleLike,
@@ -39,9 +48,15 @@ from .rules import (
 )
 
 __all__ = [
+    "CREDIT",
+    "DEBIT",
     "CommissionRuleAmbiguity",
     "CommissionRuleLike",
     "EngineError",
+    "LedgerEntry",
     "NoApplicableCommissionRule",
+    "UnknownTransactionType",
+    "position",
     "resolve_commission_rule",
+    "signed",
 ]

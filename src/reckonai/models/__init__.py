@@ -38,6 +38,7 @@ from reckonai.models.disbursements import Disbursement
 from reckonai.models.disputes import Dispute
 from reckonai.models.events import Capture, Payment, Refund
 from reckonai.models.fees import PlatformFee
+from reckonai.models.ledger import SellerLedgerEntry
 from reckonai.models.lifecycle import (
     DISBURSEMENT_STATES,
     LEDGER_ENTRY_CATEGORIES,
@@ -77,6 +78,7 @@ __all__ = [
     "RawPayloadMixin",
     "Refund",
     "Seller",
+    "SellerLedgerEntry",
     "TenantMixin",
     "Tenant",
     "TimestampMixin",

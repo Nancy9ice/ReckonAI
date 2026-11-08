@@ -101,6 +101,25 @@ class RawPayload(TenantMixin, TimestampMixin, Base):
         String(SHA256_HEX_LENGTH), nullable=False
     )
 
+    #: Which `connector_mapping` version turned this payload into canonical
+    #: records. NULL where no mapping was involved - a payload written by the
+    #: seed builder, or a PayPal payload, which is normalized by a provider
+    #: adapter rather than by a tenant's mapping.
+    #:
+    #: **This is the single place a canonical record's mapping version is
+    #: recorded**, and the reason it is here rather than on every financial
+    #: table is the same reason `source` is here: one place for one fact.
+    #: specs/tech-stack.md section 9.1 requires every canonical record to carry
+    #: the version that produced it, so a historical run stays re-derivable
+    #: (specs/mission.md P7) - and every financial record already links to its
+    #: payload `NOT NULL`, so the pointer is reachable from all of them through
+    #: a join that is guaranteed to resolve. Nine nullable integer columns kept
+    #: in step by convention would be nine chances to disagree.
+    #:
+    #: Recorded as `specs/2026-11-08-block-a-marketplace-connector/
+    #: requirements.md` D13, with the rejected alternative.
+    mapping_version: Mapped[int | None] = mapped_column()
+
     __table_args__ = (
         # Composite-foreign-key target, so a financial record's link carries
         # `tenant_id` and a cross-tenant reference is unwritable.

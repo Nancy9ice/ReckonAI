@@ -38,9 +38,27 @@ SUPPORTING_MODULES = frozenset({"base", "lifecycle", "payloads", "mixins"})
 #: at. Phase 2 exempted it by name and nothing else.
 UNSCOPED_TABLES = frozenset({"tenant"})
 
-#: Tables that hold no financial record and so carry no `raw_payload_id`: the
-#: catalogue, plus the payload store itself.
-TABLES_WITHOUT_EVIDENCE = frozenset(CATALOGUE_TABLES) | {"raw_payload"}
+#: Tables that hold no financial record: the catalogue, the payload store
+#: itself, and Block A's two connector tables.
+#:
+#: **Derived by exclusion rather than listed**, so a new financial table is
+#: covered by this gate automatically. That is worth more than the precision of
+#: an explicit list: a table added to a hand-written `FINANCIAL_TABLES` tuple
+#: can be forgotten, and the failure is a money table with no evidence link
+#: that no gate complains about.
+#:
+#: The two connector tables are excluded for different reasons, both worth
+#: stating so neither looks like an oversight. `connector_mapping` holds a
+#: configuration document - no amount, no provider record, nothing to be
+#: evidence *of*. `quarantined_record` does carry a `raw_payload_id`, and must,
+#: but it is a record of a **failure to normalize** rather than a financial
+#: record: it has no amount and no `reconciliation_state`, because a record
+#: that could not be mapped has no position in reconciliation to hold.
+TABLES_WITHOUT_EVIDENCE = (
+    frozenset(CATALOGUE_TABLES)
+    | {"raw_payload"}
+    | {"connector_mapping", "quarantined_record"}
+)
 
 
 def _module_names() -> list[str]:

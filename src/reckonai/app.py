@@ -1,11 +1,17 @@
-"""The FastAPI application: liveness, readiness, and the money serialization probe.
+"""The FastAPI application: liveness and readiness.
 
-Roadmap Phase 1 delivered the first two. Phase 2 added the third, which is the
-smallest thing that proves `Money` serializes as JSON strings through the real
-application rather than only in a unit test (specs/tech-stack.md section 2).
+Roadmap Phase 1 delivered both. Phase 2 added a third route, `GET
+/money/example`, which was the smallest thing that proved `Money` serializes as
+JSON strings through the real application rather than only in a unit test
+(specs/tech-stack.md section 2).
 
-No financial endpoint exists here yet. Phase 4 adds the simulated marketplace
-API and Phase 14 the dashboard, as a separate Render static site.
+**That probe was removed in Block A**, as Phase 4 required: it was a probe and
+not product, and leaving it meant a deployed URL answering `104.05` for no
+reason. The property it proved is now asserted against the simulated
+marketplace's real endpoints, which carry money in every response - see
+`tests/conftest.py`'s `decode_strictly` and `tests/test_sim_api.py`.
+
+Phase 14 adds the dashboard, as a separate Render static site.
 """
 
 from __future__ import annotations
@@ -14,17 +20,15 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
 from sqlalchemy.exc import SQLAlchemyError
 
 from reckonai import __version__
 from reckonai.config import get_settings
 from reckonai.db import check_connection, create_app_engine
 from reckonai.logging import configure_logging, event
-from reckonai.money import Money, supported_currencies
-from reckonai.schemas import MoneyField
+from reckonai.sim import router as sim_router
 
 # This component's share of the connection budget. The cap it is drawn against
 # is `reckonai.db.USABLE_CONNECTIONS`; see that module and the phase's
@@ -73,6 +77,15 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# The simulated marketplace, under `/sim`
+# (specs/2026-11-08-block-a-marketplace-connector/requirements.md D1).
+#
+# **Mounted in this application rather than deployed as a second service**, so
+# there is one process, one deploy and one demo URL. It is the system under
+# integration, not part of the product: the connector reads it over HTTP as it
+# would any third party, pointed at `MARKETPLACE_BASE_URL`.
+app.include_router(sim_router, prefix="/sim")
+
 
 @app.get("/")
 def index() -> dict[str, str]:
@@ -92,40 +105,11 @@ def index() -> dict[str, str]:
         "docs": "/docs",
         "health": "/health",
         "readiness": "/health/ready",
-        "money_example": "/money/example",
+        # The simulated marketplace's own index, so the deployed URL leads
+        # somewhere rather than requiring the paths to be known in advance.
+        # The index itself reads no database - see `sim.router`.
+        "marketplace": "/sim/marketplace",
     }
-
-
-class MoneyExample(BaseModel):
-    """The response model for the serialization probe below."""
-
-    amount: MoneyField
-    note: str
-
-
-@app.get("/money/example", response_model=MoneyExample)
-def money_example(currency: str = "USD") -> MoneyExample:
-    """Serialize one `Money`, so the JSON shape is exercised end to end.
-
-    **This is a probe, not product.** It exists because the criterion in
-    specs/roadmap.md Phase 2 - "amounts serialize to JSON as strings" - is about
-    what leaves the application, and a unit test on the Pydantic model cannot
-    prove FastAPI's own response encoding does not undo it. Phase 4 adds real
-    endpoints and this route is removed then.
-
-    The amount is deliberately over-precise, so the response demonstrates the
-    rounding boundary rather than a value that was already quantized.
-    """
-    if currency.upper() not in supported_currencies():
-        raise HTTPException(
-            status_code=404,
-            detail=f"{currency} is not in the currency registry",
-        )
-
-    return MoneyExample(
-        amount=Money("104.04507010764778050", currency),
-        note="amount is a JSON string, quantized to the currency's exponent",
-    )
 
 
 @app.get("/health")

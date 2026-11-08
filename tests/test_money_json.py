@@ -5,60 +5,22 @@ section 2's reason for it - a JSON number is an IEEE-754 double, so a bare
 `160.00` on the wire is parsed by a browser into a binary value that cannot
 represent some decimals exactly.
 
-**The load-bearing test here is `test_no_amount_crosses_as_a_json_number`.**
-Everything else checks the shape; that one checks the property, and it is the
-only one of them that could fail while the others pass.
+**This module now covers the serializer only.** The end-to-end half - that
+FastAPI's own response encoding does not undo the string form - lived on `GET
+/money/example`, which Block A removed as Phase 4 required. The decoder hook
+that made it a real check moved to `tests/strict_json.py`, and the property is
+asserted against the simulated marketplace's endpoints in
+`tests/test_sim_api.py`, which carry money in nearly every response.
 """
 
 from __future__ import annotations
 
-import json
 from decimal import Decimal
-from typing import Any, NoReturn
 
 import pytest
-from fastapi.testclient import TestClient
 
-from reckonai.app import app
 from reckonai.money import Money, supported_currencies
 from reckonai.schemas import MoneyOut
-
-
-@pytest.fixture
-def client() -> TestClient:
-    """A client that does not run the lifespan, so no database is needed.
-
-    `/money/example` touches nothing but the serializer. Entering the lifespan
-    would build an engine and make this suite require a database for no reason,
-    which would contradict the point of testing a pure boundary.
-    """
-    return TestClient(app)
-
-
-def _reject_json_number(raw: str) -> NoReturn:
-    """A `json.loads` hook that fails if the decoder meets a decimal number.
-
-    This is the mechanism behind the main test, and it is worth stating plainly
-    why the obvious alternative does not work.
-
-    Asserting `isinstance(body["amount"], str)` proves nothing: by the time
-    that assertion runs, `json.loads` has *already* turned a bare `160.00` into
-    a binary number, and the assertion would be inspecting the wrong object -
-    it would fail, but only by luck of type, and it would pass for an integer
-    amount such as `160` which `json` parses with `parse_int`.
-
-    Hooking the decoder catches the value as it is decoded, before anything can
-    look at it.
-    """
-    raise AssertionError(
-        f"a monetary value crossed JSON as a number, not a string: {raw!r}"
-    )
-
-
-def _decode_strictly(body: bytes) -> Any:
-    """Decode a response body, failing on any non-integer JSON number."""
-    return json.loads(body, parse_float=_reject_json_number)
-
 
 # ---------------------------------------------------------------------------
 # MoneyOut
@@ -104,66 +66,6 @@ def test_money_out_rejects_an_unknown_field() -> None:
     being dropped on the floor."""
     with pytest.raises(ValueError):
         MoneyOut(amount="1.00", currency="USD", value="1.00")  # type: ignore[call-arg]
-
-
-# ---------------------------------------------------------------------------
-# The annotated MoneyField, through the real application
-# ---------------------------------------------------------------------------
-
-
-def test_the_response_shape_is_fixed(client: TestClient) -> None:
-    """Phase 14 formats from this shape, so it is asserted rather than assumed."""
-    response = client.get("/money/example")
-
-    assert response.status_code == 200
-    assert response.json()["amount"] == {"amount": "104.05", "currency": "USD"}
-
-
-def test_no_amount_crosses_as_a_json_number(client: TestClient) -> None:
-    """The criterion itself, enforced by refusing to decode a JSON number.
-
-    If FastAPI, Pydantic or a future encoder change ever emitted the amount as
-    a bare number, `_reject_json_number` fires during decoding and this fails.
-    """
-    response = client.get("/money/example")
-
-    decoded = _decode_strictly(response.content)
-
-    assert decoded["amount"]["amount"] == "104.05"
-
-
-@pytest.mark.parametrize("currency", supported_currencies())
-def test_no_amount_crosses_as_a_json_number_in_any_currency(
-    client: TestClient, currency: str
-) -> None:
-    """Including JPY, whose quantized amount is an integer.
-
-    This is the case the `isinstance(str)` approach would wave through: `1699`
-    is a legal JSON integer, so a broken serializer emitting it as a number
-    would be parsed by `parse_int` and never reach `parse_float`. The assertion
-    on the decoded value is what catches it.
-    """
-    response = client.get("/money/example", params={"currency": currency})
-
-    decoded = _decode_strictly(response.content)
-    amount = decoded["amount"]["amount"]
-
-    assert isinstance(amount, str), f"{currency} amount decoded as {type(amount)}"
-    assert decoded["amount"]["currency"] == currency
-
-
-def test_the_probe_rejects_a_currency_outside_the_registry(
-    client: TestClient,
-) -> None:
-    response = client.get("/money/example", params={"currency": "XYZ"})
-
-    assert response.status_code == 404
-    assert "not in the currency registry" in response.json()["detail"]
-
-
-def test_the_service_index_lists_the_probe(client: TestClient) -> None:
-    """So the route is discoverable rather than only known to this test."""
-    assert client.get("/").json()["money_example"] == "/money/example"
 
 
 # ---------------------------------------------------------------------------

@@ -34,6 +34,18 @@ rediscovered:
     wrongly that nothing was granted - which is why `verify` exists and reads
     the former.
 
+**Onboard a second seller in a private window.** Observed 2026-11-08: the
+first onboarding ran in a clean browser and completed; the second, attempted
+while already signed in as the first seller, dead-ended at
+`Cannot GET /unifiedonboarding/after-login` and created nothing - the
+tracking-id lookup returned `404 RESOURCE_NOT_FOUND_ERROR`. Retried in a
+private window, the same referral body completed normally.
+
+That is a different failure from section 8.4's `Cannot GET
+/unifiedonboarding/entry`, which came from requesting `EXPRESS_CHECKOUT`
+instead of `PPCP`. Same shape of error, different cause, and both cost a
+single-use token to discover - so: one seller per clean browser session.
+
 This is a flat disposable script, like `probe_paypal.py` beside it, per
 `specs/2026-11-05-paypal-field-discovery/requirements.md` section 4 and D2. It
 uses `httpx` rather than the `httpx2` that tech-stack section 1 locks, because

@@ -1,8 +1,8 @@
 """canonical financial events and raw payload store
 
-Revision ID: 01d49fe46afc
+Revision ID: 1e2e3b57f220
 Revises: b5f8485e802e
-Create Date: 2026-11-08 08:47:12.169934
+Create Date: 2026-11-08 08:52:50.098708
 
 """
 
@@ -13,7 +13,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = '01d49fe46afc'
+revision: str = '1e2e3b57f220'
 down_revision: str | Sequence[str] | None = 'b5f8485e802e'
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
@@ -118,6 +118,84 @@ def upgrade() -> None:
     op.create_index(op.f('ix_capture_reconciliation_state'), 'capture', ['reconciliation_state'], unique=False)
     op.create_index(op.f('ix_capture_seller_id'), 'capture', ['seller_id'], unique=False)
     op.create_index(op.f('ix_capture_tenant_id'), 'capture', ['tenant_id'], unique=False)
+    op.create_table('dispute',
+    sa.Column('id', sa.Uuid(), nullable=False),
+    sa.Column('external_id', sa.String(length=128), nullable=False),
+    sa.Column('capture_id', sa.Uuid(), nullable=True),
+    sa.Column('buyer_transaction_id', sa.String(length=128), nullable=True),
+    sa.Column('seller_id', sa.Uuid(), nullable=True),
+    sa.Column('amount_amount', sa.Numeric(precision=20, scale=6), nullable=True),
+    sa.Column('amount_currency', sa.String(length=3), nullable=True),
+    sa.Column('status', sa.String(length=48), nullable=True),
+    sa.Column('lifecycle_stage', sa.String(length=48), nullable=True),
+    sa.Column('dispute_state', sa.String(length=48), nullable=True),
+    sa.Column('reason', sa.String(length=64), nullable=True),
+    sa.Column('channel', sa.String(length=32), nullable=True),
+    sa.Column('outcome', sa.String(length=48), nullable=True),
+    sa.Column('seller_response_due_date', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('occurred_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('raw_payload_id', sa.Uuid(), nullable=False),
+    sa.Column('reconciliation_state', sa.String(length=32), server_default='ingested', nullable=False),
+    sa.Column('tenant_id', sa.Uuid(), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.CheckConstraint("reconciliation_state IN ('ingested', 'matched', 'unmatched', 'delayed', 'awaiting_evidence')", name=op.f('ck_dispute_reconciliation_state')),
+    sa.CheckConstraint('(amount_amount IS NULL) = (amount_currency IS NULL)', name=op.f('ck_dispute_amount_pair')),
+    sa.ForeignKeyConstraint(['tenant_id', 'capture_id'], ['capture.tenant_id', 'capture.id'], name=op.f('fk_dispute_tenant_id_capture_id_capture'), ondelete='RESTRICT'),
+    sa.ForeignKeyConstraint(['tenant_id', 'raw_payload_id'], ['raw_payload.tenant_id', 'raw_payload.id'], name=op.f('fk_dispute_tenant_id_raw_payload_id_raw_payload'), ondelete='RESTRICT'),
+    sa.ForeignKeyConstraint(['tenant_id', 'seller_id'], ['seller.tenant_id', 'seller.id'], name=op.f('fk_dispute_tenant_id_seller_id_seller'), ondelete='RESTRICT'),
+    sa.ForeignKeyConstraint(['tenant_id'], ['tenant.id'], name=op.f('fk_dispute_tenant_id_tenant'), ondelete='RESTRICT'),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_dispute')),
+    sa.UniqueConstraint('tenant_id', 'external_id', name=op.f('uq_dispute_tenant_id_external_id')),
+    sa.UniqueConstraint('tenant_id', 'id', name=op.f('uq_dispute_tenant_id_id'))
+    )
+    op.create_index(op.f('ix_dispute_buyer_transaction_id'), 'dispute', ['buyer_transaction_id'], unique=False)
+    op.create_index(op.f('ix_dispute_capture_id'), 'dispute', ['capture_id'], unique=False)
+    op.create_index(op.f('ix_dispute_raw_payload_id'), 'dispute', ['raw_payload_id'], unique=False)
+    op.create_index(op.f('ix_dispute_reconciliation_state'), 'dispute', ['reconciliation_state'], unique=False)
+    op.create_index(op.f('ix_dispute_seller_id'), 'dispute', ['seller_id'], unique=False)
+    op.create_index(op.f('ix_dispute_tenant_id'), 'dispute', ['tenant_id'], unique=False)
+    op.create_table('refund',
+    sa.Column('id', sa.Uuid(), nullable=False),
+    sa.Column('external_id', sa.String(length=128), nullable=False),
+    sa.Column('capture_id', sa.Uuid(), nullable=True),
+    sa.Column('capture_linkage_is_derived', sa.Boolean(), nullable=False),
+    sa.Column('capture_linkage_href', sa.String(length=512), nullable=True),
+    sa.Column('seller_id', sa.Uuid(), nullable=True),
+    sa.Column('amount_amount', sa.Numeric(precision=20, scale=6), nullable=False),
+    sa.Column('amount_currency', sa.String(length=3), nullable=False),
+    sa.Column('gross_amount_amount', sa.Numeric(precision=20, scale=6), nullable=True),
+    sa.Column('gross_amount_currency', sa.String(length=3), nullable=True),
+    sa.Column('net_amount_amount', sa.Numeric(precision=20, scale=6), nullable=True),
+    sa.Column('net_amount_currency', sa.String(length=3), nullable=True),
+    sa.Column('paypal_fee_amount', sa.Numeric(precision=20, scale=6), nullable=True),
+    sa.Column('paypal_fee_currency', sa.String(length=3), nullable=True),
+    sa.Column('total_refunded_amount_amount', sa.Numeric(precision=20, scale=6), nullable=True),
+    sa.Column('total_refunded_amount_currency', sa.String(length=3), nullable=True),
+    sa.Column('status', sa.String(length=32), nullable=False),
+    sa.Column('occurred_at', sa.DateTime(timezone=True), nullable=False),
+    sa.Column('raw_payload_id', sa.Uuid(), nullable=False),
+    sa.Column('reconciliation_state', sa.String(length=32), server_default='ingested', nullable=False),
+    sa.Column('tenant_id', sa.Uuid(), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.CheckConstraint("reconciliation_state IN ('ingested', 'matched', 'unmatched', 'delayed', 'awaiting_evidence')", name=op.f('ck_refund_reconciliation_state')),
+    sa.CheckConstraint('(gross_amount_amount IS NULL) = (gross_amount_currency IS NULL)', name=op.f('ck_refund_gross_amount_pair')),
+    sa.CheckConstraint('(net_amount_amount IS NULL) = (net_amount_currency IS NULL)', name=op.f('ck_refund_net_amount_pair')),
+    sa.CheckConstraint('(paypal_fee_amount IS NULL) = (paypal_fee_currency IS NULL)', name=op.f('ck_refund_paypal_fee_pair')),
+    sa.CheckConstraint('(total_refunded_amount_amount IS NULL) = (total_refunded_amount_currency IS NULL)', name=op.f('ck_refund_total_refunded_amount_pair')),
+    sa.ForeignKeyConstraint(['tenant_id', 'capture_id'], ['capture.tenant_id', 'capture.id'], name=op.f('fk_refund_tenant_id_capture_id_capture'), ondelete='RESTRICT'),
+    sa.ForeignKeyConstraint(['tenant_id', 'raw_payload_id'], ['raw_payload.tenant_id', 'raw_payload.id'], name=op.f('fk_refund_tenant_id_raw_payload_id_raw_payload'), ondelete='RESTRICT'),
+    sa.ForeignKeyConstraint(['tenant_id', 'seller_id'], ['seller.tenant_id', 'seller.id'], name=op.f('fk_refund_tenant_id_seller_id_seller'), ondelete='RESTRICT'),
+    sa.ForeignKeyConstraint(['tenant_id'], ['tenant.id'], name=op.f('fk_refund_tenant_id_tenant'), ondelete='RESTRICT'),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_refund')),
+    sa.UniqueConstraint('tenant_id', 'external_id', name=op.f('uq_refund_tenant_id_external_id')),
+    sa.UniqueConstraint('tenant_id', 'id', name=op.f('uq_refund_tenant_id_id'))
+    )
+    op.create_index(op.f('ix_refund_capture_id'), 'refund', ['capture_id'], unique=False)
+    op.create_index(op.f('ix_refund_raw_payload_id'), 'refund', ['raw_payload_id'], unique=False)
+    op.create_index(op.f('ix_refund_reconciliation_state'), 'refund', ['reconciliation_state'], unique=False)
+    op.create_index(op.f('ix_refund_seller_id'), 'refund', ['seller_id'], unique=False)
+    op.create_index(op.f('ix_refund_tenant_id'), 'refund', ['tenant_id'], unique=False)
     # ### end Alembic commands ###
 
 
@@ -128,6 +206,19 @@ def downgrade() -> None:
     reversed is one that was never tested against a copy of production.
     """
     # ### commands auto generated by Alembic - please adjust! ###
+    op.drop_index(op.f('ix_refund_tenant_id'), table_name='refund')
+    op.drop_index(op.f('ix_refund_seller_id'), table_name='refund')
+    op.drop_index(op.f('ix_refund_reconciliation_state'), table_name='refund')
+    op.drop_index(op.f('ix_refund_raw_payload_id'), table_name='refund')
+    op.drop_index(op.f('ix_refund_capture_id'), table_name='refund')
+    op.drop_table('refund')
+    op.drop_index(op.f('ix_dispute_tenant_id'), table_name='dispute')
+    op.drop_index(op.f('ix_dispute_seller_id'), table_name='dispute')
+    op.drop_index(op.f('ix_dispute_reconciliation_state'), table_name='dispute')
+    op.drop_index(op.f('ix_dispute_raw_payload_id'), table_name='dispute')
+    op.drop_index(op.f('ix_dispute_capture_id'), table_name='dispute')
+    op.drop_index(op.f('ix_dispute_buyer_transaction_id'), table_name='dispute')
+    op.drop_table('dispute')
     op.drop_index(op.f('ix_capture_tenant_id'), table_name='capture')
     op.drop_index(op.f('ix_capture_seller_id'), table_name='capture')
     op.drop_index(op.f('ix_capture_reconciliation_state'), table_name='capture')

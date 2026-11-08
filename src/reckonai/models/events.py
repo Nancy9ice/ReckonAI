@@ -260,3 +260,87 @@ class Capture(
             nullable=True,
         ),
     )
+
+
+class Refund(
+    RawPayloadMixin, LifecycleMixin, TenantMixin, TimestampMixin, Base
+):
+    """Money returned to the buyer, and the weakest linkage in the model.
+
+    **PayPal supplies no `capture_id` on a refund.** The only route back is
+    `links[rel=up]`, whose `href` has to be parsed - so the linkage is
+    *derived*, and specs/roadmap.md Phase 3 requires that it be recorded as
+    derived rather than presented as provider evidence. Three columns carry it
+    (requirements.md D11):
+
+      - `capture_id`, **nullable**: an unresolved linkage is a recorded state
+        and a Phase 11 `unmatched`, not a failed insert
+      - `capture_linkage_is_derived`, NOT NULL: the provenance can never be
+        unstated
+      - `capture_linkage_href`, nullable: the evidence it was parsed from, so a
+        Phase 11 exception resting on this linkage can cite what it rests on
+        (specs/mission.md P5)
+
+    **A refund carries `seller_payable_breakdown` where a capture carries
+    `seller_receivable_breakdown`**, so mapping code cannot share a path
+    between the two. The arithmetic identity is the same:
+    `30.00 - 0.00 - 3.00 = 27.00` on the observed fixture, where the 3.00 is
+    the pro-rata platform fee reversal.
+    """
+
+    __tablename__ = "refund"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid4)
+    external_id: Mapped[str] = mapped_column(String(128), nullable=False)
+
+    #: Derived, not provider-supplied. See the class docstring.
+    capture_id: Mapped[uuid.UUID | None] = mapped_column(index=True)
+
+    #: Whether `capture_id` was derived rather than read from a provider field.
+    #: NOT NULL with no default: stating the provenance is not optional, and a
+    #: default would let a caller skip the question.
+    capture_linkage_is_derived: Mapped[bool] = mapped_column(nullable=False)
+
+    #: The `links[rel=up]` href the linkage was parsed out of. The evidence
+    #: behind the derivation, kept because P5 requires a conclusion to cite its
+    #: sources.
+    capture_linkage_href: Mapped[str | None] = mapped_column(String(512))
+
+    seller_id: Mapped[uuid.UUID | None] = mapped_column(index=True)
+
+    amount: Mapped[Money] = money_columns("amount")
+
+    gross_amount: Mapped[Money | None] = money_columns("gross_amount", nullable=True)
+    net_amount: Mapped[Money | None] = money_columns("net_amount", nullable=True)
+
+    #: `0.00` observed - PayPal did not return its own fee on the refund.
+    #: Still nullable rather than defaulted: an observed zero and an absent
+    #: value are different facts (specs/tech-stack.md section 9.6).
+    paypal_fee: Mapped[Money | None] = money_columns("paypal_fee", nullable=True)
+
+    #: What makes partial-refund tracking possible, and therefore what
+    #: specs/mission.md section 6 Scenario 1 is detected against.
+    total_refunded_amount: Mapped[Money | None] = money_columns(
+        "total_refunded_amount", nullable=True
+    )
+
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+
+    occurred_at: Mapped[datetime] = mapped_column(nullable=False)
+
+    __table_args__ = (
+        raw_payload_fk(),
+        _seller_fk(),
+        ForeignKeyConstraint(
+            ["tenant_id", "capture_id"],
+            ["capture.tenant_id", "capture.id"],
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("tenant_id", "external_id"),
+        UniqueConstraint("tenant_id", "id"),
+        money_pair_check("gross_amount"),
+        money_pair_check("net_amount"),
+        money_pair_check("paypal_fee"),
+        money_pair_check("total_refunded_amount"),
+        reconciliation_state_check(),
+    )

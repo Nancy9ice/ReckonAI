@@ -31,8 +31,10 @@ CATALOGUE_TABLES: tuple[str, ...] = (
 #: lands each table.
 EVENT_TABLES: tuple[str, ...] = (
     "capture",
+    "dispute",
     "payment",
     "raw_payload",
+    "refund",
 )
 
 #: Every table in `Base.metadata`. Excludes `alembic_version`, which Alembic

@@ -16,6 +16,49 @@
 
 ---
 
+# 0. MVP scope and limitations
+
+**Read this before the rest of the document.** Sections 2 onward define the
+product; they are written in the aspirational voice of a product definition and
+describe more than the hackathon MVP builds. This section is the authoritative
+statement of what the MVP does and does not do. The decisions, with their
+reasoning, are in `specs/2026-11-08-replan/requirements.md`.
+
+**What the MVP delivers, end to end:** a simulated multi-vendor marketplace API
+with deliberately non-canonical field names, a connector with declarative field
+mapping and a blocking validation gate, PayPal records in the same canonical
+model, a deterministic entitlement engine, classified exceptions, an AI agent
+that investigates each exception and reports ranked causes with cited record
+ids, a prioritised queue with human approve/reject, an operations dashboard, and
+an eval harness that scores detection rate, false positives and root-cause
+accuracy against a seeded fault manifest.
+
+**What it does not do.** Each is a deliberate decision with a reason, not an
+oversight:
+
+| Deferred | Reason |
+|---|---|
+| **Webhook ingestion**, signature verification, and recovery of missed deliveries | Reconciliation is triggered on demand and on a schedule instead. The architectural claim that mattered — one engine over one canonical model, no second code path for live events — holds and is in fact stronger, because the engine is pure functions that know nothing about what invoked them. `specs/mission.md` §4 is amended accordingly |
+| **Live PayPal calls during the reconciliation run** | PayPal records are replayed from captured **sandbox** responses, retained as raw payloads. Sandbox throughout; nothing production is ever called. A replayed response is PayPal's own data, not an estimate, so `mission.md` P3 is intact. This removes three documented live failure modes from a demo: sandbox availability, the reporting APIs' roughly one-day lag, and a `5xx` that is not reliably transient. The capture script is a real client and is run live, once, to open the demo — nothing depends on it succeeding |
+| **LLM-suggested field mapping** | Field mapping is deterministic: exact match, then a curated synonym table, then human review. An unmatched field is mapped by hand. This does **not** affect the investigation agent, which is kept entire — see below |
+| **Seller financial position view** in the dashboard | The investigation detail carries the underpaid-seller story better, with evidence attached. The exception queue, investigation detail, run summary and approve/reject all ship |
+| **Tuned retry backoff** on the job queue | Attempt count, `run_after` and a terminal failed state with the error recorded. The `jobs` table, `FOR UPDATE SKIP LOCKED` claiming, the `processed_events` unique constraint and the scheduled Cron Job all ship |
+| **Platform fee settlement reconciliation** | Unchanged from `mission.md` §7: this is settlement-account reconciliation, and PayPal's partner fee cost detail arrives only as a monthly, SFTP-delivered report for approved partners. Blocked on data we do not ingest. The per-transaction check — the platform fee PayPal recorded against the commission the marketplace's rules specify — is in scope and ships |
+| **Bryntum** | Below the cutline by definition |
+
+**Not reduced, under any pressure.** Every monetary figure comes from the
+deterministic engine and never from a language model; no financial value is ever
+fabricated, estimated or defaulted; nothing moves money without human approval;
+and a valid record is not flagged — delays and incomplete lifecycles are
+first-class states, not errors.
+
+**The AI investigation agent is kept entire**, including ranked candidate
+causes, per-cause cited record ids, confidence values, and the
+`insufficient_evidence` answer when the evidence is not there. It is the
+product's differentiator and was never in scope for reduction.
+
+---
+
 # 0. Running it
 
 Python 3.12, managed with [uv](https://docs.astral.sh/uv/). Docker for the local
@@ -315,7 +358,11 @@ Example workflow:
 
 Historical reconciliation may be initiated manually or through a scheduled reconciliation run.
 
-## 5.2 Event-driven reconciliation
+## 5.2 Event-driven reconciliation — deferred past the MVP
+
+> **Not built in the MVP** (see §0). Kept here as the product design. The MVP
+> triggers reconciliation on demand and on a schedule; there are no webhook
+> endpoints. `specs/mission.md` §4 is amended to match.
 
 Event-driven reconciliation processes new financial events as they occur.
 
@@ -338,6 +385,8 @@ The system must support:
 - Reprocessing when previously unavailable records arrive.
 
 Historical and event-driven reconciliation will use the same reconciliation engine and canonical data model.
+
+This is the load-bearing requirement in this section, and the MVP satisfies it more strongly than a second code path would: the engine is pure functions that know nothing about what invoked them, so adding the event-driven trigger later cannot create a second path. That is why the trigger was the deferrable part.
 
 ## 5.3 Multi-currency reconciliation
 
@@ -688,7 +737,11 @@ The proposed architecture separates data acquisition, financial normalisation, r
 5. Both sources are normalised into the canonical financial model.
 6. The reconciliation engine calculates expected financial positions.
 7. Historical reconciliation results are stored.
-8. New webhook events trigger event-driven reconciliation.
+8. A scheduled, date-windowed run re-reconciles recent activity — completing any
+   record that was incomplete when first read, since PayPal's reporting APIs lag
+   roughly a day, and re-evaluating any exception parked as `awaiting_evidence`.
+   *(In the full design, new webhook events also trigger event-driven
+   reconciliation. Deferred past the MVP — see §0 and §5.2.)*
 9. Exceptions are passed to the AI investigation agent.
 10. Investigation results are presented through the financial operations dashboard.
 
@@ -939,6 +992,8 @@ These are future opportunities, not commitments for the initial implementation.
 **Core problem:** Discrepancies between payment records and marketplace seller financial obligations are difficult to identify and investigate across fragmented systems.
 
 **Proposed solution:** An AI-powered reconciliation agent that connects marketplace financial records with PayPal, performs historical and event-driven reconciliation, supports multi-currency financial comparisons, detects discrepancies and investigates their underlying causes.
+
+*MVP coverage:* all of the above except event-driven reconciliation, which is deferred — the MVP reconciles on demand and on a schedule. See §0.
 
 **Core capabilities:**
 1. Marketplace and PayPal data integration.

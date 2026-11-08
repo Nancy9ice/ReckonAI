@@ -29,6 +29,13 @@ remaining work is 8 days, and the overflow is unchanged.
 handoff below before starting — particularly the three things that bite a seed
 builder.
 
+> **Sequencing superseded 2026-11-08.** Phases 4-15 below are re-sequenced into
+> seven blocks by `specs/2026-11-08-replan/requirements.md`, against a two-day
+> deadline. **Read that document first; it is the session entry point.** Every
+> exit criterion below still binds for every phase the replan keeps, which is
+> why they are left standing here. Where a phase is narrowed, folded or
+> deferred, a note under its heading says so and names the decision.
+
 ---
 
 ## Phase 0 — PayPal sandbox field discovery · 0.5 day · **COMPLETE 2026-11-07**
@@ -444,6 +451,10 @@ Phase 2 (`Money`).
 
 ## Phase 4 — Simulated marketplace API: clean data · 0.5 day
 
+> **Replanned 2026-11-08: this is Block A**, together with Phase 5 (R4) and
+> Phase 6 (R3) — one session, three commits, three spec entries. Phase 4's own
+> scope is unchanged. Start here.
+
 **Goal:** A marketplace to integrate against, with correct records only.
 
 Endpoints for sellers, orders, order items, commission rules, payments, refunds,
@@ -486,14 +497,19 @@ disbursement so the held-funds states are reachable.
 
 ---
 
-## Phase 5 — Fault injection and webhook emitter · 0.5 day
+## Phase 5 — Fault injection · 0.5 day
 
-**Goal:** The faults the demo detects, and a way to replay events.
+> **Replanned 2026-11-08 (R4, R8):** folded into Block A, and the webhook
+> emitter is dropped with webhook ingestion. The faults, the manifest and the
+> coexistence of clean and faulty records are unchanged — the manifest is still
+> Phase 15's ground truth. Clean and faulty records share one seed builder,
+> which is also the only way to be confident the clean baseline is clean.
+
+**Goal:** The faults the demo detects.
 
 Seed the three [[mission]] §6 scenarios — refund missing from ledger, wrong
 commission, FX discrepancy — plus a duplicate ledger entry, a delayed event, and
-a disbursement that disagrees with its obligation. Add an endpoint that emits
-marketplace webhooks, including deliberate duplicate deliveries.
+a disbursement that disagrees with its obligation.
 
 **Two faults must not be seeded, because they are not faults.** Funds held under
 `DELAYED` and a release not yet requested are healthy intermediate states, and
@@ -507,13 +523,30 @@ contradict one.
 - A manifest file records every seeded fault and its expected classification —
   this becomes the eval ground truth in Phase 15.
 - Clean records and faulty records coexist in the same dataset.
-- The emitter can fire the same event twice on demand.
+- ~~The emitter can fire the same event twice on demand.~~ Dropped with the
+  emitter (R8). The property it proved — the same event processed twice has one
+  financial effect — is Phase 8's `processed_events` constraint, proven by test.
 
 **Depends on:** Phase 4.
 
 ---
 
 ## Phase 6 — Marketplace connector and normalization · 0.5 day
+
+> **Replanned 2026-11-08 (R3):** runs as a sequenced sub-block of Block A rather
+> than a separate phase — two commits and two spec entries, one session.
+> **Nothing is removed**, including the [[tech-stack]] §9.4 validation gate and
+> all three exit criteria below. We author both sides of this boundary, so the
+> deliberately different field names are chosen in the same pass that writes the
+> mapping consuming them.
+>
+> *The risk that creates, named so it is guarded rather than discovered:*
+> controlling both sides makes a trivially-matching mapping easy to write, which
+> would mean mapping was never exercised. Guard: field names stay deliberately
+> different (`vendor_id`, `order_ref`, `item_total`), plus a check that no
+> canonical field maps from an identically-named source field.
+>
+> The §9.2 LLM mapping pass is cut (R11); passes 1 and 2 and human review stay.
 
 **Goal:** Marketplace records land in the canonical model.
 
@@ -531,6 +564,22 @@ normalization into Phases 2–3 tables with raw payloads retained.
 ---
 
 ## Phase 7 — PayPal ingestion · 0.5 day
+
+> **Replanned 2026-11-08 (R6, R15):** narrowed to a capture script that writes
+> real sandbox responses to fixtures, plus a replay ingester that normalizes
+> them through this same path. Sandbox throughout; nothing production, ever.
+>
+> **Every field rule below still binds**, because they are rules about what a
+> payload contains and a replayed payload is the same payload. [[mission]] P3 is
+> intact: a replayed fixture is PayPal's own response, retained as the raw
+> payload P7 requires anyway — not an estimate. What changes is when the call was
+> made, not who supplied the number.
+>
+> The capture script is a real client subject to every rule here, and is run
+> live on screen to open the demo (R15); the reconciliation run does not depend
+> on it succeeding. That removes three documented live failure modes from a
+> judged run: sandbox availability, the reporting APIs' roughly one-day lag, and
+> the `5xx` that is not reliably transient.
 
 **Goal:** PayPal records land in the same canonical model.
 
@@ -566,13 +615,25 @@ data where Phases 0 and 0b confirmed it exists.
 
 ---
 
-## Phase 8 — Job queue and worker · 0.5 day
+## Phase 8 — Job queue and worker · ~2 hours
+
+> **Replanned 2026-11-08 (R7, R9):** minimised, **not cut.** Two reasons it
+> cannot go: `render.yaml` already declares `reckonai-worker` as a *paid*
+> Starter instance, in a submission that lists Render's purpose as background
+> processing and scheduled reconciliation; and the concurrency note below means
+> SKIP LOCKED correctness is the condition production is already in.
+>
+> Kept whole: `jobs`, SKIP LOCKED claiming, `processed_events`, the Cron Job.
+> Narrowed: retry becomes attempt count, `run_after` and a terminal failed state
+> with the error recorded, rather than a tuned backoff policy. The scheduled run
+> is **date-windowed** and gains a second job — re-evaluating exceptions parked
+> as `awaiting_evidence` (R10), since the reporting APIs lag roughly a day.
 
 **Goal:** The execution substrate from [[tech-stack]] §4.
 
-`jobs` table with `FOR UPDATE SKIP LOCKED` claiming, retry with backoff,
-`processed_events` unique constraint, worker loop, Render Cron Job wired to a
-scheduled run.
+`jobs` table with `FOR UPDATE SKIP LOCKED` claiming, retry, `processed_events`
+unique constraint, worker loop, Render Cron Job wired to a scheduled
+date-windowed run.
 
 **Two workers already run concurrently on every deploy** (observed 2026-11-08,
 Phase 2 Group 9). Render's rolling deploy overlapped the outgoing worker and the
@@ -585,16 +646,49 @@ SKIP LOCKED` has to be right before the first real job type exists.
 **Exit criteria**
 - Two workers running concurrently never claim the same job — proven by test,
   not by inspection.
-- A failing job retries with backoff and lands in a terminal failed state with
-  its error recorded.
-- Inserting the same event id twice raises a constraint violation.
-- The cron job fires a run on the deployed environment.
+- A failing job retries and lands in a terminal failed state with its error
+  recorded.
+- Inserting the same event id twice raises a constraint violation. **This is
+  where the duplicate-delivery property is proven**, now that Phase 9 is
+  deferred — by test, not by a webhook.
+- The cron job fires a date-windowed run on the deployed environment.
+- A record incomplete when first read, and an exception parked as
+  `awaiting_evidence`, are both re-evaluated by a later run (R10).
 
 **Depends on:** Phase 1.
 
 ---
 
-## Phase 9 — Event-driven ingestion · 0.5 day
+## Phase 9 — Event-driven ingestion · **DEFERRED PAST THE MVP 2026-11-08**
+
+> **Deferred by R8**, with [[mission]] §4 amended to match rather than left
+> contradicted. Kept in full below as the design for when it lands.
+>
+> **Why it was the affordable cut.** §4's load-bearing claim is *through the
+> same engine and the same canonical model* — no second code path for live
+> events. That is **stronger** in the MVP, not weaker: the engine is pure
+> functions that know nothing about what invoked them ([[tech-stack]] §6), so a
+> trigger added later cannot create a second path. The trigger was the
+> deferrable part; the architecture it attaches to is already built. None of the
+> three [[mission]] §6 demo scenarios is event-driven — all three are state
+> comparisons over a seeded dataset.
+>
+> **Where each exit criterion went:**
+> 1. Duplicate delivery → Phase 8's `processed_events` constraint, proven by
+>    test rather than by a webhook.
+> 2. Parked and reprocessed → **kept, narrowed** (R10). The case survives
+>    without webhooks in cross-source form: the marketplace holds a refund whose
+>    PayPal record has not appeared yet, because reporting lags roughly a day.
+>    Calling that *missing* is the exact false positive P4 forbids, so it is
+>    classified `awaiting_evidence` and re-evaluated by Phase 8's scheduled run —
+>    the run is the retry. The parking **machinery** is deferred; the
+>    classification is not.
+> 3. Scheduled backfill of a withheld event → gone with webhooks; there is no
+>    missed delivery to recover. The date-windowed run that remains does a
+>    different job (R9).
+>
+> *Limitation to record in the readme:* no webhook ingestion, no signature
+> verification; reconciliation is triggered on demand and on a schedule.
 
 **Goal:** Live events update state through the same path as historical.
 
@@ -685,6 +779,14 @@ Three further matching constraints from Phase 0:
 
 ## Phase 12 — AI investigation agent · 0.5 day
 
+> **Kept entire by the replan (R11), with nothing reduced.** Stated here because
+> it was conflated twice with the separate, deferred Haiku **field-name**
+> mapping pass ([[tech-stack]] §9.2 pass 3), which is a connector-setup concern
+> that never reads a financial record. This phase — ranked candidate causes,
+> per-cause cited record ids, confidence values, the `insufficient_evidence`
+> branch, persisted reasoning, model-id comparison — is the LLM that produces
+> evidence-backed recommendations, and it is not in scope for any cut.
+
 **→ Demo becomes viable at the end of this phase.**
 
 **Goal:** Investigate an exception and produce an evidence-backed report.
@@ -711,6 +813,16 @@ model.
 
 ## Phase 13 — Investigation queue and approval gate · 0.5 day
 
+> **Kept as its own block, 2026-11-08 (R5).** The cutline below names this as
+> the first thing to drop, folding a minimal approve/reject into Phase 14. That
+> was considered and **reversed** by the operator: the phase keeps prioritisation
+> scoring over all four `readme.md` §9.3 factors, an append-only decision record
+> carrying approver and outcome, and the visible confirmed-vs-suspected
+> distinction. P6 is the point of this phase, not a constraint on it.
+>
+> If Day 2 runs short, the in-flight drop is the **scoring** only — approve/
+> reject and the decision record stay, and P6 survives either way.
+
 **Goal:** Prioritisation and the human decision point.
 
 Queue ordered by financial impact, affected-seller count, age and confidence,
@@ -728,6 +840,19 @@ recorded.
 ---
 
 ## Phase 14 — Operations dashboard · 1 day
+
+> **Replanned 2026-11-08 (R13):** kept, with two changes. The **seller financial
+> position view is dropped** — the least load-bearing of the four views for the
+> three demo scenarios, since the investigation detail tells the underpaid-seller
+> story better with evidence attached, and the easiest to add back if Day 2 runs
+> ahead. The **run summary is kept but lean**: one AG Grid table over runs with
+> click-through to that run's exceptions, rather than a charted view. It is kept
+> because R9 adds scheduled runs and the run history is how anyone sees that one
+> happened and what changed, and because [[tech-stack]] §10 requires runs to be
+> append-only and timestamped, so the data exists either way.
+>
+> Runs with Phase 13 as Block F. AG Grid stays — `readme.md` §12 makes it a
+> sponsor technology doing real grouping and drill-down work.
 
 **Goal:** The interface the demo is given through.
 
@@ -748,6 +873,12 @@ from strings per [[tech-stack]] §7.
 
 ## Phase 15 — Demo script and eval harness · 0.5 day
 
+> **Kept by the replan (R12), against the cutline below**, which names the
+> harness as the second thing to drop. The reasoning inverts at two days:
+> hand-scoring costs hours that are not available, so the harness *replaces* a
+> manual pass rather than adding one. It also gains a rehearsal against the
+> deployed environment, since R15 makes a live demo the deliverable.
+
 **Goal:** Prove the numbers in [[mission]] §6 rather than assert them.
 
 A runner that reconciles the seeded dataset and scores detection rate, false
@@ -764,6 +895,31 @@ demo path through all three scenarios.
 ---
 
 ## Cutline
+
+> **Superseded 2026-11-08** by `specs/2026-11-08-replan/requirements.md`, which
+> lands the remainder in **2 days** rather than 7. Both items below were
+> considered and **both were reversed**, which is worth recording because the
+> reversals were deliberate rather than oversights:
+>
+> - **Phase 13 stays its own block** (R5) — the operator's call. Prioritisation
+>   scoring and the decision record are product value, not ceremony.
+> - **The eval harness stays** (R12). The reasoning inverts under a two-day
+>   deadline: hand-scoring costs hours that are not available, so the harness
+>   *replaces* a manual pass rather than adding one. [[mission]] §6 is a table of
+>   measures and the readme claims detection and root-cause figures; one command
+>   printing measured output is what makes those claims true rather than
+>   asserted.
+>
+> What was cut instead is in R6 through R13 — chiefly the event-driven trigger
+> (R8), live PayPal calls at demo time (R6), the Haiku field-name pass (R11) and
+> the seller position view (R13). The paragraph below still governs: Phase 11's
+> zero-false-positive criterion was never on the table, and Phase 12 is kept
+> entire.
+>
+> The replan's own in-flight drop order, for if Day 2 runs short, is: the lean
+> run summary, then Phase 13's **scoring** (keeping approve/reject), then
+> scenario 3 as a dashboard story. Never dropped: the engine, the
+> false-positive gate, `insufficient_evidence`, approve/reject.
 
 The plan above is 8.5 days, of which Phase 0 is already spent. To land the
 remainder in 7, drop in this order:

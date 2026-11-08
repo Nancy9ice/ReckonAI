@@ -19,6 +19,7 @@ rather than trusted:
 
 from __future__ import annotations
 
+from .allocation import allocate, allocate_evenly
 from .currency import (
     CURRENCY_EXPONENTS,
     exponent,
@@ -36,6 +37,8 @@ __all__ = [
     "Money",
     "MoneyError",
     "UnknownCurrency",
+    "allocate",
+    "allocate_evenly",
     "exponent",
     "normalise",
     "quantum",

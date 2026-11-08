@@ -34,3 +34,65 @@ daemon is down, which reads like a configuration fault and is not one.
 anything. `/health/ready` runs `SELECT 1`, so a `200` after the migration shows
 the service came back with the new schema; without the before-reading it would
 show only that the service worked at some point.
+
+---
+
+## Group 1 — Money and the currency registry · 2026-11-08
+
+**75 tests pass**, `ruff` clean, and the module imports and runs with
+`DATABASE_URL` unset - which is the evidence that the money path has no database
+dependency rather than merely not using one today.
+
+One implementation consequence of the float gate worth recording, because it
+looks like a workaround and is not. **`value.py` cannot write
+`isinstance(value, float)`**, because the gate in `tests/test_money_purity.py`
+parses the file's AST and fails on any reference to the `float` builtin,
+including inside a type check. So an inexact amount is rejected by *exclusion* -
+it reaches the final `else` because it is not a `Decimal`, `int` or `str` - and
+the error message names the offending type at runtime through
+`type(value).__name__`.
+
+That is stricter than an explicit check rather than weaker: any inexact numeric
+type is refused by the same branch, including ones nobody has thought about,
+such as a numpy scalar arriving through a future connector.
+
+## Group 2 — Largest-remainder allocation · 2026-11-08
+
+**541 tests pass.** The sum-exactly property is parameterised across 8 amounts,
+all 7 registry currencies and 9 weight vectors, which is where most of that
+count comes from.
+
+**Decimal division was wrong here, and subtly.** The first implementation
+computed each ideal share as `Decimal(units) * weight / weight_total`. Decimal
+division is evaluated at the context precision - 28 significant digits - so both
+the share and its remainder are *rounded* results, and comparing rounded
+remainders can seat the spare minor unit on the wrong party. That is precisely
+the residue the function exists to eliminate, reintroduced by the arithmetic
+meant to remove it.
+
+Replaced with exact integer arithmetic: the weights are scaled to a common
+integer basis, and `divmod(units * weight, weight_total)` gives the floor and
+the remainder's numerator. All remainders share the denominator, so their
+numerators order them exactly and no division is needed to compare them.
+`test_remainders_are_compared_exactly_not_at_context_precision` uses weights
+that differ only at the 28th significant digit, and is what would notice a
+regression to division.
+
+### The fail-observation, run rather than asserted
+
+`plan.md` Group 2 requires watching the property fail before trusting it. The
+remainder distribution loop was disabled (`order[:0]` in place of
+`order[:leftover]`) and the suite re-run:
+
+```
+311 failed, 230 passed in 0.57s
+```
+
+The failures include `test_parts_sum_exactly_to_the_total` across every
+currency and every weight vector that does not divide evenly,
+`test_negative_totals_also_sum_exactly` for all 7 currencies, and every named
+residue case. Restored, and the full money suite is **616 passed**.
+
+This is the check `validation.md` §5 names first among the ways this phase could
+be green and wrong: a sum property written with a tolerance, or comparing
+rounded sums, would have passed with the distribution removed.

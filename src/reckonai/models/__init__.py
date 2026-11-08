@@ -33,6 +33,13 @@ from reckonai.models.catalogue import (
     Seller,
     Tenant,
 )
+from reckonai.models.connector import (
+    MAPPING_PROVENANCES,
+    MAPPING_STATUSES,
+    QUARANTINE_REASONS,
+    ConnectorMapping,
+    QuarantinedRecord,
+)
 from reckonai.models.conversions import FxConversion
 from reckonai.models.disbursements import Disbursement
 from reckonai.models.disputes import Dispute
@@ -58,6 +65,9 @@ from reckonai.models.payloads import (
 
 __all__ = [
     "DISBURSEMENT_MODES",
+    "MAPPING_PROVENANCES",
+    "MAPPING_STATUSES",
+    "QUARANTINE_REASONS",
     "DISBURSEMENT_STATES",
     "PAYLOAD_SOURCES",
     "LEDGER_ENTRY_CATEGORIES",
@@ -66,6 +76,7 @@ __all__ = [
     "Base",
     "Capture",
     "CommissionRule",
+    "ConnectorMapping",
     "Disbursement",
     "Dispute",
     "FxConversion",
@@ -74,6 +85,7 @@ __all__ = [
     "OrderItem",
     "Payment",
     "PlatformFee",
+    "QuarantinedRecord",
     "RawPayload",
     "RawPayloadMixin",
     "Refund",

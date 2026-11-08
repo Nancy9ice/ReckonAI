@@ -19,6 +19,14 @@ dependencies = [
     "sqlalchemy>=2.0.36,<2.1",
     "alembic>=1.14",
     "psycopg[binary]>=3.2",
+    # The marketplace connector's HTTP client, and Block D's PayPal client.
+    # `httpx2` rather than `httpx`: Starlette deprecated the latter as its
+    # TestClient transport and warns on every test run, so this project
+    # already had httpx2 for tests. Two HTTP stacks in one process, differing
+    # between the test path and the production path, is the shape of a bug
+    # that only appears in deployment. tech-stack.md section 1 locks it, added
+    # there 2026-11-08.
+    "httpx2>=2.16",
 ]
 
 [build-system]
@@ -31,9 +39,9 @@ packages = ["src/reckonai"]
 [dependency-groups]
 dev = [
     "pytest>=8.3",
-    # Starlette's TestClient takes its transport from here. httpx2 rather than
-    # httpx: starlette deprecated the latter and warns on every test run.
-    "httpx2>=2.16",
+    # httpx2 moved to the runtime dependencies in Block A - the connector
+    # needs it at runtime, and Starlette's TestClient takes its transport from
+    # the same package.
     "ruff>=0.8",
     # Declared explicitly rather than relied on transitively through
     # uvicorn[standard]: tests/test_render_blueprint.py parses render.yaml, and

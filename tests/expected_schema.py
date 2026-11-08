@@ -41,9 +41,19 @@ EVENT_TABLES: tuple[str, ...] = (
     "seller_ledger_entry",
 )
 
+#: Block A's connector side: the versioned field mapping and the quarantine
+#: store. specs/2026-11-08-block-a-marketplace-connector/requirements.md D7 and
+#: D11.
+CONNECTOR_TABLES: tuple[str, ...] = (
+    "connector_mapping",
+    "quarantined_record",
+)
+
 #: Every table in `Base.metadata`. Excludes `alembic_version`, which Alembic
 #: owns and which never appears in the declarative metadata.
-MODEL_TABLES: tuple[str, ...] = tuple(sorted(CATALOGUE_TABLES + EVENT_TABLES))
+MODEL_TABLES: tuple[str, ...] = tuple(
+    sorted(CATALOGUE_TABLES + EVENT_TABLES + CONNECTOR_TABLES)
+)
 
 #: Every table in the database, which is the above plus Alembic's own.
 DATABASE_TABLES: tuple[str, ...] = tuple(sorted(("alembic_version", *MODEL_TABLES)))

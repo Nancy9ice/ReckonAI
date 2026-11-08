@@ -136,6 +136,31 @@ def _order_refs(session: Session, tenant_id: uuid.UUID) -> dict[uuid.UUID, str]:
     }
 
 
+def _marketplace_only(statement: Any, model: Any) -> Any:
+    """Restrict a query to rows whose payload came from the marketplace.
+
+    **The sim is the marketplace, and must not serve PayPal's records as its
+    own.** One canonical table per record type holds both sources, told apart
+    only by their payload's `source` (Phase 3's D3) - so a query that does not
+    filter serves both, and the `refund` table holds two rows per refund.
+
+    This was a real bug: `/marketplace/refunds` returned five records where the
+    marketplace knows three, and the connector dutifully ingested PayPal's two
+    as marketplace refunds. The count check caught it, which is the argument
+    for having a count check that compares against an independent figure rather
+    than against itself.
+
+    `releases` is the deliberate exception - see `list_releases`.
+    """
+    from reckonai.models import RawPayload
+
+    return statement.join(
+        RawPayload,
+        (RawPayload.id == model.raw_payload_id)
+        & (RawPayload.tenant_id == model.tenant_id),
+    ).where(RawPayload.source == "marketplace")
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -297,7 +322,7 @@ def list_payments(session: SessionDep) -> dict[str, Any]:
     sellers = _seller_refs(session, tenant_id)
     orders = _order_refs(session, tenant_id)
     rows = session.scalars(
-        select(Payment)
+        _marketplace_only(select(Payment), Payment)
         .where(Payment.tenant_id == tenant_id)
         .order_by(Payment.external_id)
     )
@@ -325,7 +350,7 @@ def list_refunds(session: SessionDep) -> dict[str, Any]:
     f = fields.REFUND_FIELDS
     sellers = _seller_refs(session, tenant_id)
     rows = session.scalars(
-        select(Refund)
+        _marketplace_only(select(Refund), Refund)
         .where(Refund.tenant_id == tenant_id)
         .order_by(Refund.external_id)
     )
@@ -352,18 +377,43 @@ def list_refunds(session: SessionDep) -> dict[str, Any]:
 def _refund_order_ref(
     session: Session, tenant_id: uuid.UUID, row: Refund
 ) -> str | None:
-    """The order reference a refund's ledger entries point at, if any."""
-    entry = session.scalar(
-        select(SellerLedgerEntry).where(
-            SellerLedgerEntry.tenant_id == tenant_id,
-            SellerLedgerEntry.external_ref == f"LED-{row.external_id}-refund",
+    """The order a refund belongs to, walked through capture and payment.
+
+    **`refund` carries no `order_id` column**, so this has to be derived. The
+    chain is `refund.capture_id -> capture.payment_id -> payment.order_id`,
+    which is the only route that does not depend on the marketplace's ledger.
+
+    An earlier version looked the order up through the refund's *ledger entry*,
+    which was circular in exactly the case that matters: fault F1 is a refund
+    with no ledger entry, so the sim would have served `order_ref: null` for it
+    and the endpoint's output would have varied with the fault it is meant to
+    expose. A reconciler would then be told the refund belonged to no order,
+    which is a different and more confusing claim than the one F1 makes.
+    """
+    from reckonai.models import Capture
+
+    if row.capture_id is None:
+        return None
+
+    payment_id = session.scalar(
+        select(Capture.payment_id).where(
+            Capture.tenant_id == tenant_id, Capture.id == row.capture_id
         )
     )
-    if entry is None or entry.order_id is None:
+    if payment_id is None:
         return None
+
+    order_id = session.scalar(
+        select(Payment.order_id).where(
+            Payment.tenant_id == tenant_id, Payment.id == payment_id
+        )
+    )
+    if order_id is None:
+        return None
+
     return session.scalar(
         select(Order.external_ref).where(
-            Order.tenant_id == tenant_id, Order.id == entry.order_id
+            Order.tenant_id == tenant_id, Order.id == order_id
         )
     )
 
@@ -375,7 +425,7 @@ def list_ledger_entries(session: SessionDep) -> dict[str, Any]:
     sellers = _seller_refs(session, tenant_id)
     orders = _order_refs(session, tenant_id)
     rows = session.scalars(
-        select(SellerLedgerEntry)
+        _marketplace_only(select(SellerLedgerEntry), SellerLedgerEntry)
         .where(SellerLedgerEntry.tenant_id == tenant_id)
         .order_by(SellerLedgerEntry.external_ref)
     )
@@ -406,7 +456,7 @@ def list_disputes(session: SessionDep) -> dict[str, Any]:
     f = fields.DISPUTE_FIELDS
     sellers = _seller_refs(session, tenant_id)
     rows = session.scalars(
-        select(Dispute)
+        _marketplace_only(select(Dispute), Dispute)
         .where(Dispute.tenant_id == tenant_id)
         .order_by(Dispute.external_id)
     )
@@ -452,7 +502,9 @@ def list_entitlements(session: SessionDep) -> dict[str, Any]:
     # Built from the ledger the marketplace wrote, grouped by (order, seller).
     owed: dict[tuple[str, str], dict[str, Money]] = {}
     for row in session.scalars(
-        select(SellerLedgerEntry).where(SellerLedgerEntry.tenant_id == tenant_id)
+        _marketplace_only(select(SellerLedgerEntry), SellerLedgerEntry).where(
+            SellerLedgerEntry.tenant_id == tenant_id
+        )
     ):
         order_ref = orders.get(row.order_id) if row.order_id else None
         seller_ref = sellers.get(row.seller_id)

@@ -23,10 +23,25 @@
 | Frontend | React 18 + TypeScript + Vite | Yes |
 | Data grid | AG Grid / AG Studio | Yes |
 | Payments | PayPal REST APIs (sandbox) | Yes |
+| HTTP client | `httpx2` | Yes, added 2026-11-08 |
 | PayPal API context | APIMatic Context Plugin (dev-time) | Yes |
 | Hosting | Render | Yes |
 | Tests | pytest | Yes |
 | Timeline / scheduling UI | Bryntum | Optional, only if free |
+
+**Amended 2026-11-08 — the HTTP client row is new.** This table locked no HTTP
+client, although "PayPal REST APIs (sandbox)" requires one, and Block A's
+marketplace connector is the first code to need it at runtime. `pyproject.toml`
+carries the rule that a runtime dependency absent from this table requires
+amending this document first, so the row is added rather than the dependency
+being slipped in.
+
+**`httpx2` rather than `httpx`**, and not a preference: Starlette deprecated
+`httpx` as its `TestClient` transport and warns on every test run, so this
+project already depended on `httpx2` for tests. Adding `httpx` beside it would
+mean two HTTP stacks in one process, differing between the test path and the
+production path — which is the shape of a bug that only appears in deployment.
+It moves from the dev group to the runtime dependencies.
 
 ---
 

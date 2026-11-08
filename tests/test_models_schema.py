@@ -297,9 +297,24 @@ def test_the_amount_gate_actually_sees_columns() -> None:
             if "rate" in column.name:
                 rates.append(f"{table.name}.{column.name}")
 
-    assert len(amounts) == 4, amounts
-    assert len(currencies) == 5, currencies  # four pairs plus seller.default_currency
-    assert rates == ["commission_rule.rate"], rates
+    # Phase 2 pinned these as exact counts - 4 amounts, 5 currencies, one
+    # rate. Phase 3 adds fifteen more money pairs across nine tables, and an
+    # exact count would then be churn on every group for no signal: the
+    # per-column type gates above already check *every* amount column, so the
+    # only thing this test adds is that the list is not empty.
+    #
+    # The floor is Phase 2's own numbers, which still catches the failure it
+    # was written for - a rename that silently emptied the gates.
+    assert len(amounts) >= 4, amounts
+    assert len(currencies) >= 5, currencies
+    assert len(currencies) > len(amounts), (amounts, currencies)
+
+    # Rate columns stay enumerated, because there are few of them and each one
+    # carries a different precision for a stated reason: a commission rate is
+    # `NUMERIC(9, 6)` and an FX rate `NUMERIC(20, 10)`, which
+    # specs/tech-stack.md section 2 calls a floor rather than a target.
+    assert set(rates) <= {"commission_rule.rate", "fx_conversion.rate"}, rates
+    assert "commission_rule.rate" in rates, rates
 
 
 def test_timestamps_are_timezone_aware() -> None:

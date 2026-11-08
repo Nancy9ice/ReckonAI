@@ -29,7 +29,11 @@ CATALOGUE_TABLES: tuple[str, ...] = (
 #: Phase 3's event side: specs/roadmap.md Phase 3, plus the payload store.
 #: Grown one group at a time as specs/2026-11-08-canonical-events/plan.md
 #: lands each table.
-EVENT_TABLES: tuple[str, ...] = ("raw_payload",)
+EVENT_TABLES: tuple[str, ...] = (
+    "capture",
+    "payment",
+    "raw_payload",
+)
 
 #: Every table in `Base.metadata`. Excludes `alembic_version`, which Alembic
 #: owns and which never appears in the declarative metadata.

@@ -33,6 +33,7 @@ from reckonai.models.catalogue import (
     Seller,
     Tenant,
 )
+from reckonai.models.events import Capture, Payment
 from reckonai.models.lifecycle import (
     DISBURSEMENT_STATES,
     LEDGER_ENTRY_CATEGORIES,
@@ -57,10 +58,12 @@ __all__ = [
     "RECONCILIATION_STATES",
     "TRANSACTION_TYPES",
     "Base",
+    "Capture",
     "CommissionRule",
     "LifecycleMixin",
     "Order",
     "OrderItem",
+    "Payment",
     "RawPayload",
     "RawPayloadMixin",
     "Seller",

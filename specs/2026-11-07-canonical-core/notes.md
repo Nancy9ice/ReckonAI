@@ -209,6 +209,33 @@ the generated DDL is correct, but any hand-written SQL in a later phase needs
 `"order"` with the quotes. The table keeps the name the roadmap gives it rather
 than being renamed to work around the quoting.
 
+## Group 5 — Commission rule resolution · 2026-11-08
+
+**25 tests pass**, with `DATABASE_URL` unset - the resolver is pure, and a test
+suite for it that needed a database would mean it was not.
+
+Two findings, both about Python rather than about the domain.
+
+**`issubclass()` does not work on a `Protocol` with non-method members.**
+`CommissionRuleLike` carries fields rather than methods, which makes it a *data*
+protocol, and `issubclass(CommissionRule, CommissionRuleLike)` raises
+`TypeError: Protocols with non-method members don't support issubclass()`.
+`isinstance` on an instance is the check that works, and an unflushed
+`CommissionRule()` is enough because the check is for attribute presence and
+SQLAlchemy instruments the attributes on the class.
+
+That test matters more than it looks: it is the only thing standing between
+`engine/` and `models/` drifting apart. The protocol exists so the engine
+imports no ORM, which means nothing else would notice if the ORM class stopped
+satisfying it - Phase 10 would find out through an `AttributeError` inside a
+calculation.
+
+**`ruff` UP047 wanted PEP 695 type parameters.** The first version used
+`TypeVar("RuleT", bound=CommissionRuleLike)`; the generic is now spelled
+`def resolve_commission_rule[RuleT: CommissionRuleLike](...)` and the `TypeVar`
+is gone. Python 3.12 is the floor for this project, so the modern form is
+available and is what the lint rule asks for.
+
 ## Group 6 — Alembic metadata, the revision, and drift detection · 2026-11-08
 
 **758 tests pass** from a genuinely empty database, `alembic check` is clean,
@@ -354,7 +381,7 @@ would make the gate meaningless rather than strict.
 so the asymmetry is a decision on the record rather than something a later
 reader "fixes".
 
-## Groups 8 and 9 — Documentation and the pre-merge gate run · 2026-11-08
+## Group 8 — Documentation and the pre-merge gate run · 2026-11-08
 
 Phase 2 marked complete in `specs/roadmap.md` with its handoff to Phases 3, 4,
 6, 10 and 14. `readme.md` gained a section 0.1 on the money rules,

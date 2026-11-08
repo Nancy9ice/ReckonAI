@@ -58,7 +58,7 @@ would be putting a convention violation into the first commit of the codebase.
 | S1 | No emoji or pictographs anywhere in the codebase | [[tech-stack]] §13 | C12 |
 | S2 | No `requirements.txt`, hand-maintained or generated | [[tech-stack]] §3 | C4 |
 | S3 | No credential-shaped string in a tracked file | [[tech-stack]] §10 | C13 |
-| S4 | No `float` in a money path | [[tech-stack]] §2 | Not applicable — no money path exists until Phase 2, which owns the gate. C14 asserts the absence rather than pretending to test it. |
+| S4 | No `float` in a money path | [[tech-stack]] §2 | Not applicable in Phase 1 — no money path existed. **Now enforced by Phase 2**: `specs/2026-11-07-canonical-core/validation.md` C7 (AST gate over the money-path packages) and C8 (no float column in `Base.metadata`). C14 below records what replaced it. |
 
 ---
 
@@ -223,17 +223,31 @@ database URL to leak. `compose.yaml`'s local development credentials are the one
 expected match and are not secrets — `requirements.md` D10 and `plan.md`
 Group 4 step 1 say so in the file itself.
 
-### C14 — The money path is absent, not untested
+### C14 — Deleted by Phase 2, as this document specified
 
-```bash
-test -z "$(git ls-files 'src/**/*.py' | xargs grep -l 'Decimal\|NUMERIC' )"
-```
+C14 asserted that Phase 1 introduced **no** monetary code, by checking that no
+tracked source file mentioned `Decimal` or `NUMERIC`. It was never a money
+check; it was the statement that there was nothing to check yet, so nobody could
+read Phase 1's green suite as evidence that the `float` rule was enforced.
 
-Exits 0, confirming Phase 1 introduced no monetary code. This is not a money
-check — it is the statement that there is nothing to check yet, so that nobody
-reads Phase 1's green suite as evidence that the `float` rule is enforced. Phase
-2 introduces `Money` and the grep gate that enforces it
-([[roadmap]] Phase 2), and **this check is deleted then**, not inverted.
+**Deleted on 2026-11-08** by [[roadmap]] Phase 2, which is what this check said
+would happen — deleted, not inverted. Phase 2 introduces `Money` and the real
+gate, so the check now describes the opposite of the truth: `src/` is full of
+`Decimal` and `NUMERIC` by design, and C14 would fail.
+
+The rule it stood in for is now enforced by two checks in
+`specs/2026-11-07-canonical-core/validation.md`:
+
+- **C7** parses the AST of every module under `reckonai.money`,
+  `reckonai.engine`, `reckonai.models` and `reckonai.schemas`, failing on a
+  reference to the `float` builtin, a `float` annotation, a call to `round`, or
+  an attribute on `math`.
+- **C8** iterates `Base.metadata` and fails on any `Float`, `REAL` or
+  `DOUBLE PRECISION` column, requiring `NUMERIC(20, 6)` for every `*_amount`.
+
+The heading is kept rather than removed so the numbering of C1–C13 above stays
+stable, and so a reader following a reference to C14 finds out what became of
+it instead of a gap.
 
 ---
 

@@ -275,3 +275,81 @@ FAILED tests/test_migrations.py::test_the_models_and_the_migrations_agree
 
 Both the command and the test fire. Reverted, and `alembic check` reports
 "No new upgrade operations detected."
+
+## Group 7 — The gates, and the deletion of Phase 1's C14 · 2026-11-08
+
+**858 tests pass**, `ruff` clean. The two new modules add 100 checks between
+them, most of them parameterised per module or per table so a failure names the
+file.
+
+### Both gates had bugs, and the self-tests found them
+
+This is the argument for writing a gate's negative cases rather than trusting
+it green, and it would have been easy to skip.
+
+**The purity gate reported every module as forbidden.** The runtime half
+collapsed `FORBIDDEN_IMPORTS` to top-level names to compare against
+`sys.modules`, and `reckonai.db` collapses to `reckonai` - so importing
+`reckonai.engine` "leaked" `reckonai`, `reckonai.engine` and
+`reckonai.engine.rules`. Now the dotted entries are matched by full name and
+the third-party ones by top level.
+
+**The float gate flagged `x = 'float'`.** The first version walked every string
+constant looking for a string annotation, which cannot distinguish an ordinary
+string literal from `x: 'float' = None`. Now annotation expressions are
+collected explicitly - from `AnnAssign`, `arg` and a function's `returns` - and
+only string constants inside those are re-parsed and inspected.
+
+Worth recording while fixing it: **`from __future__ import annotations` does
+not turn annotations into strings in the AST.** It only changes runtime
+evaluation, so `def f(x: float)` still parses as an `ast.Name` and the ordinary
+walk catches it. The string branch is only for an annotation someone quoted
+deliberately.
+
+### Both gates, seen failing
+
+A `float`-returning method was added to `money/value.py` and an unscoped table
+to `models/catalogue.py`:
+
+```
+E  src/reckonai/money/value.py:277: reference to the float builtin
+E  src/reckonai/money/value.py:278: reference to the float builtin
+FAILED tests/test_money_purity.py::...[money/value.py]
+
+E  AssertionError: unscoped_probe has no tenant_id. Add TenantMixin, or add
+   the table to UNSCOPED_TABLES with a reason.
+E  AssertionError: unscoped_probe has no UNIQUE (tenant_id, id); a child table
+   cannot carry a composite foreign key to it.
+FAILED tests/test_models_schema.py::test_every_table_is_tenant_scoped[unscoped_probe]
+```
+
+Both reverted. Note the tenant gate caught the new table through **three**
+separate checks, including `test_the_metadata_is_not_empty`, which asserts the
+table count - that one is a tripwire against a gate quietly iterating nothing.
+
+### Phase 1's C14 is deleted, as Phase 1 specified
+
+C14 asserted that no tracked source file mentioned `Decimal` or `NUMERIC` -
+the statement that Phase 1 had no money path to test, so its green suite could
+not be read as evidence the `float` rule was enforced. Confirmed that the
+command now fails, which is why deleting it rather than inverting it was
+right:
+
+```
+$ test -z "$(git ls-files 'src/**/*.py' | xargs grep -l 'Decimal\|NUMERIC')"
+fails as expected: the money path exists
+```
+
+The heading is kept in Phase 1's `validation.md` and rewritten to record what
+replaced it - C7 and C8 of this phase - so C1-C13 keep their numbering and a
+reader following a reference to C14 finds an explanation rather than a gap.
+Phase 1's S4 row now points here too.
+
+### One asymmetry made explicit
+
+`models` and `schemas` are in the **float** gate but not the **purity** gate. A
+declarative model *is* the database mapping, so forbidding SQLAlchemy there
+would make the gate meaningless rather than strict.
+`test_the_models_package_is_deliberately_not_pure` asserts both halves of that,
+so the asymmetry is a decision on the record rather than something a later
+reader "fixes".

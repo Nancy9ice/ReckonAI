@@ -25,6 +25,9 @@ found the product specified against the wrong PayPal integration model
 (`specs/multiparty-direction.md`). So 0.5 day is spent and 0.5 added: the
 remaining work is 8 days, and the overflow is unchanged.
 
+**Phases 0, 0b, 1 and 2 are complete.** Phase 3 is next, and reads Phase 2's
+handoff below before starting.
+
 ---
 
 ## Phase 0 — PayPal sandbox field discovery · 0.5 day · **COMPLETE 2026-11-07**
@@ -239,7 +242,66 @@ Render web service + worker + managed Postgres provisioned, secrets in env vars.
 
 ---
 
-## Phase 2 — Canonical core: money, tenant, catalogue · 0.5 day
+## Phase 2 — Canonical core: money, tenant, catalogue · 0.5 day · **COMPLETE 2026-11-08**
+
+> **Delivered.** `Money`, the largest-remainder allocation helper, the five
+> catalogue tables and the gates that keep them honest. Spec, plan, merge gate
+> and findings are in `specs/2026-11-07-canonical-core/`.
+>
+> Every exit criterion below passes. The pre-merge gate is 18 automated checks
+> and **858 tests**; the post-merge deployed checks are tabled in that
+> directory's `notes.md`.
+>
+> **What later phases inherit, so none of it is rediscovered:**
+>
+> - **Phase 3** gets `Base`, `TenantMixin`, `TimestampMixin`,
+>   `money_columns()`, a populated `target_metadata`, and both gates already
+>   enforcing its eight new tables — it must add each model module to
+>   `reckonai/models/__init__.py`, because a module that is never imported is
+>   absent from `Base.metadata` and autogenerate reads that as a table to
+>   **drop**. It also owns the lifecycle state enum, and inherits the warning
+>   that **Alembic does not reliably emit a native enum type's `CREATE`/`DROP`
+>   alongside its table's** — which is why Phase 2 used a checked `VARCHAR(16)`
+>   for `disbursement_mode` rather than meeting that trap in the first revision
+>   with a schema in it.
+> - **Phase 4** instantiates these five tables. `seller` carries
+>   `partner_fee_enabled` and `delay_funds_enabled`, and `order` carries
+>   `disbursement_mode`, so "at least one order uses `DELAYED`" needs no schema
+>   change. **Its clean baseline has no database backstop**: by decision, no
+>   constraint ties an order's total to the sum of its items, so the seed
+>   builder needs its own consistency check or Phase 11's false-positive gate is
+>   measured against a baseline that was never clean.
+> - **Phase 6** owns query-time tenant filtering, specified in that directory's
+>   `requirements.md` D7. It inherits composite foreign keys that already make a
+>   cross-tenant link unwritable.
+> - **Phase 10** fills `src/reckonai/engine/`, calls `allocate()` for
+>   proportional refund allocation, and consumes `resolve_commission_rule()`.
+>   The purity gate is already watching that package, which is why its functions
+>   take a `typing.Protocol` rather than an ORM class.
+> - **Phase 14** formats amounts from the shape this phase fixed:
+>   `{"amount": "160.00", "currency": "USD"}`.
+>
+> **Four findings worth not relearning.**
+>
+> **A nullable `composite()` does not return `None`** — it constructs
+> `Money(None, None)` and raises. Nullable money pairs go through the
+> `_money_or_none` factory in `models/base.py`.
+>
+> **Alembic's `fileConfig` was disabling every application logger.** It
+> defaults `disable_existing_loggers` to `True`, so running Alembic in-process
+> silences `reckonai.web` and `reckonai.worker` for the life of the process.
+> Latent since Phase 1; invisible on Render, where Alembic runs as its own
+> process through `preDeployCommand`.
+>
+> **`Base.metadata.create_all` in a test fixture fights with Alembic.**
+> Database-backed tests now run against the migrated schema via the
+> `migrated_database` fixture, which is also stricter — a `CHECK` lost in
+> autogenerate now fails the constraint tests, not only the drift check.
+>
+> **Decimal division is not exact enough for allocation.** It is evaluated at
+> the context precision, so comparing the remainders it produces can seat a
+> spare minor unit on the wrong party. The allocator scales weights to a common
+> integer basis instead.
 
 **Goal:** The `Money` value object and the entities everything else references.
 

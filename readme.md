@@ -37,6 +37,38 @@ uv run python -m reckonai.worker            # the worker, in another shell
 `GET /health` is liveness and touches no database; `GET /health/ready` runs
 `SELECT 1` and answers `503` when the database is unreachable.
 
+## 0.1 The money rules a contributor meets first
+
+Four rules, all enforced by tests rather than convention. Full reasoning is in
+`specs/tech-stack.md` §2 and `specs/2026-11-07-canonical-core/`.
+
+```python
+from reckonai.money import Money, allocate
+
+Money("160.00", "USD")             # Decimal + currency, frozen, hashable
+Money("100.00", "USD") + Money("100.00", "EUR")   # CurrencyMismatch
+Money(1.5, "USD")                  # InvalidAmount: no inexact types, ever
+allocate(Money("100.00", "USD"), [1, 1, 1])       # 33.34, 33.33, 33.33
+```
+
+- **`Money` is the only monetary type.** No bare amount appears in any
+  signature, column pair or API field. `decimal.Decimal` in Python,
+  `NUMERIC(20, 6)` in Postgres, strings over JSON.
+- **`quantize()` is the only rounding**, `ROUND_HALF_UP`, to the currency's own
+  exponent. Construction deliberately does not round, because a rate
+  multiplication produces fifteen decimal places and rounding every
+  intermediate is how a settlement comparison drifts.
+- **Mixed currencies raise on arithmetic and ordering; `==` returns `False`.**
+  Adding 100 USD to 100 EUR has no answer without a conversion record, and
+  inventing one is forbidden. Asking whether two values are the same does have
+  an answer.
+- **Dividing money is allocation.** `allocate()` uses largest remainder, so the
+  parts sum exactly to the whole. There is no `Money.__truediv__`.
+
+An unknown currency raises rather than defaulting to two decimal places; add it
+to `CURRENCY_EXPONENTS` in `src/reckonai/money/currency.py` with its exponent
+and a reason.
+
 The compose credentials above are local-only development values and are not
 secrets. Real credentials never enter this repository: see §12 "Render" for how
 `DATABASE_URL` reaches a deployed service, and `.env.example` for the PayPal

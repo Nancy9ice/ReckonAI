@@ -1,8 +1,11 @@
-"""The FastAPI application: liveness, readiness, and nothing else yet.
+"""The FastAPI application: liveness, readiness, and the money serialization probe.
 
-Roadmap Phase 1 is a deployable spine. No financial endpoint exists here, and no
-monetary value is serialized, so there is no JSON encoder decision to make yet -
-Phase 2 owns that when `Money` exists (specs/tech-stack.md section 2).
+Roadmap Phase 1 delivered the first two. Phase 2 added the third, which is the
+smallest thing that proves `Money` serializes as JSON strings through the real
+application rather than only in a unit test (specs/tech-stack.md section 2).
+
+No financial endpoint exists here yet. Phase 4 adds the simulated marketplace
+API and Phase 14 the dashboard, as a separate Render static site.
 """
 
 from __future__ import annotations
@@ -11,14 +14,17 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 from sqlalchemy.exc import SQLAlchemyError
 
 from reckonai import __version__
 from reckonai.config import get_settings
 from reckonai.db import check_connection, create_app_engine
 from reckonai.logging import configure_logging, event
+from reckonai.money import Money, supported_currencies
+from reckonai.schemas import MoneyField
 
 # This component's share of the connection budget. The cap it is drawn against
 # is `reckonai.db.USABLE_CONNECTIONS`; see that module and the phase's
@@ -86,7 +92,40 @@ def index() -> dict[str, str]:
         "docs": "/docs",
         "health": "/health",
         "readiness": "/health/ready",
+        "money_example": "/money/example",
     }
+
+
+class MoneyExample(BaseModel):
+    """The response model for the serialization probe below."""
+
+    amount: MoneyField
+    note: str
+
+
+@app.get("/money/example", response_model=MoneyExample)
+def money_example(currency: str = "USD") -> MoneyExample:
+    """Serialize one `Money`, so the JSON shape is exercised end to end.
+
+    **This is a probe, not product.** It exists because the criterion in
+    specs/roadmap.md Phase 2 - "amounts serialize to JSON as strings" - is about
+    what leaves the application, and a unit test on the Pydantic model cannot
+    prove FastAPI's own response encoding does not undo it. Phase 4 adds real
+    endpoints and this route is removed then.
+
+    The amount is deliberately over-precise, so the response demonstrates the
+    rounding boundary rather than a value that was already quantized.
+    """
+    if currency.upper() not in supported_currencies():
+        raise HTTPException(
+            status_code=404,
+            detail=f"{currency} is not in the currency registry",
+        )
+
+    return MoneyExample(
+        amount=Money("104.04507010764778050", currency),
+        note="amount is a JSON string, quantized to the currency's exponent",
+    )
 
 
 @app.get("/health")

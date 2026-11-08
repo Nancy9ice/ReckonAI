@@ -19,7 +19,7 @@ Also read, and in this order:
 - `specs/paypal-fields.md` — what PayPal actually returns, per field, with the
   evidence. The root specs state rules and point here; they do not repeat it.
 
-**Phases 0, 0b and 1 are complete. Phase 2 is next.**
+**Phases 0, 0b, 1 and 2 are complete. Phase 3 is next.**
 
 Phase 0's observed evidence was captured against a **first-party** integration,
 so it does not cover platform fees, disbursement modes or any seller-level view.
@@ -31,6 +31,14 @@ GitHub Actions CI and a Render Blueprint — running at
 **https://reckonai-api.onrender.com**. What it hands to Phases 2, 3, 7, 8 and 14
 is listed under Phase 1 in `specs/roadmap.md`; read that before starting any of
 them.
+
+Phase 2 delivered the canonical core — `Money`, largest-remainder allocation,
+and the `tenant`, `seller`, `order`, `order_item` and `commission_rule` tables,
+with the `float` and tenant gates enforcing the rules below. Its handoff to
+Phases 3, 4, 6, 10 and 14 is under Phase 2 in `specs/roadmap.md`, and
+`readme.md` §0.1 is the short version of the money rules. **Phase 3 should read
+that handoff before writing a model**, particularly the note on adding modules
+to `reckonai/models/__init__.py` and the Alembic enum trap.
 
 ## Hard rules
 

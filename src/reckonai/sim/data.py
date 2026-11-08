@@ -187,6 +187,15 @@ class RefundSpec:
     expected_commission_reversal: str
     reflected_in_ledger: bool = True
 
+    #: Whether PayPal's own refund record has arrived yet.
+    #:
+    #: **This is what fault F5 turns off, and the default has to be `True` for
+    #: F5 to mean anything.** If no refund ever had a provider counterpart,
+    #: "the counterpart is missing" would be the universal condition rather
+    #: than a distinguishable state, and `awaiting_evidence` would be the
+    #: answer for every refund in the dataset.
+    paypal_record_present: bool = True
+
 
 @dataclass(frozen=True)
 class DisputeSpec:
@@ -277,6 +286,26 @@ class OrderSpec:
     #: one seller only; `None` where it has several, since PayPal issues a
     #: capture per purchase unit and the sim models the simple case.
     settles_to: str | None = None
+
+    # --- fault levers -----------------------------------------------------
+    #
+    # Each exists because a fault is a *disagreement between two sources*, and
+    # a builder that derived both sides from one figure could not express one.
+    # F2 is the clearest case: with PayPal's platform fee computed from
+    # `expected_commission`, the marketplace's wrong commission would be
+    # faithfully echoed by the provider and nothing would disagree.
+
+    #: What PayPal actually took as a platform fee, where that differs from
+    #: what the marketplace believes it retained. `None` means the two agree,
+    #: which is the clean case.
+    paypal_platform_fee: str | None = None
+
+    #: Write the sale credit twice, under distinct references. F4.
+    duplicate_ledger_entry: bool = False
+
+    #: `(amount, state)` for the release record, where PayPal released
+    #: something other than the obligation. F6.
+    release_override: tuple[str, str] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -661,6 +690,237 @@ EXPECTED_COMMISSION_TOTALS: dict[str, str] = {
 }
 
 
+# ---------------------------------------------------------------------------
+# The six faults (requirements.md D4)
+#
+# **Their own orders, ORD-0013 to ORD-0018**, rather than perturbations of the
+# twelve above. The clean baseline then stays exactly as hand-tabulated, and
+# `verify()` excludes faulty rows by order reference - a whole-order boundary
+# is far easier to keep honest than a column inside an otherwise clean order.
+#
+# Each fault's expected classification lives in `manifest.py`, not here: this
+# module states what the marketplace's records say, and the manifest states
+# what reconciliation should conclude about them. Keeping the two apart is what
+# stops the manifest from being written by reading the seeder.
+# ---------------------------------------------------------------------------
+
+#: F2's wrong rate. The rule says 10%; the marketplace charged 15%.
+F2_WRONG_RATE = "0.150000"
+
+FAULTY_ORDERS: tuple[OrderSpec, ...] = (
+    # F1 - specs/mission.md section 6 scenario 1. A partial refund that the
+    # seller ledger never heard about. The refund record exists; the debit and
+    # the commission reversal do not.
+    OrderSpec(
+        ref="ORD-0013",
+        currency="USD",
+        total="110.00",
+        placed_at=_at(14),
+        items=(
+            ItemSpec(
+                ref="ITEM-0013-A",
+                seller_ref="vendor-bellweather",
+                quantity=1,
+                unit_price="110.00",
+                line_total="110.00",
+                category="books",
+            ),
+        ),
+        expected_commission="11.00",
+        expected_entitlements={"vendor-bellweather": "99.00"},
+        paypal_fee="3.79",
+        settles_to="vendor-bellweather",
+        refunds=(
+            RefundSpec(
+                ref="RFND-0013-A",
+                seller_ref="vendor-bellweather",
+                amount="30.00",
+                expected_commission_reversal="3.00",
+                # The fault itself.
+                reflected_in_ledger=False,
+            ),
+        ),
+    ),
+    # F2 - scenario 2. The marketplace retained commission at 15% where its own
+    # rule says 10%, so its ledger and PayPal's platform fee disagree. The
+    # stated figures below are the **wrong** ones the marketplace believes,
+    # which is why this order is excluded from `verify()`: the whole point is
+    # that its arithmetic does not hold.
+    OrderSpec(
+        ref="ORD-0014",
+        currency="USD",
+        total="200.00",
+        placed_at=_at(15),
+        items=(
+            ItemSpec(
+                ref="ITEM-0014-A",
+                seller_ref="vendor-aurora",
+                quantity=1,
+                unit_price="200.00",
+                line_total="200.00",
+                category="audio",
+            ),
+        ),
+        # 200.00 at 15% rather than the rule's 10%. Correct would be 20.00.
+        expected_commission="30.00",
+        expected_entitlements={"vendor-aurora": "170.00"},
+        paypal_fee="6.80",
+        settles_to="vendor-aurora",
+        # **PayPal took the rule-correct figure.** 200.00 at the tenant's 10%
+        # is 20.00, and that is what the provider recorded - so the
+        # marketplace's 30.00 has something independent to disagree with.
+        # Without this the provider would echo the wrong figure faithfully and
+        # the fault would be invisible.
+        paypal_platform_fee="20.00",
+    ),
+    # F3 - scenario 3. A conversion whose reported settlement does not follow
+    # from its reported rate, by far more than a rounding cent.
+    #
+    # Citrine's share is 300.00 - 24.00 = 276.00 USD. At the reported 0.9183
+    # that is 253.45 EUR; the settlement says 248.40, which is roughly the
+    # figure a stale rate of 0.90 would give. **Five euros, not one cent** -
+    # deliberately an order of magnitude clear of ORD-0008's artefact, so the
+    # two cannot be confused by a threshold.
+    #
+    # The fault is the **rate or the settlement value**, never a conversion
+    # fee: PayPal publishes no conversion fee to contradict, and the table's
+    # CHECK refuses a zero one anyway (P3).
+    OrderSpec(
+        ref="ORD-0015",
+        currency="USD",
+        total="300.00",
+        placed_at=_at(16),
+        items=(
+            ItemSpec(
+                ref="ITEM-0015-A",
+                seller_ref="vendor-citrine",
+                quantity=1,
+                unit_price="300.00",
+                line_total="300.00",
+                category="ceramics",
+            ),
+        ),
+        expected_commission="24.00",
+        expected_entitlements={"vendor-citrine": "276.00"},
+        paypal_fee="10.20",
+        settles_to="vendor-citrine",
+        fx=FxSpec(
+            rate="0.9183",
+            target_currency="EUR",
+            # What PayPal is recorded as having settled - wrong, given the rate.
+            settlement_amount="248.40",
+            # What the rate implies: 276.00 * 0.9183 = 253.4508 -> 253.45
+            naive_recomputation="253.45",
+        ),
+    ),
+    # F4 - a duplicate ledger entry for one sale, so the seller's position is
+    # overstated by the duplicated amount. Seeded by `manifest`-driven code in
+    # `seed.py` rather than by a field here, because the duplicate is a second
+    # *row*, not a different value.
+    OrderSpec(
+        ref="ORD-0016",
+        currency="USD",
+        total="90.00",
+        placed_at=_at(17),
+        items=(
+            ItemSpec(
+                ref="ITEM-0016-A",
+                seller_ref="vendor-aurora",
+                quantity=1,
+                unit_price="90.00",
+                line_total="90.00",
+                category="audio",
+            ),
+        ),
+        expected_commission="9.00",
+        expected_entitlements={"vendor-aurora": "81.00"},
+        paypal_fee="3.11",
+        settles_to="vendor-aurora",
+        duplicate_ledger_entry=True,
+    ),
+    # F5 - **the fault whose correct classification is not an exception.**
+    # R10's cross-source case: the marketplace recorded a refund whose PayPal
+    # counterpart has not appeared, because the reporting APIs run roughly a
+    # day behind. Classifying it as "missing from PayPal" is exactly the false
+    # positive Phase 11 forbids - the record is late, not absent - so the right
+    # answer is `awaiting_evidence` and a re-evaluation on the next scheduled
+    # run.
+    #
+    # The marketplace side is complete and correct here: the ledger reflects
+    # the refund properly. What is missing is the provider's record, which
+    # `seed.py` omits rather than this spec.
+    OrderSpec(
+        ref="ORD-0017",
+        currency="USD",
+        total="60.00",
+        placed_at=_at(18),
+        items=(
+            ItemSpec(
+                ref="ITEM-0017-A",
+                seller_ref="vendor-aurora",
+                quantity=1,
+                unit_price="60.00",
+                line_total="60.00",
+                category="audio",
+            ),
+        ),
+        expected_commission="6.00",
+        expected_entitlements={"vendor-aurora": "54.00"},
+        paypal_fee="2.04",
+        settles_to="vendor-aurora",
+        refunds=(
+            RefundSpec(
+                ref="RFND-0017-A",
+                seller_ref="vendor-aurora",
+                amount="15.00",
+                expected_commission_reversal="1.50",
+                reflected_in_ledger=True,
+                # The fault: the marketplace's side is complete and correct;
+                # PayPal's record has not appeared yet.
+                paypal_record_present=False,
+            ),
+        ),
+    ),
+    # F6 - a disbursement that disagrees with the obligation behind it. Citrine
+    # is owed 138.00 EUR and PayPal released 120.00, an 18.00 shortfall. The
+    # order is `DELAYED`, so the release record exists to disagree with.
+    OrderSpec(
+        ref="ORD-0018",
+        currency="EUR",
+        total="150.00",
+        placed_at=_at(19),
+        items=(
+            ItemSpec(
+                ref="ITEM-0018-A",
+                seller_ref="vendor-citrine",
+                quantity=1,
+                unit_price="150.00",
+                line_total="150.00",
+                category="ceramics",
+            ),
+        ),
+        expected_commission="12.00",
+        expected_entitlements={"vendor-citrine": "138.00"},
+        disbursement_mode="DELAYED",
+        paypal_fee="5.10",
+        settles_to="vendor-citrine",
+        # Released 120.00 against an obligation of 138.00: an 18.00 shortfall
+        # on a completed release, so there is nothing still in flight to
+        # explain it.
+        release_override=("120.00", "disbursement_completed"),
+    ),
+)
+
+#: Order references the faults occupy, which `verify()` excludes.
+FAULTY_ORDER_REFS: frozenset[str] = frozenset(o.ref for o in FAULTY_ORDERS)
+
+def faulty_order(ref: str) -> OrderSpec:
+    for order in FAULTY_ORDERS:
+        if order.ref == ref:
+            return order
+    raise KeyError(f"no faulty order {ref!r}")
+
+
 def clean_order(ref: str) -> OrderSpec:
     """One clean order by reference, for a test that names a specific case."""
     for order in CLEAN_ORDERS:
@@ -704,4 +964,18 @@ class Dataset:
     faulty_order_refs: frozenset[str] = field(default_factory=frozenset)
 
 
+#: The clean baseline on its own: Block B's worked example and the dataset
+#: Phase 11's false-positive gate is measured against.
 CLEAN = Dataset()
+
+#: Clean and faulty records coexisting in one dataset, which is Phase 5's
+#: second exit criterion, and what the demo and the eval harness both run on.
+#:
+#: `faulty_order_refs` is what `verify()` excludes - **by reference, never by a
+#: heuristic.** The builder knows which orders it broke (requirements.md D6),
+#: and a heuristic that tried to detect them would be a reimplementation of the
+#: reconciliation engine inside the test fixture.
+FULL = Dataset(
+    orders=CLEAN_ORDERS + FAULTY_ORDERS,
+    faulty_order_refs=FAULTY_ORDER_REFS,
+)

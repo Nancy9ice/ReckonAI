@@ -517,4 +517,14 @@ def test_counts_are_what_the_dataset_implies(
     assert count(CommissionRule) == len(data.COMMISSION_RULES)
     assert count(Payment) == len(data.CLEAN_ORDERS)
     assert count(Capture) == len(data.CLEAN_ORDERS)
-    assert count(Refund) == sum(len(o.refunds) for o in data.CLEAN_ORDERS)
+
+    # **Two refund rows per refund**, one from each source. One table per
+    # record type holds both sides, told apart only by their payload's
+    # `source` - and nothing links them, because establishing that link is a
+    # matching decision and belongs to Block C, not to a column here.
+    expected_refunds = sum(
+        1 + int(refund.paypal_record_present)
+        for order in data.CLEAN_ORDERS
+        for refund in order.refunds
+    )
+    assert count(Refund) == expected_refunds

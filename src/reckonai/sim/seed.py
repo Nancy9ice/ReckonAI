@@ -321,7 +321,16 @@ def _build_order(session: Session, result: SeedResult, spec: OrderSpec) -> None:
     # money. `status` does not: a `DELAYED` capture reads `COMPLETED` while
     # PayPal still holds the funds, which is why the two columns exist.
     held = spec.disbursement_mode == "DELAYED"
-    capture_state = "funds_held" if held else "disbursed_at_capture"
+    if not held:
+        capture_state = "disbursed_at_capture"
+    elif spec.release_override is not None:
+        # F6's release completed, so the capture says so too. Leaving it at
+        # `funds_held` would make the disagreement look like an in-flight
+        # release, and R10 is explicit that a state still in motion is not a
+        # discrepancy - the fault has to be unambiguously settled to be one.
+        capture_state = spec.release_override[1]
+    else:
+        capture_state = "funds_held"
 
     capture_payload = _paypal_payload(
         session,
@@ -374,7 +383,16 @@ def _build_order(session: Session, result: SeedResult, spec: OrderSpec) -> None:
     # platform fee there, so no row is the accurate record. A zero-amount row
     # would assert a measured fee of nothing, which is the substitution P3
     # forbids.
-    commission = Money(spec.expected_commission, spec.currency)
+    # **What PayPal took, which is not always what the marketplace believes.**
+    # `paypal_platform_fee` is the F2 lever: with the fee derived from
+    # `expected_commission` the provider would echo a wrong commission
+    # faithfully and the fault would be undetectable.
+    commission = Money(
+        spec.paypal_platform_fee
+        if spec.paypal_platform_fee is not None
+        else spec.expected_commission,
+        spec.currency,
+    )
     if data.seller(settles_to).partner_fee_enabled and not commission.is_zero():
         fee_payload = _paypal_payload(
             session,
@@ -439,12 +457,18 @@ def _build_order(session: Session, result: SeedResult, spec: OrderSpec) -> None:
 
     # --- the release record, for a DELAYED order ---------------------------
     if held:
+        # `release_override` is F6's lever: what PayPal actually released,
+        # where that disagrees with the obligation behind it.
+        released, release_state = spec.release_override or (
+            spec.expected_entitlements[settles_to],
+            "funds_held",
+        )
         release_payload = _paypal_payload(
             session,
             result,
             "disbursement",
             f"REL-{spec.ref}",
-            {"status": "HELD"},
+            {"status": release_state.upper()},
             spec.placed_at,
         )
         session.add(
@@ -456,9 +480,9 @@ def _build_order(session: Session, result: SeedResult, spec: OrderSpec) -> None:
                 seller_id=seller_id,
                 recipient_reference=data.seller(settles_to).merchant_id,
                 payout_transaction_id=None,
-                amount=Money(spec.expected_entitlements[settles_to], spec.currency),
-                provider_status="HELD",
-                state="funds_held",
+                amount=Money(released, spec.currency),
+                provider_status=release_state.upper(),
+                state=release_state,
                 # **No default, ever.** PayPal's release record carries no
                 # usable timestamp, and writing an ingestion time here would
                 # present our clock as a provider timestamp (P3).
@@ -582,6 +606,42 @@ def _build_ledger(
         )
         session.flush()
 
+        # F4: the same sale credited twice, under a distinct reference.
+        #
+        # A *distinct* reference is what makes this a realistic duplicate
+        # rather than an impossible one: `UNIQUE (tenant_id, external_ref)`
+        # refuses a literal repeat, and a marketplace's double-post usually
+        # does carry its own id. So the fault is two entries describing one
+        # sale, which is what overstates the seller's position - not a
+        # constraint violation.
+        if spec.duplicate_ledger_entry:
+            dup_ref = f"LED-{spec.ref}-{seller_ref}-sale-dup"
+            dup_payload = _marketplace_payload(
+                session,
+                result,
+                "ledger_entry",
+                dup_ref,
+                {"entry_ref": dup_ref, "txn_kind": "sale",
+                 "direction": "credit",
+                 "entry_amount": str(share.quantize().amount),
+                 "ccy": spec.currency},
+                spec.placed_at,
+            )
+            session.add(
+                SellerLedgerEntry(
+                    tenant_id=result.tenant_id,
+                    raw_payload_id=dup_payload.id,
+                    seller_id=seller_id,
+                    order_id=order_id,
+                    entry_category="sale",
+                    transaction_type="credit",
+                    amount=share,
+                    occurred_at=spec.placed_at,
+                    external_ref=dup_ref,
+                )
+            )
+            session.flush()
+
         # A commission of zero gets no entry. `CHECK (amount_amount > 0)`
         # refuses one anyway, and that constraint is right: an entry moving
         # nothing is not a movement.
@@ -659,6 +719,49 @@ def _build_refund(
     session.add(refund)
     session.flush()
     result.refund_ids[refund_spec.ref] = refund.id
+
+    # --- PayPal's own refund record, where it has arrived ------------------
+    #
+    # F5 is the case where it has not. The default is present, and has to be:
+    # if no refund ever had a provider counterpart then "the counterpart is
+    # missing" would describe every refund in the dataset, and
+    # `awaiting_evidence` would be the answer for all of them rather than for
+    # the one that earns it.
+    #
+    # A distinct `external_id`, because PayPal's refund id is its own and the
+    # table is unique on `(tenant_id, external_id)`. Tying the two together is
+    # Block C's work, not a column here - Phase 3 omitted any `matched_*_id`
+    # deliberately, pinned by test.
+    if refund_spec.paypal_record_present:
+        pp_ref = f"PPRF-{refund_spec.ref}"
+        pp_payload = _paypal_payload(
+            session,
+            result,
+            "refund",
+            pp_ref,
+            {"status": "COMPLETED",
+             "amount": {"value": refund_spec.amount,
+                        "currency_code": spec.currency}},
+            spec.placed_at,
+        )
+        session.add(
+            Refund(
+                tenant_id=result.tenant_id,
+                raw_payload_id=pp_payload.id,
+                external_id=pp_ref,
+                capture_id=capture_id,
+                capture_linkage_is_derived=True,
+                capture_linkage_href=(
+                    "https://api-m.sandbox.paypal.com/v2/payments/captures/"
+                    f"CAP-{spec.ref}"
+                ),
+                seller_id=seller_id,
+                amount=amount,
+                status="COMPLETED",
+                occurred_at=spec.placed_at,
+            )
+        )
+        session.flush()
 
     if not refund_spec.reflected_in_ledger:
         # Fault F1: the refund exists and the ledger never heard about it.

@@ -313,3 +313,116 @@ with the reason written beside it — they produced the committed evidence in
 `specs/paypal-fields.md` and Phase 0's validation re-runs them, so reformatting
 them now would edit evidence-producing code for no benefit. CI runs bare
 `uv run ruff check`, which honours the exclusion, and that passes.
+
+---
+
+## Group 10 — Post-merge deployed checks · 2026-11-08
+
+PR #11 merged as `04d1d3d`. Deploy `dep-dbo6rhfb9u1s73da9hs0` (web) and
+`dep-dbo6rhfb9u1s73da9i00` (worker), both triggered by the merge commit.
+
+| # | Check | Result |
+|---|---|---|
+| D1 | The migration applied on Render | **Pass** |
+| D2 | The service is still ready | **Pass** — `/health` and `/health/ready` both `200`, re-checked after the deploy reached `Live` |
+| D3 | Nine tables and `alembic current` from inside Render | see below |
+| D4 | The worker is up and logging | **Pass** |
+
+### D1 — the migration executed, not stamped
+
+```
+12:41:08  ==> Starting pre-deploy: uv run --no-sync alembic upgrade head
+12:41:55  INFO [alembic.runtime.migration] Context impl PostgresqlImpl.
+12:41:55  INFO [alembic.runtime.migration] Will assume transactional DDL.
+12:41:55  INFO [alembic.runtime.migration] Running upgrade
+          b5f8485e802e -> 33b2f40099eb, canonical financial events and raw
+          payload store
+12:41:59  ==> Pre-deploy complete!
+```
+
+Nine `CREATE TABLE`s with 31 `CHECK` constraints against managed Postgres 16, in
+about four seconds. "Running upgrade" is the line that matters: it shows the
+revision *executing*, where an `alembic_version` row alone would only show a
+stamp.
+
+### D2 — ready, and checked at the right moment
+
+`/health` and `/health/ready` both answered `200` while the deploy was still
+`Pre Deploy In Progress`, which proves nothing on its own — a rolling deploy
+means those responses came from the **previous** instance. Both were re-checked
+once the deploy reported `Live` and answered `200` again. Worth recording
+because the premature check looks identical to the real one.
+
+### D4 — the worker is up, and the rolling overlap happened again
+
+```
+12:41:22  reckonai.worker.tick tick=689      <- outgoing instance
+12:41:52  reckonai.worker.tick tick=690
+12:41:54  ==> Running 'uv run --no-sync python -m reckonai.worker'
+12:41:56  reckonai.worker.start environment=production pool_size=2
+12:41:56  reckonai.worker.database_ready
+12:41:56  reckonai.worker.tick tick=1        <- incoming instance
+12:42:22  reckonai.worker.tick tick=691      <- still the outgoing one
+12:42:26  reckonai.worker.tick tick=2
+```
+
+**Two workers ran concurrently again**, the outgoing instance at `tick=689..691`
+interleaved with the incoming one at `tick=1,2`. Phase 2 observed the same thing
+and Phase 8's first exit criterion names exactly this condition. It is now
+observed on two consecutive deploys, so it is the normal state of production
+rather than a one-off: `FOR UPDATE SKIP LOCKED` has to be right before the
+first real job type exists.
+
+`reckonai.worker.database_ready` is also the worker connecting to the database
+**through the internal URL**, which is the `ipAllowList` bypass working as Phase
+1 designed it.
+
+### D3 — the schema, read from inside Render
+
+`validation.md` section 4 named `render jobs create` as the mechanism and
+recorded it as documented-but-unverified. **It is now verified.** Job
+`job-dbo6smbm8hqs73fnnc9g` against `srv-dbnp8pbrjlhs739ftnj0`:
+
+```
+==> Running 'uv run --no-sync alembic current && uv run --no-sync python -c ...'
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+33b2f40099eb (head)
+15
+['alembic_version', 'capture', 'commission_rule', 'disbursement', 'dispute',
+ 'fx_conversion', 'order', 'order_item', 'payment', 'platform_fee',
+ 'raw_payload', 'refund', 'seller', 'seller_ledger_entry', 'tenant']
+36
+```
+
+Three facts, and all three cross-check against something written down before the
+job ran:
+
+- **`alembic current` is `33b2f40099eb (head)`** — the revision this phase
+  produced, applied and current on the deployed database.
+- **15 tables**, which is exactly `tests/expected_schema.py`'s
+  `DATABASE_TABLES`: Alembic's own, Phase 2's five, and this phase's nine. The
+  same list the local gate asserts, now asserted against managed Postgres.
+- **36 `CHECK` constraints.** The revision docstring counts 31 in this phase's
+  DDL and Phase 2's counts five of its own, which is 36 exactly. So **no
+  constraint was lost between autogenerate and managed Postgres** — including
+  the two `num_nonnulls` checks that `requirements.md` section 6 flagged as the
+  phase's unverified ground.
+
+The job used `--no-sync`, per `CLAUDE.md`; without it `uv run` re-syncs at
+container start and undoes the build's `--no-dev`. It needed no SSH key and no
+allowlist change, because a service inside Render reaches the database by its
+internal URL.
+
+**Two notes for whoever runs this next.** `render deploys list` takes no
+`--limit` flag and its `-o json` returned nothing parseable, so the status came
+from `-o text` plus `grep`; and a job's logs are empty for the first few
+seconds, so a poll loop is needed rather than a single read.
+
+### Phase 3 is complete
+
+All seven roadmap exit criteria pass, the 24-check pre-merge gate is green at
+1117 tests, and all four post-merge deployed checks pass. Phase 4 is next and
+should start from the handoff under Phase 3 in `specs/roadmap.md` —
+particularly the three things that bite a seed builder: the `NOT NULL`
+`raw_payload` link, the unsigned ledger amount, and SQLAlchemy's flush order
+between unrelated mappers.

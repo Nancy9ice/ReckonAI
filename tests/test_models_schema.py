@@ -17,6 +17,7 @@ import pytest
 from sqlalchemy import Boolean, Integer, Numeric, String, Table
 from sqlalchemy.types import Float
 
+from expected_schema import MODEL_TABLES
 from reckonai.models import Base
 from reckonai.money import supported_currencies
 
@@ -54,7 +55,7 @@ def test_the_metadata_is_not_empty() -> None:
     `reckonai.models.__init__` is what makes the metadata complete; if a module
     stopped being imported there, every test below would pass over nothing.
     """
-    assert len(tables()) == 5, [t.name for t in tables()]
+    assert sorted(t.name for t in tables()) == list(MODEL_TABLES)
 
 
 @pytest.mark.parametrize("table", tables(), ids=table_ids)

@@ -18,6 +18,8 @@ from alembic.config import Config
 from alembic.script import ScriptDirectory
 from sqlalchemy import Engine, text
 
+from expected_schema import DATABASE_TABLES, MODEL_TABLES
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -72,14 +74,7 @@ def test_upgrade_creates_the_catalogue_tables(
     """
     command.upgrade(at_base, "head")
 
-    assert _public_tables(engine) == [
-        "alembic_version",
-        "commission_rule",
-        "order",
-        "order_item",
-        "seller",
-        "tenant",
-    ]
+    assert _public_tables(engine) == list(DATABASE_TABLES)
 
 
 def test_the_models_and_the_migrations_agree(at_base: Config) -> None:
@@ -118,7 +113,10 @@ def test_every_catalogue_table_carries_a_tenant_id(
     with engine.connect() as connection:
         scoped = sorted(row[0] for row in connection.execute(query))
 
-    assert scoped == ["commission_rule", "order", "order_item", "seller"]
+    # Every table except `tenant`, which is what a `tenant_id` points at.
+    expected = [name for name in MODEL_TABLES if name != "tenant"]
+
+    assert scoped == expected
 
 
 def test_downgrade_reverses_every_revision(

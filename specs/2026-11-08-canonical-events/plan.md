@@ -132,13 +132,29 @@ The table every financial record points at, so it is created first.
    - The same `(tenant, source, type, sha)` twice raises `IntegrityError`.
    - The same body under a different `source_record_type` inserts.
    - A payload with an unknown `source` is rejected by the `CHECK`.
-5. **Throwaway autogenerate probe.** Run
-   `uv run alembic revision --autogenerate -m probe`, read the generated DDL,
-   and **delete the file**. Nothing is committed from this step. The question it
-   answers early is whether autogenerate emits the `CHECK` constraints and the
-   `JSONB` column at all — `requirements.md` §6 names this as new ground, and
-   the alternative is discovering it in Group 9 with nine tables already
-   written. Repeated for the constraint-heavy tables in Group 5.
+5. **Create the phase's single revision here, not in Group 9.**
+
+   `tests/conftest.py`'s `migrated_database` fixture runs database-backed tests
+   against **the schema a migration produced**, deliberately — a `CHECK` lost in
+   autogenerate then fails the constraint tests and not only the drift check.
+   The consequence is that no group's database tests can pass before a revision
+   exists, so a revision that arrived in Group 9 would leave Groups 2 to 7
+   unvalidated for the whole run.
+
+   So: `uv run alembic revision --autogenerate`, read the generated DDL, then
+   `uv run alembic upgrade head`. Each later group **regenerates the same one
+   file** at its end:
+
+       uv run alembic downgrade b5f8485e802e
+       rm src/reckonai/migrations/versions/<phase-3 revision>.py
+       uv run alembic revision --autogenerate -m "canonical financial events and raw payload store"
+       uv run alembic upgrade head
+
+   `requirements.md` D16 still holds — the phase ships **one** revision — and it
+   is now also validated nine times instead of once. The read-the-DDL step
+   stops being a throwaway probe and becomes the thing being built, which is
+   strictly better: the `num_nonnulls` question D16 flagged as new ground is
+   answered at Group 5 by the revision that will actually ship.
 
 **Exit:** `uv run pytest tests/test_raw_payload.py` green against the compose
 database. `uv run pytest tests/test_models_schema.py` still green — the tenant

@@ -165,6 +165,14 @@ def load_platform() -> dict[str, str]:
         "bn_code": bn_code,
         "base": base,
         "platform_merchant_id": values.get("PAYPAL_PLATFORM_MERCHANT_ID", ""),
+        # Slot 1 is the original pair; PAYPAL_SELLER_1_MERCHANT_ID overrides it
+        # if set. See .env.example for why slot 1 keeps the unnumbered names.
+        "seller_1": (
+            values.get("PAYPAL_SELLER_1_MERCHANT_ID")
+            or values.get("PAYPAL_SELLER_MERCHANT_ID", "")
+        ),
+        "seller_2": values.get("PAYPAL_SELLER_2_MERCHANT_ID", ""),
+        "seller_3": values.get("PAYPAL_SELLER_3_MERCHANT_ID", ""),
     }
 
 
@@ -278,8 +286,18 @@ def verify(args: argparse.Namespace) -> int:
             "PAYPAL_PLATFORM_MERCHANT_ID."
         )
 
-    if not args.seller and not args.tracking_id:
-        sys.exit("error: pass --seller or --tracking-id.")
+    seller = args.seller
+    if args.slot:
+        seller = creds.get(f"seller_{args.slot}", "")
+        if not seller:
+            sys.exit(
+                f"error: slot {args.slot} has no merchant id set. Slot 1 reads "
+                "PAYPAL_SELLER_MERCHANT_ID (or PAYPAL_SELLER_1_MERCHANT_ID); "
+                "slots 2 and 3 read PAYPAL_SELLER_N_MERCHANT_ID."
+            )
+
+    if not seller and not args.tracking_id:
+        sys.exit("error: pass --seller, --slot or --tracking-id.")
 
     with httpx.Client(timeout=30.0) as client:
         bearer = token(client, creds)
@@ -288,10 +306,10 @@ def verify(args: argparse.Namespace) -> int:
             "PayPal-Partner-Attribution-Id": creds["bn_code"],
         }
 
-        if args.seller:
+        if seller:
             url = (
                 f"{creds['base']}/v1/customer/partners/{platform}"
-                f"/merchant-integrations/{args.seller}"
+                f"/merchant-integrations/{seller}"
             )
         else:
             # **Lookup by our own tracking_id**, which is how a just-completed
@@ -313,17 +331,45 @@ def verify(args: argparse.Namespace) -> int:
 
     payload = response.json()
 
-    # The tracking_id form returns a collection.
-    if "merchants" in payload:
-        merchants = payload.get("merchants") or []
-        if not merchants:
+    # **The tracking_id form returns a summary, and scoring it is wrong.**
+    # Observed twice on 2026-11-08: it carries `merchant_id` and little else,
+    # with no `oauth_integrations` at all - so scoring the grant from it
+    # reported all six features as NOT granted on sellers that had all six.
+    #
+    # A first attempt at this guessed the response wrapped results in a
+    # `merchants` collection. It does not, so that branch never ran and the
+    # false negative recurred. Hence the unconditional form: when the lookup
+    # was by tracking id, **always** re-fetch by the resolved merchant id,
+    # whatever shape the summary turns out to have.
+    if args.tracking_id and not seller:
+        resolved = payload.get("merchant_id")
+        if not resolved:
+            for item in payload.get("merchants") or []:
+                resolved = item.get("merchant_id")
+                break
+        if not resolved:
             print(
-                "no merchant found for that tracking_id. The onboarding did "
-                "not persist, or it completed under a different referral.",
+                "no merchant for that tracking_id. The onboarding did not "
+                "persist, or it completed under a different referral.",
                 file=sys.stderr,
             )
             return 1
-        payload = merchants[0]
+
+        print(f"resolved tracking_id -> merchant_id {resolved}")
+        with httpx.Client(timeout=30.0) as client:
+            bearer = token(client, creds)
+            response = client.get(
+                f"{creds['base']}/v1/customer/partners/{platform}"
+                f"/merchant-integrations/{resolved}",
+                headers={
+                    "Authorization": f"Bearer {bearer}",
+                    "PayPal-Partner-Attribution-Id": creds["bn_code"],
+                },
+            )
+        if response.status_code != 200:
+            print(f"lookup failed: {response.status_code}", file=sys.stderr)
+            return 1
+        payload = response.json()
 
     granted: set[str] = set()
     for integration in payload.get("oauth_integrations", []):
@@ -345,6 +391,20 @@ def verify(args: argparse.Namespace) -> int:
         print("full record:")
         print(json.dumps(payload, indent=2)[:4000])
     print()
+    # **A record carrying no scope data at all is not a record of six
+    # refusals.** Treating it as one is how this script twice called a fully
+    # granted seller a failure. A verifier that cannot distinguish "not
+    # granted" from "did not ask properly" is worse than no verifier, because
+    # it produces a confident wrong answer - which is the same failure mode
+    # specs/mission.md P3 forbids of the product itself.
+    if not granted:
+        print(
+            "this record carries no oauth_integrations scopes at all, so it "
+            "says nothing about what was granted. Re-query by merchant id, "
+            "with --seller or --slot."
+        )
+        return 1
+
     print("requested feature             granted scope                        ok")
     missing = []
     for feature, scope in FEATURE_SCOPES.items():
@@ -384,6 +444,15 @@ def main() -> int:
 
     check = sub.add_parser("verify", help="report what a seller was granted")
     check.add_argument("--seller", help="the seller's merchant id")
+    check.add_argument(
+        "--slot",
+        type=int,
+        choices=(1, 2, 3),
+        help=(
+            "read the merchant id from the env file instead of passing it, "
+            "so the value stays out of shell history and transcripts"
+        ),
+    )
     check.add_argument(
         "--tracking-id",
         help="the referral's tracking_id, to resolve a just-onboarded seller",

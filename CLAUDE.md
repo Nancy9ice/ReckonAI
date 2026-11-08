@@ -3,11 +3,20 @@
 AI-powered financial reconciliation and investigation agent for marketplace
 operators using PayPal.
 
+**Start here: `specs/2026-11-08-replan/requirements.md`.** It is the session
+entry point. Phases 4-15 are re-sequenced into seven blocks against a two-day
+deadline, and R1-R15 record every narrowing with its reasoning. The root specs
+below total ~3,500 lines and re-reading them per session is the largest
+avoidable cost — read a section when a block points at it, not by default.
+
 The specs in `specs/` are the constitution. Read them before implementing:
 
-- `specs/mission.md` — what we are building, and principles P1–P7
-- `specs/tech-stack.md` — locked technology decisions
-- `specs/roadmap.md` — phase order and exit criteria
+- `specs/mission.md` — what we are building, and principles P1–P7. §4 is
+  amended: event-driven ingestion is deferred past the MVP (R8)
+- `specs/tech-stack.md` — locked technology decisions. §4, §5, §6, §8 and §9.2
+  carry dated MVP amendments
+- `specs/roadmap.md` — exit criteria, which **all still bind**. Its sequencing
+  and its cutline are superseded by the replan
 
 Also read, and in this order:
 
@@ -19,7 +28,16 @@ Also read, and in this order:
 - `specs/paypal-fields.md` — what PayPal actually returns, per field, with the
   evidence. The root specs state rules and point here; they do not repeat it.
 
-**Phases 0, 0b, 1, 2 and 3 are complete. Phase 4 is next.**
+**Phases 0, 0b, 1, 2 and 3 are complete. Block A is next** — Phases 4, 5 and 6
+together, per the replan. Read Phase 3's handoff in `roadmap.md` first,
+particularly the three things that bite a seed builder.
+
+**What the MVP does not include**, so it is not half-built by accident: webhook
+ingestion (R8), live PayPal calls during the reconciliation run — records are
+replayed from captured sandbox responses (R6), LLM-suggested field mapping
+(R11), and the dashboard's seller financial position view (R13). The AI
+investigation agent is kept **entire** (Phase 12) and the zero-false-positive
+gate (Phase 11) is the last thing to compromise.
 
 Phase 0's observed evidence was captured against a **first-party** integration,
 so it does not cover platform fees, disbursement modes or any seller-level view.

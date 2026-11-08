@@ -197,6 +197,25 @@ third of three capabilities. Confirmed explicitly with the operator,
 *Limitation to record:* field mapping is deterministic only; unmatched fields
 are mapped by hand.
 
+**Three different things are called "confidence" in these specs, and only the
+first is cut.** This caused the conflation twice while replanning, so:
+
+| Where | What it scores | Status |
+|---|---|---|
+| [[tech-stack]] §9.2 pass 3 | A guess that source column `vendor_id` means canonical `seller_id` | **Cut** |
+| [[tech-stack]] §5.2 output contract | A **candidate cause** in an investigation report, with its cited record ids | **Kept** |
+| `readme.md` §9.3, via R5 | Whether an exception is a genuine discrepancy, used to rank the queue | **Kept** |
+
+And two different things are called "unmatched". An **unmapped field** is a
+schema question — which canonical field a column corresponds to — answered once
+per marketplace by a human before any reconciliation runs, with no financial
+record involved. An **unmatched record** is a refund with no capture to tie to,
+a ledger entry with no PayPal counterpart, a seller paid something other than
+their entitlement. Those are Phase 11's output and **Phase 12's agent is what
+explains them**: reconstruct the lifecycle, rank probable causes against
+retrieved evidence, cite the ids each cause rests on, attach a confidence, and
+return `insufficient_evidence` rather than guess. R11 does not touch any of it.
+
 **R12. The eval harness stays, against the roadmap's cutline.** The cutline says
 drop it and score by hand. That reasoning inverts here: hand-scoring costs hours
 this plan does not have, so the harness *replaces* a manual pass rather than

@@ -102,6 +102,38 @@ Reconciliation runs both **historically** (over a chosen period) and
 **event-driven** (as new financial events arrive), through the same engine and
 the same canonical model.
 
+**Amended 2026-11-08 — event-driven ingestion is deferred past the MVP.**
+Recorded here rather than rewritten above, because the paragraph states the
+product's intent correctly and it is the *MVP's* coverage that is narrower. The
+decision and its reasoning are
+`specs/2026-11-08-replan/requirements.md` R8; what follows is why it does not
+contradict this document.
+
+**What the MVP delivers:** reconciliation over a chosen period, triggered on
+demand or on a schedule, through one engine over one canonical model.
+
+**What is deferred:** webhook ingestion, signature verification, and recovery of
+missed deliveries. There are no webhook endpoints in the MVP.
+
+**Why this is an amendment and not a breach.** The load-bearing claim in the
+paragraph above is *"through the same engine and the same canonical model"* —
+that there is no second code path for live events. That claim is **stronger** in
+the MVP, not weaker: the engine is pure functions that know nothing about what
+invoked them ([[tech-stack]] §6), so a trigger added later cannot create a
+second path. The trigger was therefore the affordable thing to defer, and the
+architecture it would attach to is already built.
+
+**What P4 keeps.** "Unmatched is not the same as wrong" is untouched, and the
+case it protects survives without webhooks: the marketplace holds a refund whose
+PayPal record has not appeared yet, because the reporting APIs run roughly a day
+behind. Calling that *missing* would be the exact false positive P4 forbids. So
+an incomplete lifecycle is classified `awaiting_evidence` and re-evaluated on
+the next scheduled run — the run is the retry. What is deferred is the webhook
+parking machinery, never the classification.
+
+Three of three §6 demo scenarios are state comparisons over a seeded dataset, so
+none of them is affected.
+
 ## 5. Principles
 
 These are non-negotiable and exist to be cited in code review.

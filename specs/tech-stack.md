@@ -22,7 +22,7 @@
 | LLM orchestration | Anthropic Python SDK, beta Tool Runner | Yes |
 | Frontend | React 18 + TypeScript + Vite | Yes |
 | Data grid | AG Grid / AG Studio | Yes |
-| Payments | PayPal REST APIs + webhooks (sandbox) | Yes |
+| Payments | PayPal REST APIs (sandbox) | Yes |
 | PayPal API context | APIMatic Context Plugin (dev-time) | Yes |
 | Hosting | Render | Yes |
 | Tests | pytest | Yes |
@@ -143,10 +143,26 @@ Implementation:
 - Columns for `attempts`, `run_after`, `last_error` to support retry with
   exponential backoff.
 - A `processed_events` table keyed on the provider's event id as a **unique
-  constraint** — the database, not application logic, is what makes duplicate
-  webhook delivery impossible.
-- Render Cron Jobs trigger scheduled reconciliation runs and periodic backfills
-  that recover missed events.
+  constraint** — the database, not application logic, is what makes processing
+  the same event twice impossible.
+- Render Cron Jobs trigger scheduled reconciliation runs over a date window.
+
+**Amended 2026-11-08** (`specs/2026-11-08-replan/requirements.md` R7, R9). Two
+narrowings, neither structural:
+
+- Retry is the simplest correct form — attempt count, `run_after`, a terminal
+  failed state with the error recorded — rather than a tuned backoff policy.
+  The `attempts` / `run_after` / `last_error` columns above are unchanged.
+- "Periodic backfills that recover missed events" is dropped, because webhook
+  ingestion is out of the MVP (§8, and [[mission]] §4's amendment) and there is
+  therefore no missed delivery to recover. **The scheduled run itself stays**,
+  and does more work than before: the reporting APIs lag roughly a day (§8), so
+  a date-windowed re-run is what completes a record that was incomplete when
+  first read, and is what re-evaluates an exception parked as
+  `awaiting_evidence`.
+
+Nothing above weakens the `COMMIT` argument below, which is the reason the queue
+lives in Postgres at all.
 
 **Why this over Redis + ARQ/Celery:** the decisive reason is correctness, not
 simplicity. Idempotency must be transactional with the financial write it
@@ -174,6 +190,18 @@ investigations per demo the cost is immaterial.
 MTok) for the high-volume, low-judgment task of suggesting marketplace→canonical
 field mappings. Per [[mission]] P1 those suggestions are advisory and must pass
 deterministic validation before activation.
+
+**Dropped from the MVP, 2026-11-08** (`specs/2026-11-08-replan/requirements.md`
+R11). The secondary model is cut along with §9.2's third mapping pass; field
+mapping is deterministic only, and an unmatched field is mapped by hand. The
+decision stands for the MVP, not for the design — §9.2 keeps the pass documented
+because the three-pass ordering is the right shape once there is time for it.
+
+**This cut is scoped to field-name guessing and touches nothing in this
+section's primary model.** The Opus 5.5 investigation layer below — including
+every audit constraint in §5.2 — is unaffected and is not reducible. It is the
+LLM that produces evidence-backed recommendations, which [[mission]] §4 lists as
+the third of three capabilities.
 
 ### 5.1 Request configuration
 
@@ -242,7 +270,9 @@ and fetch a full raw payload only when explicitly asked for one.
 
 **Haiku 5.5 has no server-side refusal fallback.** A refused field-mapping
 suggestion must fail closed — the administrator maps the field by hand. It must
-never fall through to an unvalidated guess ([[mission]] P1).
+never fall through to an unvalidated guess ([[mission]] P1). *Moot in the MVP,
+which has no Haiku pass (§5 amendment); the fail-closed behaviour it specifies
+is what the MVP does unconditionally.*
 
 **Agent loop:** the Anthropic SDK's beta Tool Runner —
 `@beta_tool`-decorated functions passed to `client.beta.messages.tool_runner(...)`,
@@ -284,6 +314,13 @@ call it as a tool.
 Both historical and event-driven reconciliation call the *same* engine over the
 *same* canonical model. There is no second code path for live events.
 
+**Amended 2026-11-08** (`specs/2026-11-08-replan/requirements.md` R8). Webhook
+ingestion is out of the MVP, so there is currently only one trigger — on demand,
+or on §4's schedule. **The structural rule is unchanged and is the part that
+mattered:** the engine is pure functions over the canonical model and knows
+nothing about what invoked it, so adding a trigger later cannot create a second
+code path. That is precisely why the trigger was the affordable thing to cut.
+
 ---
 
 ## 7. Frontend
@@ -305,9 +342,21 @@ core work is already finished — it is not permitted to displace any phase in
 
 ## 8. PayPal integration
 
-Sandbox throughout. PayPal REST APIs plus webhooks, using the PayPal MCP
-toolkit where its exposed capabilities genuinely fit: transaction retrieval,
-dispute retrieval, refunds, disbursement data, merchant insights.
+Sandbox throughout. PayPal REST APIs, using the PayPal MCP toolkit where its
+exposed capabilities genuinely fit: transaction retrieval, dispute retrieval,
+refunds, disbursement data, merchant insights.
+
+**Amended 2026-11-08** (`specs/2026-11-08-replan/requirements.md` R6, R8, R15).
+Webhooks are out of the MVP, and PayPal records reach the canonical model by
+**replaying captured sandbox responses** rather than by a call the
+reconciliation run makes at demo time. Sandbox throughout still holds; nothing
+production is ever called.
+
+The field rules below are unaffected, because they are rules about **what a
+payload contains**, and a replayed payload is the same payload. The verification
+they rest on was completed in Phases 0 and 0b against a real platform app; the
+capture script that produces the fixtures is a real client subject to every rule
+in this section, and it is run live — once, on screen — to open the demo.
 
 **The integration model is multiparty** (amended 2026-11-06). We read as the
 **platform** in a PayPal *connected integration*, not as the merchant, and both
@@ -350,9 +399,15 @@ Five client rules, all of them non-obvious enough to be worth locking here:
 
 Each rests on evidence in `specs/paypal-fields.md` and the Phase 0 notes.
 
-Webhook handling: verify signatures where supported, dedupe on event id via the
+Webhook handling — **deferred past the MVP, 2026-11-08**
+(`specs/2026-11-08-replan/requirements.md` R8), and kept here as the design for
+when it lands: verify signatures where supported, dedupe on event id via the
 unique constraint in §4, process idempotently, and backfill on a schedule to
 recover anything missed.
+
+The `processed_events` constraint in §4 is built regardless, because it is what
+makes processing the same event twice impossible and it is proven by test rather
+than by a webhook.
 
 ### 8.1 APIMatic Context Plugin — how PayPal knowledge enters the build
 
@@ -455,7 +510,11 @@ passes run first and the model only sees the residue.
    Provenance `synonym`.
 3. **LLM suggestion for whatever remains.** Claude Haiku 5.5 (§5), given field
    names, types, descriptions and sample values. Provenance `llm`, with a
-   confidence value.
+   confidence value. — **Not in the MVP, 2026-11-08**
+   (`specs/2026-11-08-replan/requirements.md` R11). Whatever passes 1 and 2
+   leave unmapped goes straight to human review, which is where an `llm` entry
+   had to go anyway. The `llm` provenance value and the activation rule below
+   stay in the schema so the pass can be added without a migration.
 
 Then, always: **human review.** An administrator sees every entry with its
 provenance and confidence, and corrects what is wrong. Provenance becomes

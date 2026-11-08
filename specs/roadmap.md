@@ -449,11 +449,14 @@ Phase 2 (`Money`).
 
 ---
 
-## Phase 4 — Simulated marketplace API: clean data · 0.5 day
+## Phase 4 — Simulated marketplace API: clean data · 0.5 day · **COMPLETE 2026-11-08**
 
-> **Replanned 2026-11-08: this is Block A**, together with Phase 5 (R4) and
-> Phase 6 (R3) — one session, three commits, three spec entries. Phase 4's own
-> scope is unchanged. Start here.
+> **Delivered as Block A**, with Phases 5 and 6. `reckonai.sim` serves four
+> sellers and twelve clean orders over `/sim/marketplace/*` under deliberately
+> non-canonical field names, and `seed.verify()` recomputes every stated figure
+> through the real commission resolver. All three exit criteria pass; the
+> hand-check table is `specs/2026-11-08-block-a-marketplace-connector/
+> validation.md` §2.
 
 **Goal:** A marketplace to integrate against, with correct records only.
 
@@ -497,8 +500,14 @@ disbursement so the held-funds states are reachable.
 
 ---
 
-## Phase 5 — Fault injection · 0.5 day
+## Phase 5 — Fault injection · 0.5 day · **COMPLETE 2026-11-08**
 
+> **Delivered as Block A.** Six faults on their own orders (ORD-0013 to
+> ORD-0018), so the hand-checked clean baseline stays intact, plus
+> `reckonai.sim.manifest`. F5's expected classification is
+> `awaiting_evidence` and **not** an exception — it is the entry that measures
+> over-reporting.
+>
 > **Replanned 2026-11-08 (R4, R8):** folded into Block A, and the webhook
 > emitter is dropped with webhook ingestion. The faults, the manifest and the
 > coexistence of clean and faulty records are unchanged — the manifest is still
@@ -531,8 +540,14 @@ contradict one.
 
 ---
 
-## Phase 6 — Marketplace connector and normalization · 0.5 day
+## Phase 6 — Marketplace connector and normalization · 0.5 day · **COMPLETE 2026-11-08**
 
+> **Delivered as Block A.** `reckonai.connector`: httpx2 client, versioned
+> `connector_mapping`, the closed transform set, §9.2 passes 1 and 2, all six
+> §9.4 checks with a failing-direction test each, and idempotent ingestion with
+> a `quarantined_record` store. Zero data loss is proven as
+> `retrieved == written + quarantined`.
+>
 > **Replanned 2026-11-08 (R3):** runs as a sequenced sub-block of Block A rather
 > than a separate phase — two commits and two spec entries, one session.
 > **Nothing is removed**, including the [[tech-stack]] §9.4 validation gate and

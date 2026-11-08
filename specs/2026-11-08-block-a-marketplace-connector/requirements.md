@@ -268,15 +268,49 @@ block's debt, not Block D's discovery.
 
 ## 3. What this block hands forward
 
-- **Block B** gets the clean dataset its worked example runs against: $160
-  across two sellers at 10% → A $90, B $54, commission $16. Order `ORD-0001`
-  is that order, seeded exactly.
-- **Block C** gets both the clean baseline its false-positive gate is measured
-  on and the faults it must classify, with D4's two non-faults planted in the
-  clean set.
-- **Block D** reuses `MarketplaceClient`'s shape and the `raw_payload` retain
-  path for PayPal fixtures.
-- **Block G** reads the manifest as eval ground truth.
+Written before building, corrected after. `validation.md` §9 lists every
+correction and §8 the three debts handed on.
+
+**Block B — the entitlement engine.**
+- `ORD-0001` is [[mission]]'s worked example, seeded exactly: $160 across two
+  sellers at 10% → aurora $90, bellweather $54, commission $16.
+- `validation.md` §2 tabulates all 12 clean orders, plus per-seller positions
+  (aurora USD 237.00, bellweather USD 256.47, citrine USD 138.00 / EUR 294.40,
+  dunlin USD 125.00) and commission totals (USD 66.83, EUR 25.60).
+- **A capture fee is never `0`.** Every seeded capture states one and `NULL`
+  stays available for "unknown" — Phase 10 must not default it.
+- **`vendor-dunlin` has an explicit 0% rule**, because it was not onboarded for
+  `PARTNER_FEE` and has no platform fee row at all. A stated zero, not a
+  defaulted one, and the engine has to tell those apart.
+- Expected commission is comparable to PayPal's platform fee, which is what
+  Block C checks it against — `platform_fee.amount`, not a recomputation.
+
+**Block C — matching and classification.**
+- `data.FULL` is the dataset: 12 clean orders plus 6 faulty, in one tenant.
+- The two non-faults are in the clean set on purpose (D4), and `validation.md`
+  §2 gives ORD-0008's two conflicting-but-correct figures in full.
+- `manifest.FAULTS` is the ground truth. **F5's expected answer is
+  `awaiting_evidence`, not an exception** — it is the entry that measures
+  over-reporting.
+- The six classification strings in `manifest.py` are **not** a shared
+  vocabulary yet. Reconciling them with Block C's own is its first task
+  (`validation.md` §8).
+- Both sides of a record type live in one table, told apart only by their
+  payload's `source`. **Nothing links them** — no `matched_*_id` exists
+  anywhere, pinned by test, because that link is Block C's decision to make.
+
+**Block D — fixture replay and the queue.**
+- `MarketplaceClient` is the shape to reuse: httpx2 against a configurable base
+  URL, `Page` carrying the source's stated count and a schema hash.
+- The `raw_payload` write path, including the id-in-body requirement that two
+  identical commission figures exposed (`validation.md` §9).
+- **The debt:** no `_synthetic` payload may survive into the demo tenant once
+  the replay ingester has run (D12).
+
+**Block G — the eval harness.**
+- `manifest.as_dict()` is the ground truth, amounts as strings.
+- `Fault.evidence_refs` is what a correct investigation must cite, so Block E's
+  citations are scoreable rather than a judgement call.
 
 ## 4. Deviations from the replan, recorded
 

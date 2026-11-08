@@ -28,9 +28,20 @@ Also read, and in this order:
 - `specs/paypal-fields.md` — what PayPal actually returns, per field, with the
   evidence. The root specs state rules and point here; they do not repeat it.
 
-**Phases 0, 0b, 1, 2 and 3 are complete. Block A is next** — Phases 4, 5 and 6
-together, per the replan. Read Phase 3's handoff in `roadmap.md` first,
-particularly the three things that bite a seed builder.
+**Phases 0, 0b, 1, 2, 3 and Block A (4 + 5 + 6) are complete. Block B is
+next** — Phase 10, the entitlement engine, ~3 h. Read Block A's handoff in
+`specs/2026-11-08-block-a-marketplace-connector/requirements.md` §3 first: it
+names the worked example's seeded figures, the per-seller totals Block B's
+output is checked against, and the two things Phase 10 must not do (default a
+capture fee to zero, or confuse `vendor-dunlin`'s stated 0% rule with a
+defaulted one).
+
+Block A delivered the simulated marketplace (`reckonai.sim`), the six seeded
+faults with their manifest, and the connector (`reckonai.connector`). That
+directory's `validation.md` §9 records seven corrections to its own
+`requirements.md` and two bugs the checks caught; §8 records three debts
+handed forward. **Read §8 before Block C or Block D** — one of them is a
+cleanup Block D owes.
 
 **What the MVP does not include**, so it is not half-built by accident: webhook
 ingestion (R8), live PayPal calls during the reconciliation run — records are

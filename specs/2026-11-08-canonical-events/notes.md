@@ -426,3 +426,31 @@ should start from the handoff under Phase 3 in `specs/roadmap.md` —
 particularly the three things that bite a seed builder: the `NOT NULL`
 `raw_payload` link, the unsigned ledger amount, and SQLAlchemy's flush order
 between unrelated mappers.
+
+### What the deployed database is actually reachable for
+
+Established while answering a question during Group 10, and recorded because
+all three parts get re-derived otherwise.
+
+**Database logs need no allowlist.** They come through Render's API rather than
+a database connection, so the API key alone is enough:
+
+    render logs --resources dpg-dbnp86rrjlhs739fsjdg-a --limit 50 -o text
+
+The log lines show `client=10.196.149.16`, an internal Render address, which is
+the `ipAllowList` bypass visible from the inside.
+
+**`ipAllowList` governs SQL connections only, and allowlisting is unreliable
+here.** The developer machine's egress IP was `105.113.98.236` at 06:20 and
+`105.113.69.86` by 12:30 the same day — it rotates within a working day, so an
+allowlist entry goes stale about as fast as it is added, and the resulting
+failure reads like a bad credential rather than a changed address. A dashboard
+entry is also removed by the next Blueprint sync, because `render.yaml` pins
+`ipAllowList: []`. A free way to look up the current address: the refusal
+message from `render psql <db> -c "SELECT 1;"` reports it.
+
+**There is nothing in the database to look at yet**, which is the practical
+reason not to bother. Phase 2 built the catalogue and Phase 3 built the event
+tables; **no code path has ever written a row.** Phase 4 is the phase that seeds
+data, Phases 6 and 7 are what ingest it. Direct SQL access becomes worth having
+after Phase 4, not before.

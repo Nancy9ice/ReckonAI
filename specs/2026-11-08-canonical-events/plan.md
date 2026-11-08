@@ -132,6 +132,13 @@ The table every financial record points at, so it is created first.
    - The same `(tenant, source, type, sha)` twice raises `IntegrityError`.
    - The same body under a different `source_record_type` inserts.
    - A payload with an unknown `source` is rejected by the `CHECK`.
+5. **Throwaway autogenerate probe.** Run
+   `uv run alembic revision --autogenerate -m probe`, read the generated DDL,
+   and **delete the file**. Nothing is committed from this step. The question it
+   answers early is whether autogenerate emits the `CHECK` constraints and the
+   `JSONB` column at all — `requirements.md` §6 names this as new ground, and
+   the alternative is discovering it in Group 9 with nine tables already
+   written. Repeated for the constraint-heavy tables in Group 5.
 
 **Exit:** `uv run pytest tests/test_raw_payload.py` green against the compose
 database. `uv run pytest tests/test_models_schema.py` still green — the tenant
@@ -289,8 +296,17 @@ share a shape are written together.
    - A 15-decimal rate string round-trips through `NUMERIC(20, 10)` without
      passing through `float`, and the stored value is compared as `Decimal`.
 
-**Exit:** the new tests green. This is the group to slow down in; if anything in
-the phase is wrong in a way the later groups hide, it is here.
+5. **Throwaway autogenerate probe, again**, and this is the one that matters.
+   Generate, read, delete. Confirm specifically that
+   `CHECK (num_nonnulls(capture_id, refund_id) = 1)` and
+   `CHECK (fee_amount IS NULL OR fee_amount <> 0)` appear in the generated
+   `create_table`. If either is missing, autogenerate is dropping it and the
+   revision in Group 9 must carry it by hand — which is a finding for
+   `notes.md`, not a reason to weaken the constraint.
+
+**Exit:** the new tests green, and the probe's answer recorded in `notes.md`.
+This is the group to slow down in; if anything in the phase is wrong in a way
+the later groups hide, it is here.
 
 ---
 

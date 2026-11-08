@@ -46,7 +46,8 @@ entry point — the root specs are 3,532 lines and re-reading them per session i
 the largest avoidable token cost; read a root spec only where a block points at
 a section. No subagents. Whole modules per pass, implementation and tests in one
 write. Operator runs the suite and pastes failures only. `/code-review medium`
-on Blocks B and C only. One deploy, in Block F.
+on Blocks B and C only. One deploy, in Block F — **spent early on Block A's
+merge; see "State" below**.
 
 ## Lever 2 — merges
 
@@ -377,12 +378,28 @@ record of completed phases and record what was true when written.
 5. **`CLAUDE.md`** — phase status, and a pointer making this directory the
    session entry point.
 
-## State when this was written
+## State
 
-2026-11-08. Phases 0, 0b, 1, 2 and 3 complete and merged. **No block below has
-been started** — the replan and the document amendments are the only work done
-on this branch. Block A is next, and reads Phase 3's handoff in [[roadmap]]
-first, particularly the three things that bite a seed builder.
+**Updated 2026-11-08 after Block A merged.** This section is the first thing a
+new session reads, so it is kept current rather than left as a record of when
+the replan was written.
+
+Phases 0, 0b, 1, 2, 3 and **Block A (4 + 5 + 6) are complete and merged** — PR
+#14, merge commit `2d002b1`, CI green. **Block B is next** (Phase 10, the
+entitlement engine, ~3 h).
+
+Before starting it, read
+`specs/2026-11-08-block-a-marketplace-connector/requirements.md` §3 — Block A's
+handoff — and that directory's `validation.md` §8, which lists four debts
+handed forward. Two of them are Block B's or Block C's to settle.
+
+**The deploy budget below is spent.** R2 allowed one deploy, in Block F. Block A
+was merged to `main`, and both Render services track `main` with no
+`autoDeploy` setting, so the merge deployed. This was accepted deliberately,
+not overlooked. The deployed app is verified healthy and serving
+`/sim/marketplace`; `validation.md` §10 has the checks. A later block that needs
+another deploy is therefore spending an unbudgeted one, which is a decision to
+make consciously rather than a rule being broken.
 
 ## Related
 

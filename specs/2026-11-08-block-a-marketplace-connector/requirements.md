@@ -274,6 +274,14 @@ correction and §8 the three debts handed on.
 **Block B — the entitlement engine.**
 - `ORD-0001` is [[mission]]'s worked example, seeded exactly: $160 across two
   sellers at 10% → aurora $90, bellweather $54, commission $16.
+- **Only the first half of that example is seeded.** [[roadmap]] Phase 10's
+  exit criterion continues "after a $40 refund on A's item → A $54, B $54,
+  commission $12", and **`ORD-0001` carries no refund**. That half is a
+  pure-function fixture, which is all Phase 10 needs — it is I/O-free by
+  definition, so its hand-computed fixtures do not have to exist as rows. Do
+  not go looking for a $40 refund on `ORD-0001`; the seeded refund case is
+  `ORD-0011`, a $20 refund on a $70 item with a $2 commission reversal, and
+  its figures are different on purpose.
 - `validation.md` §2 tabulates all 12 clean orders, plus per-seller positions
   (aurora USD 237.00, bellweather USD 256.47, citrine USD 138.00 / EUR 294.40,
   dunlin USD 125.00) and commission totals (USD 66.83, EUR 25.60).
@@ -284,6 +292,26 @@ correction and §8 the three debts handed on.
   defaulted one, and the engine has to tell those apart.
 - Expected commission is comparable to PayPal's platform fee, which is what
   Block C checks it against — `platform_fee.amount`, not a recomputation.
+
+**One thing Block B should move rather than rewrite.** `seed._verify_order`
+already performs the entitlement calculation — per-seller share, resolve the
+rule, quantize the commission, subtract — because D6 needed it before an engine
+existed. **That logic belongs in `reckonai/engine/`**, and Block B should move
+it there and have `verify()` call the engine, not write a second copy.
+
+Two copies would be worse than duplication: they could disagree, and the one in
+the test fixture would be the one nobody reviews. Moving it **preserves D5a's
+independence**, which is the property that matters — the check stays
+hand-written literals against a recomputation, and the recomputation simply
+becomes the real engine instead of a stand-in. If `verify()` still passes
+afterwards, the engine agrees with twelve hand-tabulated orders on its first
+day.
+
+What Block B inherits from earlier phases, unchanged: `signed()` and
+`position()` from `reckonai.engine.ledger`, `resolve_commission_rule` from
+`reckonai.engine.rules`, and `allocate()` from `reckonai.money` for the
+refund-across-sellers case. The engine stays I/O-free — no database handle,
+HTTP client or clock read, pinned by `tests/test_money_purity.py`.
 
 **Block C — matching and classification.**
 - `data.FULL` is the dataset: 12 clean orders plus 6 faulty, in one tenant.

@@ -111,6 +111,15 @@ trimming of earlier tool results. See `specs/tech-stack.md` §5.2.
 
 - Package manager is `uv`. Install with `uv sync --frozen`, run with `uv run`.
   No hand-maintained `requirements.txt`.
+- **The test suite is order-dependent.** Two modules commit rows and clean up
+  at module teardown; `tests/test_migrations.py` downgrades to `base`. It
+  passes because pytest collects alphabetically. **Do not add test
+  randomisation or `-n auto`** without first adding a session-scoped guard —
+  `specs/2026-11-08-block-a-marketplace-connector/validation.md` §8 debt 4 has
+  the detail and the fix.
+- **The deployed database carries the schema and no rows**, and is not
+  reachable externally, so nothing can currently seed it. The live demo needs
+  that; it is §8 debt 5, and Block D is the natural place for it.
 - **Local work needs the compose database and `DATABASE_URL` exported.**
   Without them the database-backed tests skip locally and fail hard in CI, which
   is deliberate — a silent skip would be a green run that tested nothing.

@@ -209,8 +209,15 @@ because those PEP 723 probes produced the committed evidence in
    plus this document.
 4. `requirements.md` §3's handoff accurate — **met**; amended while building,
    see §9.
-5. No deploy — **met**. The replan allows one, in Block F.
-6. CI green on the branch — pending push.
+5. CI green on the branch — **met**. `ruff, migrations, pytest` passed in 45s
+   on GitHub Actions, against a fresh Postgres service where both migrations
+   apply from scratch. The real run agrees with the local one.
+6. Merged — PR #14, merge commit `2d002b1`.
+
+**The "no deploy" condition was dropped, not met.** An earlier draft listed it,
+reasoning from R2's one-deploy-in-Block-F budget. Merging to `main` deploys,
+because both Render services track `main` with no `autoDeploy` setting, and the
+merge went ahead with that accepted. §10 records what the deploy produced.
 
 ## 9. Corrections made while building
 
@@ -282,7 +289,7 @@ body, which a real provider response carries anyway.
 - That `awaiting_evidence` is reached for F5 — Block C.
 - That the manifest scores — Block G's eval harness.
 
-**Three debts this block hands on explicitly**, so none is discovered:
+**Five debts this block hands on explicitly**, so none is discovered:
 
 1. **`manifest.py`'s classification strings are not yet a shared vocabulary.**
    Block C owns the exception vocabulary; these six strings were written here
@@ -298,6 +305,57 @@ body, which a real provider response carries anyway.
    deliberately *not* in the clean baseline, because D4 fixes the non-faults at
    two and adding a third silently would change what Phase 11's gate is
    measured against. Block C should take it or decline it deliberately.
+4. **The test suite is order-dependent, and will break on randomisation or
+   parallelism.** `tests/test_sim_api.py` and `tests/test_connector_ingest.py`
+   each **commit** real rows and delete them at module teardown, because the
+   sim's endpoints open their own `Session` from `app.state.engine` and cannot
+   see a transaction a fixture is holding open. `tests/test_migrations.py`
+   downgrades to `base`.
+
+   It passes only because pytest collects alphabetically —
+   `test_connector_ingest` < `test_migrations` < `test_sim_api` — so the
+   committed rows are gone before the downgrade runs. Add `pytest-randomly`,
+   `-p no:cacheprovider` reordering, or `-n auto`, and the downgrade meets rows
+   it cannot drop through `ondelete="RESTRICT"`.
+
+   **Verified fragile, not theorised:** the committing fixtures are
+   module-scoped and their teardown is what keeps the window closed. Worth a
+   session-scoped guard — a fixture that refuses to run `test_migrations` while
+   any tenant rows exist, which fails loudly instead of depending on
+   collection order. Block B is the cheapest place to add it.
+5. **Nothing can seed the deployed environment.** See §10. R15 makes the live
+   demo the deliverable and Block G rehearses against the deployed app, so
+   something has to put rows in the production database — and the database is
+   not reachable from a developer machine. Needs a CLI entry point or a
+   one-off Render job. **Block D is the natural place**, since it already adds
+   the Render Cron Job and a replay ingester that writes rows.
+
+## 10. The deployed state, verified 2026-11-08
+
+Checked against `https://reckonai-api.onrender.com` after the merge deployed.
+
+| Check | Result |
+|---|---|
+| `GET /health` | `{"status":"ok","version":"0.1.0"}` |
+| `GET /health/ready` | `{"status":"ready",...}` — so the connection pool works and **the migration applied**; readiness executes `SELECT 1` |
+| `GET /` | advertises `/sim/marketplace` |
+| `GET /sim/marketplace` | serves the index and all 10 resource paths |
+| `GET /sim/marketplace/orders` | **404** |
+
+**That 404 is correct, and it is also a gap.** The endpoint 404s rather than
+returning an empty list because an unseeded database and a marketplace with no
+orders are different conditions (`sim/router.py`). Production carries the
+schema and no rows.
+
+**So there is no way to seed the deployed environment**, and nothing was built
+for it. `seed.build()` is a Python function with no CLI entry point, and
+`CLAUDE.md` records that the production database is not reachable externally
+(`ipAllowList: []`), so seeding has to run from inside Render — a one-off job,
+a `render exec`, or a guarded admin route.
+
+This matters because **R15 makes the live demo the deliverable and Block G
+rehearses against the deployed environment.** Recorded in §8 as a debt rather
+than left for Block G to discover the evening before.
 
 ## Related
 

@@ -60,9 +60,9 @@ in parallel.
 | Provider events | `payment`, `capture`, `refund`, `dispute` |
 | Multiparty events | `platform_fee`, `disbursement` |
 | Conversions | `fx_conversion`, one-to-many against its parent, created only where PayPal reported a rate |
-| Marketplace ledger | `seller_ledger_entry`, append-only, unsigned with an explicit direction |
+| Marketplace ledger | `seller_ledger_entry`, append-only, unsigned with an explicit transaction type |
 | Lifecycle | Two checked state vocabularies: reconciliation states and disbursement states |
-| Sign handling | One pure helper in `engine/` that turns a direction and an amount into a signed `Money` |
+| Sign handling | One pure helper in `engine/` that turns a transaction type and an amount into a signed `Money` |
 | Migration | One additive Alembic revision creating all nine tables, reversible, `alembic check` clean |
 | Gates | The model-import gate, the raw-payload-link gate, the conversion-shape gate, plus Phase 2's four re-run over nine new tables |
 
@@ -227,7 +227,7 @@ place to disagree. The amount is never negated at rest; [[roadmap]] Phase 10's
 expected position applies the direction, and must assume the reversal happened
 rather than instruct it.
 
-### D7 — `seller_ledger_entry` is append-only and unsigned, with an explicit `direction`
+### D7 — `seller_ledger_entry` is append-only and unsigned, with an explicit `transaction_type`
 
 One row per movement, never updated or deleted:
 
@@ -235,19 +235,19 @@ One row per movement, never updated or deleted:
 |---|---|---|
 | `seller_id` | Composite FK, `NOT NULL` | An entry with no seller has no position to belong to |
 | `order_id` | Composite FK, nullable | A manual adjustment, a dispute debit or a periodic fee has no order behind it |
-| `entry_type` | `VARCHAR(32)`, checked | What Phase 11 asks "is there a refund entry for this refund?" against. Scenario 1 is a missing row of one type |
-| `direction` | `VARCHAR(6)`, `debit` or `credit` | The sign, as its own fact |
+| `entry_category` | `VARCHAR(32)`, checked | What Phase 11 asks "is there a refund entry for this refund?" against. Scenario 1 is a missing row of one category |
+| `transaction_type` | `VARCHAR(6)`, `debit` or `credit` | The sign, as its own fact |
 | `amount` | `money_columns`, `NOT NULL`, `CHECK (> 0)` | Unsigned magnitude |
 | `occurred_at` | `TIMESTAMPTZ`, `NOT NULL` | When the marketplace says it happened, distinct from `created_at` |
 | `external_ref` | `UNIQUE (tenant_id, external_ref)` | What makes Phase 6's idempotency a database property |
 
-`LEDGER_ENTRY_TYPES` is `sale`, `commission`, `commission_reversal`, `refund`,
+`LEDGER_ENTRY_CATEGORIES` is `sale`, `commission`, `commission_reversal`, `refund`,
 `dispute`, `adjustment`, `fee`.
 
-**The direction is a column rather than a sign on the amount**, and the `CHECK
+**The transaction type is a column rather than a sign on the amount**, and the `CHECK
 (amount_amount > 0)` is what that buys. With a signed amount there is no way to
 distinguish a wrong sign from a legitimate negative, so a zero or negative
-amount cannot be rejected; with a direction column it is rejected by the
+amount cannot be rejected; with a `transaction_type` column it is rejected by the
 database. A seller's position is `SUM(credit) - SUM(debit)` per currency,
 computed at read time.
 
@@ -262,7 +262,7 @@ positive gate, the hardest criterion in the project, for a figure that is
 already derivable. The marketplace's stated balance is simply not evidence we
 hold.
 
-**`direction` and `entry_type` are partly redundant, and no `CHECK` ties them.**
+**`transaction_type` and `entry_category` are partly redundant, and no `CHECK` ties them.**
 A `sale` is always a credit and a `refund` always a debit, so a row could say
 `sale` + `debit`. The marketplace supplies both, and a disagreement between them
 is a finding about the marketplace's data rather than an insert to reject —
@@ -271,9 +271,9 @@ exception into an ingestion crash.
 
 ### D8 — The sign is applied in exactly one place, in `engine/`
 
-`reckonai/engine/ledger.py` holds `signed(direction, amount) -> Money`, a pure
+`reckonai/engine/ledger.py` holds `signed(transaction_type, amount) -> Money`, a pure
 function over a `typing.Protocol`, and it is the only place in the codebase
-where a ledger direction becomes a sign.
+where a ledger transaction type becomes a sign.
 
 D7 moves the sign out of the data, which means something has to put it back, and
 the failure mode is that twelve call sites each do it slightly differently — one
@@ -465,7 +465,7 @@ are in `specs/2026-11-07-canonical-core/notes.md` §"Render CLI setup".
 Recorded here so none of it is rediscovered.
 
 - **Phase 4** seeds these tables for its clean baseline. It must honour D7's
-  `CHECK (amount_amount > 0)` and supply a `direction`, and it needs a
+  `CHECK (amount_amount > 0)` and supply a `transaction_type`, and it needs a
   `raw_payload` row per record because D2's link is `NOT NULL` — a seed builder
   that was going to insert financial rows directly cannot. It also still owes
   its own order-total consistency check (Phase 2 D13) and must delete

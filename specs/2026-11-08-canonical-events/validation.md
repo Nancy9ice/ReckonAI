@@ -81,6 +81,7 @@ be putting the violation into the schema every later phase builds on.
 | S6 | Retain raw source payloads; never discard the evidence for a decision | [[mission]] P7, `CLAUDE.md` | C3, C4, C18 |
 | S7 | Never fabricate a financial value | [[mission]] P3 | C6, C19 |
 | S8 | Every migration is reversible | `specs/2026-11-07-repo-deployment-skeleton` | C21 |
+| S9 | Never default or invent a monetary value | [[tech-stack]] §9.6 | C6, C19, C23 |
 
 ---
 
@@ -317,7 +318,26 @@ No module under `src/reckonai/models/` is unreachable from
 is absent from the metadata, and autogenerate reads its table as one to
 **drop**.
 
-### C23 — The whole suite is green
+### C23 — The ledger is unsigned, positive, and deliberately unconstrained across its two type columns
+
+    uv run pytest tests/test_ledger.py
+
+Four assertions, and the fourth is the unusual one:
+
+- A zero `amount` is rejected by `CHECK (amount_amount > 0)`, and so is a
+  negative one. This is what `requirements.md` D7 buys by moving the sign out of
+  the amount: a signed column cannot distinguish a wrong sign from a legitimate
+  negative, so neither could be refused.
+- `signed()` inverts a `debit` and leaves a `credit` alone.
+- An unknown `transaction_type` raises rather than defaulting to `credit`.
+- **A `sale` row with `transaction_type='debit'` inserts successfully.** The
+  deliberate absence of a cross-column `CHECK`, pinned by a test so a later
+  contributor does not add one as a tidy-up. The marketplace supplies both
+  columns and a disagreement between them is a Phase 11 finding about the
+  marketplace's data, not an insert to reject — Phase 2's D13 reasoning
+  unchanged.
+
+### C24 — The whole suite is green
 
     uv run pytest
 
@@ -352,7 +372,7 @@ run once per phase.
 Not every red result blocks the merge, and the distinction is worth stating in
 advance so it is not negotiated under pressure.
 
-**Blocks the merge.** C1–C4, C6, C7, C10, C14–C17, C21, C22, C23. Each is a rule
+**Blocks the merge.** C1–C4, C6, C7, C10, C14–C17, C21, C22, C23, C24. Each is a rule
 from a constitution document, and a violation is written into the schema that
 every later phase builds on. C21 in particular: a migration that does not
 reverse is not reversible later.

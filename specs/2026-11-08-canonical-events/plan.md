@@ -67,7 +67,7 @@ No database, no table. The vocabulary every table below references.
    - `DISBURSEMENT_STATES` — `("disbursed_at_capture", "funds_held",
      "release_requested", "disbursement_completed", "disbursement_pending",
      "disbursement_failed")`, from `specs/multiparty-direction.md` §4.
-   - `LEDGER_ENTRY_TYPES` — `("sale", "commission", "commission_reversal",
+   - `LEDGER_ENTRY_CATEGORIES` — `("sale", "commission", "commission_reversal",
      "refund", "dispute", "adjustment", "fee")`.
    - `state_check(column: str, values: tuple[str, ...], *, name: str) ->
      CheckConstraint`, generating the `IN (...)` constraint from the tuple so
@@ -340,8 +340,8 @@ The marketplace side of the model, and the only new thing in `engine/`.
 1. Create `src/reckonai/models/ledger.py` with `SellerLedgerEntry`, exactly the
    shape of `requirements.md` D7:
    - `seller_id` composite FK `NOT NULL`; `order_id` composite FK nullable.
-   - `entry_type` `VARCHAR(32)` `NOT NULL` over `LEDGER_ENTRY_TYPES`.
-   - `direction` `VARCHAR(6)` `NOT NULL`, checked against
+   - `entry_category` `VARCHAR(32)` `NOT NULL` over `LEDGER_ENTRY_CATEGORIES`.
+   - `transaction_type` `VARCHAR(6)` `NOT NULL`, checked against
      `("debit", "credit")`.
    - `amount` `NOT NULL`, plus `CHECK (amount_amount > 0)`.
    - `occurred_at` `TIMESTAMPTZ` `NOT NULL`; `external_ref` `VARCHAR(128)`
@@ -349,21 +349,22 @@ The marketplace side of the model, and the only new thing in `engine/`.
    - The docstring states three things: the table is **append-only** — never
      updated, never deleted; the amount is unsigned and the `CHECK (> 0)` is
      what that buys, since a signed column cannot distinguish a wrong sign from
-     a legitimate negative; and **no `CHECK` ties `direction` to `entry_type`**,
+     a legitimate negative; and **no `CHECK` ties `transaction_type` to `entry_category`**,
      because the marketplace supplies both and a disagreement is a Phase 11
      finding rather than an insert to reject (Phase 2 D13's reasoning).
    - It also states that there is **no stored running balance**, and why: a
      derived monetary value persisted beside its inputs is what
      [[tech-stack]] §9.6 forbids, and a seller's position is
      `SUM(credit) - SUM(debit)` per currency, computed at read time.
-2. Create `src/reckonai/engine/ledger.py` with `signed(direction, amount) ->
+2. Create `src/reckonai/engine/ledger.py` with `signed(transaction_type, amount) ->
    Money`, taking a `typing.Protocol` rather than the ORM class so the purity
    gate stays satisfiable, and `position(entries, currency) -> Money` if it
    falls out cleanly — otherwise leave the sum to Phase 10 and ship only
-   `signed`. An unknown direction raises; it is not defaulted to `credit`.
+   `signed`. An unknown transaction type raises; it is not defaulted to `credit`.
 3. Tests in `tests/test_ledger.py`: a zero amount is rejected by the database; a
    negative amount is rejected; `signed` inverts a debit and leaves a credit
-   alone; an unknown direction raises; a `sale` row with `direction='debit'`
+   alone; an unknown transaction type raises; a `sale` row with
+   `transaction_type='debit'`
    **inserts successfully**, pinning the deliberate absence of a cross-column
    check so a later contributor does not add one as a tidy-up.
 

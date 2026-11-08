@@ -142,3 +142,69 @@ JPY's `1699` as a bare number would slip past the decoder hook alone. The
 docstring on `_reject_json_number` records this, since it is the reason the
 obvious `isinstance(body["amount"], str)` assertion is insufficient *and* the
 reason it is still present alongside the hook.
+
+## Group 4 — The declarative base and the five catalogue tables · 2026-11-08
+
+**731 tests pass** with the database up, and the suite skips cleanly with
+`DATABASE_URL` unset. Three findings, one of which changed the design.
+
+### A nullable `composite()` does NOT return `None`. It constructs `Money(None, None)`
+
+This was the open question going into the group, flagged in `requirements.md`
+D4's risk, and the answer is the unhelpful one. SQLAlchemy calls the composite's
+class with whatever the columns hold, so an all-NULL pair reaches
+`Money(None, None)`, and `Money` - correctly - raises:
+
+```
+reckonai.money.errors.UnknownCurrency:
+  a currency code must be a string, not NoneType
+```
+
+Four tests failed on it, and it would have fired on **every load of a
+commission rule with no fixed component**, which is most of them.
+
+Fixed by building the composite from a factory, `_money_or_none`, rather than
+from `Money` directly. It handles three cases, and the third is the one worth
+having: both NULL gives `None`; both set gives a `Money`; **exactly one set
+raises**, because reaching that state means `money_pair_check()` is missing from
+the table, and handing back `None` there would read as "no fixed component"
+when an amount had in fact been recorded without its currency.
+
+The factory is used for non-nullable pairs too, so there is one code path. A
+`None` assigned to a non-nullable attribute then fails at flush against the
+column's `NOT NULL`, which is a clearer error than one raised mid-construction.
+
+### `uuid.UUID` must not appear in `type_annotation_map`
+
+A `uuid.UUID: uuid.UUID` entry makes SQLAlchemy try to instantiate
+`uuid.UUID()` as a SQL type, which raises `TypeError: one of the hex, bytes,
+bytes_le, fields, or int arguments must be given` at **class definition time** -
+so the whole models package fails to import. SQLAlchemy 2.0 already maps
+`uuid.UUID` to its own `Uuid` type, rendering as native `UUID` on Postgres.
+A comment in `base.py` records this where the next person would add it back.
+
+### A test session needs `join_transaction_mode="create_savepoint"`
+
+Many tests in `tests/test_catalogue_constraints.py` provoke an
+`IntegrityError` on purpose. Without a savepoint, the failed flush rolls back
+the transaction the fixture owns, so teardown warns
+`SAWarning: transaction already deassociated from connection` and anything
+after it runs outside a transaction. With `create_savepoint`, a failed flush
+unwinds only to the savepoint and the enclosing transaction survives to be
+rolled back by the fixture.
+
+Phase 3 will write far more constraint tests than this phase did, so the
+pattern is worth inheriting rather than rediscovering.
+
+### Two smaller notes
+
+**A raw `session.execute(insert())` raises at the call, not at the next
+flush.** Two tests that write a half-populated money pair have to bypass the
+ORM - `composite()` makes the state unrepresentable through the mapped
+attribute, which is D4 working - and so they need `pytest.raises` around the
+`execute` itself.
+
+**`order` is a reserved word in SQL.** SQLAlchemy quotes it automatically and
+the generated DDL is correct, but any hand-written SQL in a later phase needs
+`"order"` with the quotes. The table keeps the name the roadmap gives it rather
+than being renamed to work around the quoting.

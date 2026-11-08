@@ -28,13 +28,23 @@ Also read, and in this order:
 - `specs/paypal-fields.md` — what PayPal actually returns, per field, with the
   evidence. The root specs state rules and point here; they do not repeat it.
 
-**Phases 0, 0b, 1, 2, 3 and Block A (4 + 5 + 6) are complete. Block B is
-next** — Phase 10, the entitlement engine, ~3 h. Read Block A's handoff in
-`specs/2026-11-08-block-a-marketplace-connector/requirements.md` §3 first: it
-names the worked example's seeded figures, the per-seller totals Block B's
-output is checked against, and the two things Phase 10 must not do (default a
-capture fee to zero, or confuse `vendor-dunlin`'s stated 0% rule with a
-defaulted one).
+**Phases 0, 0b, 1, 2, 3 and Block A (4 + 5 + 6) are complete. The PayPal
+capture is next, then Block B** — see the replan's **R16**, which moved the
+capture script, the fixtures and the replay ingester ahead of the remaining
+blocks and **retired Block A's synthetic PayPal side**.
+
+The capture is the one piece of remaining work that cannot proceed unattended:
+it needs live sandbox credentials and operator decisions about which orders,
+sellers and currencies to push. Block B is unaffected and does not move — it is
+pure functions over hand-computed fixtures.
+
+Before Block B, read Block A's handoff in
+`specs/2026-11-08-block-a-marketplace-connector/requirements.md` §3: it names
+the worked example's seeded figures, the per-seller totals Block B's output is
+checked against, the two things Phase 10 must not do (default a capture fee to
+zero, or confuse `vendor-dunlin`'s stated 0% rule with a defaulted one), and
+the entitlement calculation that should **move** out of `seed._verify_order`
+rather than be rewritten.
 
 Block A delivered the simulated marketplace (`reckonai.sim`), the six seeded
 faults with their manifest, and the connector (`reckonai.connector`). That
@@ -45,8 +55,9 @@ cleanup Block D owes.
 
 **What the MVP does not include**, so it is not half-built by accident: webhook
 ingestion (R8), live PayPal calls during the reconciliation run — records are
-replayed from captured sandbox responses (R6), LLM-suggested field mapping
-(R11), and the dashboard's seller financial position view (R13). The AI
+replayed from captured sandbox responses (R6, whose capture now runs early per
+R16), LLM-suggested field mapping (R11), and the dashboard's seller financial
+position view (R13). The AI
 investigation agent is kept **entire** (Phase 12) and the zero-false-positive
 gate (Phase 11) is the last thing to compromise.
 

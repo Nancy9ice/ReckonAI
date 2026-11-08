@@ -398,15 +398,10 @@ def test_no_platform_fee_exists_for_the_seller_without_the_capability(
     assert count == 0
 
 
-def test_a_capture_fee_is_never_defaulted_to_zero(
+def test_no_seeded_capture_fee_is_zero(
     session: Session, seeded: seed.SeedResult
 ) -> None:
-    """specs/roadmap.md Phase 10: `NULL` makes "unknown" representable.
-
-    Every seeded capture states a fee, so none is null here - but none is zero
-    either, which is the property that would break first if a future change
-    started defaulting.
-    """
+    """Every capture in the clean set states a real, non-zero fee."""
     captures = list(
         session.scalars(
             select(Capture).where(Capture.tenant_id == seeded.tenant_id)
@@ -417,6 +412,47 @@ def test_a_capture_fee_is_never_defaulted_to_zero(
     for capture in captures:
         assert capture.paypal_fee is not None
         assert not capture.paypal_fee.is_zero()
+
+
+def test_an_unstated_capture_fee_stays_null_and_is_not_defaulted(
+    session: Session,
+) -> None:
+    """specs/roadmap.md Phase 10: `NULL` makes "unknown" representable.
+
+    **This test exists because the one above could not fail.** Mutation testing
+    found it: every order in the clean set states a `paypal_fee`, so the
+    builder's `else None` branch was never reached, and replacing it with
+    `Money(spec.paypal_fee or "0", ...)` left the whole suite green. The
+    assertion "no fee is zero" was true of the data and said nothing about the
+    code.
+
+    So this seeds an order whose fee PayPal did not state - which is a real
+    condition, not a contrivance: a capture loses its entire
+    `seller_receivable_breakdown` while `PENDING`, and an open dispute puts it
+    there (Phase 3's handoff). The fee must come back `NULL`, because an
+    unknown fee and a fee of nothing are different claims.
+    """
+    order = dataclasses.replace(
+        data.clean_order("ORD-0002"), ref="ORD-UNKNOWNFEE", paypal_fee=None
+    )
+    dataset = data.Dataset(orders=(order,))
+
+    result = seed.build(
+        session, dataset, tenant_slug=f"sim-{uuid.uuid4().hex[:8]}"
+    )
+    session.flush()
+
+    capture = session.scalar(
+        select(Capture).where(Capture.tenant_id == result.tenant_id)
+    )
+    assert capture is not None
+    assert capture.paypal_fee is None, (
+        "an unstated fee was defaulted; NULL is what makes 'unknown' "
+        "representable and a zero would assert a measured fee of nothing"
+    )
+    # The net is NULL too, and must be: it is derived from the fee, so a net
+    # computed from a defaulted zero would be the gross wearing a fee's name.
+    assert capture.net_amount is None
 
 
 def test_every_ledger_amount_is_positive(

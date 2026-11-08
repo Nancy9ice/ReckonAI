@@ -228,7 +228,37 @@ the code is worse than one that records the correction.
 | §6 gates | Listed `ruff format --check` and `mypy src`, neither of which this project has | Replaced with the gates CI actually runs |
 | tech-stack §1 | Locked no HTTP client, although the connector needs one at runtime | Amended, dated 2026-11-08, adding `httpx2` — the fork this project already used for tests, rather than a second HTTP stack |
 
-Two bugs the checks caught, worth keeping because each argues for a check:
+### Two tests that could not fail, found by mutation testing
+
+The suite was audited by deliberately breaking each guarantee and checking that
+something failed. **24 mutations, 22 caught immediately, 2 missed** — and the
+two misses were the same defect in different places: a test asserting what the
+data happened to be rather than what the code must do.
+
+| Missed mutation | Why nothing failed | Fix |
+|---|---|---|
+| `paypal_fee` defaulted to `Money("0")` when absent | Every seeded order *states* a fee, so the builder's `else None` branch was never reached. `test_a_capture_fee_is_never_defaulted_to_zero` asserted "no fee is zero", which was true of the dataset and said nothing about the code | Split in two. `test_an_unstated_capture_fee_stays_null_and_is_not_defaulted` seeds an order with `paypal_fee=None` and asserts `NULL`, plus `net_amount is None` — a net derived from a defaulted zero would be the gross wearing a fee's name |
+| `accounts_for_everything()` → `return True` | Every call site was a case where the identity genuinely holds, so the method was both the claim and its own witness — the Phase 3 gate's failure shape exactly | `test_the_accounting_identity_can_actually_fail` exercises it on a lossy and a double-counted result, and `test_zero_data_loss_measured_from_rows_not_from_counters` re-proves the claim from database rows against what the sim served, using none of the counters |
+
+Both mutations are now caught. The remaining 22 were caught by between 1 and 6
+tests each; `verify()` reduced to a no-op fails 6.
+
+### Verified independently of the test suite
+
+Run against the deployed-shape app on a real port, with arithmetic recomputed
+from the HTTP responses rather than from `data.py`:
+
+| Check | Result |
+|---|---|
+| `GET /` advertises `/sim/marketplace`; `GET /money/example` | 200; **404** |
+| [[mission]]'s worked example, recomputed from `/order-items` at 10% | aurora 90.00, bellweather 54.00, commission 16.00, total 160.00 — **matches** |
+| Any money key carrying a bare JSON number, by regex over raw bytes across all 10 endpoints | **none** |
+| Any outward key colliding with one of the 100 canonical column names | **none** |
+| ORD-0008's artefact, recomputed at rate 0.9183 | total-once 126.73, per-line 126.72, difference **0.01** |
+| Each of the six faults visible from the HTTP surface | **all six**; F1's clean counterpart still carries its 2 entries, so F1 is a fault and not a broken builder |
+| Both non-faults indistinguishable from healthy records | **confirmed**; `funds_held` with `released_on: null` |
+
+### Two bugs the checks caught, worth keeping because each argues for a check:
 
 **The sim served PayPal's refunds as its own.** `/marketplace/refunds`
 returned five records where the marketplace knows three, and the connector

@@ -298,6 +298,97 @@ def test_the_full_dataset_ingests_with_zero_data_loss(
         )
 
 
+def test_the_accounting_identity_can_actually_fail() -> None:
+    """**This test exists because the one above could not fail.**
+
+    Mutation testing found it: replacing `accounts_for_everything` with
+    `return True` left the whole suite green. Every test that calls it does so
+    where the identity genuinely holds, so the method was both the claim and
+    its own witness - the same shape as the Phase 3 gate that passed with its
+    subject commented out.
+
+    So the method is exercised directly, on numbers that do not add up.
+    """
+    from reckonai.connector.ingest import IngestResult
+
+    honest = IngestResult(tenant_id=uuid.uuid4(), mapping_version=1)
+    honest.retrieved["order"] = 10
+    honest.inserted["order"] = 7
+    honest.quarantined["order"] = 3
+    assert honest.accounts_for_everything()
+
+    # Three records retrieved, neither written nor quarantined: the silent
+    # skip this identity exists to catch.
+    lossy = IngestResult(tenant_id=uuid.uuid4(), mapping_version=1)
+    lossy.retrieved["order"] = 10
+    lossy.inserted["order"] = 7
+    assert not lossy.accounts_for_everything(), (
+        "the identity accepted a run that lost three records"
+    )
+
+    # And double-counting, which is the opposite failure.
+    doubled = IngestResult(tenant_id=uuid.uuid4(), mapping_version=1)
+    doubled.retrieved["order"] = 10
+    doubled.inserted["order"] = 7
+    doubled.updated["order"] = 7
+    assert not doubled.accounts_for_everything()
+
+
+def test_zero_data_loss_measured_from_rows_not_from_counters(
+    environment: Engine, client: MarketplaceClient, ingest_tenant: uuid.UUID
+) -> None:
+    """The same claim, independent of the ingester's own bookkeeping.
+
+    The test above makes the counters trustworthy; this one does not use them.
+    It counts what the sim **served** over HTTP against what landed in the
+    database, per table, so a result object that lied about everything could
+    not make this pass.
+    """
+    served = {
+        "seller": len(client.fetch("/marketplace/sellers").records),
+        "order": len(client.fetch("/marketplace/orders").records),
+        "order_item": len(client.fetch("/marketplace/order-items").records),
+        "payment": len(client.fetch("/marketplace/payments").records),
+        "refund": len(client.fetch("/marketplace/refunds").records),
+        "seller_ledger_entry": len(
+            client.fetch("/marketplace/ledger-entries").records
+        ),
+    }
+    assert all(count > 0 for count in served.values()), served
+
+    with Session(bind=environment) as session:
+        _run(session, client, ingest_tenant)
+        session.commit()
+
+        models = {
+            "seller": Seller,
+            "order": Order,
+            "order_item": OrderItem,
+            "payment": Payment,
+            "refund": Refund,
+            "seller_ledger_entry": SellerLedgerEntry,
+        }
+
+        quarantined = session.scalar(
+            select(func.count())
+            .select_from(QuarantinedRecord)
+            .where(QuarantinedRecord.tenant_id == ingest_tenant)
+        )
+
+        for table, expected in served.items():
+            landed = session.scalar(
+                select(func.count())
+                .select_from(models[table])
+                .where(models[table].tenant_id == ingest_tenant)
+            )
+            assert landed == expected, (
+                f"{table}: the sim served {expected} records and {landed} "
+                f"landed. Quarantined overall: {quarantined}."
+            )
+
+        assert quarantined == 0
+
+
 def test_the_ingested_counts_match_the_sim_tenant(
     environment: Engine, client: MarketplaceClient, ingest_tenant: uuid.UUID
 ) -> None:

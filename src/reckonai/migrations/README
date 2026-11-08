@@ -14,9 +14,32 @@ length of the overlap window. Expand, then contract: add a column, deploy the
 code that writes it, drop the old one in a later revision. Dropping or renaming
 a column the running instance still selects will break it.
 
+`alembic check` is part of the merge gate (Phase 2 onward). It fails when a
+model has changed without a matching revision, which is otherwise invisible
+until the next deploy applies a revision that no longer matches the code being
+deployed. tests/test_migrations.py runs it as a test too.
+
+Autogenerate is a starting point, not an answer. Read a generated revision
+before trusting it, and check in particular that every CHECK constraint is
+present and named, that a composite foreign key carries both of its columns,
+that NUMERIC kept its precision and scale rather than becoming bare, and that
+downgrade() drops in dependency order. A lost CHECK leaves every ORM-level test
+passing while the database accepts the row it was meant to refuse.
+
+Do not introduce a native Postgres enum type without handling its lifecycle by
+hand. Autogenerate does not reliably emit the type's CREATE/DROP alongside the
+table's, so a downgrade leaves an orphaned type and the next upgrade fails on a
+duplicate. Phase 2 used a VARCHAR plus a CHECK constraint for
+order.disbursement_mode for this reason.
+
+A model module that is not imported by reckonai/models/__init__.py is absent
+from Base.metadata, and autogenerate reads an absent table as a table to DROP.
+Add new model modules there.
+
 Usage:
 
   uv run alembic upgrade head
   uv run alembic downgrade base
-  uv run alembic revision -m "<message>"
+  uv run alembic check                   # models and migrations agree
+  uv run alembic revision --autogenerate -m "<message>"
   uv run alembic upgrade head --sql      # review the SQL without connecting

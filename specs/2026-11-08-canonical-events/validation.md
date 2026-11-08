@@ -356,14 +356,44 @@ is failing (`requirements.md` D18).
 |---|---|---|
 | D1 | The migration applied on Render | Render CLI deploy logs — `preDeployCommand` ran `alembic upgrade head` and reported the new revision as head |
 | D2 | The service is still ready | `GET /health` and `/health/ready` both answer `200` from `https://reckonai-api.onrender.com` |
-| D3 | The nine tables exist with their constraints, and `alembic current` matches head | From **inside Render**. The database is not reachable externally — `ipAllowList: []` — so this is a shell on the service, not a connection from a developer machine. Mechanics in `specs/2026-11-07-canonical-core/notes.md` §"Render CLI setup" |
+| D3 | The nine tables exist with their constraints, and `alembic current` matches head | From **inside Render**, via a one-off job — see below. The database is not reachable externally, which was re-confirmed by test on 2026-11-08 rather than assumed. Ids in `specs/2026-11-07-canonical-core/notes.md` §"Render CLI setup" |
 | D4 | The worker is up and logging | Render logs. Two workers overlapping for about 90 seconds during a rolling deploy is expected and is Phase 8's problem, not a failure here |
 
-**Manual, with a stated reason.** D1 and D4 read deploy logs, and D3 runs inside
-a container whose database is deliberately unreachable from anywhere else.
-Automating any of them means giving CI the Render credentials, which
-[[tech-stack]] §10 does not provide for and which is not worth it for a check
-run once per phase.
+**How D3 reaches the database.** `ipAllowList: []` on `reckonai-db` means
+internal Render traffic only, and it governs **external** connections only —
+which is why the migration itself connects without trouble, since a service
+inside Render uses the internal URL and bypasses the list. Re-confirmed by test
+on 2026-11-08, with the Render API key present and the workspace set:
+
+    $ render psql dpg-dbnp86rrjlhs739fsjdg-a --command "SELECT ..."
+    Error: IP address (...) not in allow list for reckonai-db
+
+The key authenticated fine and the CLI resolved the instance; what refused the
+connection was a packet filter, not an authorization check. The two are
+orthogonal and no credential changes the second.
+
+So D3 runs **inside** Render. Phase 2 named two paths — the dashboard Shell,
+which is manual, and `render ssh`, which needs an SSH public key registered on
+the account — and ran neither. There is a third, which is non-interactive and
+needs no key:
+
+    render jobs create srv-dbnp8pbrjlhs739ftnj0 \
+      --start-command "uv run --no-sync alembic current"
+
+A one-off job runs in the service's own environment, so `DATABASE_URL` is the
+internal URL and the allowlist does not apply. Output comes back through
+`render logs`. Two things to know: Render **bills a one-off job per second** of
+runtime, and `--no-sync` is required — without it `uv run` re-syncs at container
+start and undoes the build's `--no-dev` (`CLAUDE.md`).
+
+**This command is documented but not yet verified**, because running it before
+the merge would exercise the pre-merge deploy. Group 10 is where it is proven;
+if it does not work, the dashboard Shell is the fallback and that is a finding
+for `notes.md`, not a reason to skip the check.
+
+**Manual, with a stated reason.** D1 and D4 read deploy logs. Automating them
+means giving CI the Render credentials, which [[tech-stack]] §10 does not
+provide for and which is not worth it for a check run once per phase.
 
 ---
 

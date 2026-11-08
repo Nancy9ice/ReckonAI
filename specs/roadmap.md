@@ -380,12 +380,29 @@ who is PayPal's `payee`, the marketplace's expected commission is what PayPal
 should have taken as a platform fee, and at least one order uses `DELAYED`
 disbursement so the held-funds states are reachable.
 
+**Two things inherited from Phase 2**, both easy to miss:
+
+- **Delete `GET /money/example` from `src/reckonai/app.py`.** It is a
+  serialization probe, not product — the smallest thing that proved `Money`
+  crosses JSON as strings through the real application rather than only in a
+  unit test. Phase 4 is where real endpoints arrive and it should go then, along
+  with its entry in the service index and `tests/test_money_json.py`'s route
+  tests. Leaving it means a demo URL that returns `104.05` for no reason.
+- **Nothing in the database stops an inconsistent order.** By decision
+  (`specs/2026-11-07-canonical-core/requirements.md` D13) no constraint ties an
+  order's total to the sum of its items, because such a disagreement is a
+  finding rather than a bad write. So the "reconciles perfectly by hand"
+  criterion below has **no database backstop**: the seed builder needs its own
+  consistency check, or Phase 11's false-positive gate is measured against a
+  baseline that was never clean.
+
 **Exit criteria**
 - All endpoints return data with deliberately *different* field names from
   canonical (`vendor_id`, `order_ref`, `item_total`) so mapping is exercised for
   real.
 - The seed dataset reconciles perfectly by hand — this is the known-good
   baseline that proves the engine produces no false positives.
+- `GET /money/example` is gone, and the service index no longer lists it.
 
 **Depends on:** nothing technically; sequenced here so it is shaped by Phases 2–3.
 
@@ -478,6 +495,14 @@ data where Phases 0 and 0b confirmed it exists.
 `jobs` table with `FOR UPDATE SKIP LOCKED` claiming, retry with backoff,
 `processed_events` unique constraint, worker loop, Render Cron Job wired to a
 scheduled run.
+
+**Two workers already run concurrently on every deploy** (observed 2026-11-08,
+Phase 2 Group 9). Render's rolling deploy overlapped the outgoing worker and the
+incoming one for about 90 seconds — the log shows the old instance at
+`tick=1045..1048` interleaved with the new one at `tick=2,3,4`. So the first
+exit criterion below is not a condition to construct in a test; it is the
+condition production is already in, every time the worker ships. `FOR UPDATE
+SKIP LOCKED` has to be right before the first real job type exists.
 
 **Exit criteria**
 - Two workers running concurrently never claim the same job — proven by test,

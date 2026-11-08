@@ -209,6 +209,33 @@ the generated DDL is correct, but any hand-written SQL in a later phase needs
 `"order"` with the quotes. The table keeps the name the roadmap gives it rather
 than being renamed to work around the quoting.
 
+## Group 5 — Commission rule resolution · 2026-11-08
+
+**25 tests pass**, with `DATABASE_URL` unset - the resolver is pure, and a test
+suite for it that needed a database would mean it was not.
+
+Two findings, both about Python rather than about the domain.
+
+**`issubclass()` does not work on a `Protocol` with non-method members.**
+`CommissionRuleLike` carries fields rather than methods, which makes it a *data*
+protocol, and `issubclass(CommissionRule, CommissionRuleLike)` raises
+`TypeError: Protocols with non-method members don't support issubclass()`.
+`isinstance` on an instance is the check that works, and an unflushed
+`CommissionRule()` is enough because the check is for attribute presence and
+SQLAlchemy instruments the attributes on the class.
+
+That test matters more than it looks: it is the only thing standing between
+`engine/` and `models/` drifting apart. The protocol exists so the engine
+imports no ORM, which means nothing else would notice if the ORM class stopped
+satisfying it - Phase 10 would find out through an `AttributeError` inside a
+calculation.
+
+**`ruff` UP047 wanted PEP 695 type parameters.** The first version used
+`TypeVar("RuleT", bound=CommissionRuleLike)`; the generic is now spelled
+`def resolve_commission_rule[RuleT: CommissionRuleLike](...)` and the `TypeVar`
+is gone. Python 3.12 is the floor for this project, so the modern form is
+available and is what the lint rule asks for.
+
 ## Group 6 — Alembic metadata, the revision, and drift detection · 2026-11-08
 
 **758 tests pass** from a genuinely empty database, `alembic check` is clean,
@@ -354,7 +381,7 @@ would make the gate meaningless rather than strict.
 so the asymmetry is a decision on the record rather than something a later
 reader "fixes".
 
-## Groups 8 and 9 — Documentation and the pre-merge gate run · 2026-11-08
+## Group 8 — Documentation and the pre-merge gate run · 2026-11-08
 
 Phase 2 marked complete in `specs/roadmap.md` with its handoff to Phases 3, 4,
 6, 10 and 14. `readme.md` gained a section 0.1 on the money rules,
@@ -412,3 +439,125 @@ legitimately uses it. It now greps for the deleted command itself.
 This is the failure mode `validation.md` section 5 warns about - "a gate that
 has only ever been seen green is not a gate" - arriving through the *runner*
 rather than through the assertion.
+
+## Group 9 — Post-merge deployed checks · 2026-11-08
+
+PR #9 merged to `main` at `fda43d7`. Both checks pass, and M1 is confirmed from
+the deploy log rather than inferred - the Render CLI was installed partway
+through this group, which upgraded the evidence.
+
+| Check | Result |
+|---|---|
+| M1 migration applied on Render | **Pass.** Deploy log shows the pre-deploy step running the upgrade to `b5f8485e802e`, and the deploy reached `live` |
+| M2 `/health/ready` answers 200 | **Pass.** 200 on three consecutive attempts, 0.23-0.25s |
+
+### M1 — the deploy log, quoted
+
+`render deploys list srv-dbnp8pbrjlhs739ftnj0` shows the merge commit deployed
+as `dep-dbo1c17b9u1s73d5lrt0`, **status `live`**, finished
+`2026-11-08T06:27:21Z`, with the previous deploy `deactivated`. A deploy only
+reaches `live` if `preDeployCommand` exits zero.
+
+The pre-deploy step's own output:
+
+```
+06:26:37  ==> Starting pre-deploy: uv run --no-sync alembic upgrade head
+06:26:49  ==> Running 'uv run --no-sync alembic upgrade head'
+06:26:50  INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+06:26:50  INFO  [alembic.runtime.migration] Will assume transactional DDL.
+06:26:50  INFO  [alembic.runtime.migration] Running upgrade 92be96b3c343 ->
+          b5f8485e802e, canonical core: tenant, seller, order, order_item,
+          commission_rule
+```
+
+"Will assume transactional DDL" is the line that makes the rest conclusive:
+the revision is all-or-nothing on Postgres, so a completed upgrade to
+`b5f8485e802e` means all five tables and every constraint exist, or the deploy
+would have failed and the previous version would still be serving.
+
+**353 log lines in the deploy window contain no `error`, `traceback`,
+`exception`, `failed` or `503`.**
+
+### M2, and why the Group 0 reading mattered
+
+`/health/ready` executes `SELECT 1` and answers `503` when the database is
+unreachable, so a `200` after the migration shows the service came back up with
+the new schema and its connection pool intact. Group 0 recorded it at `200`
+**before** the phase changed anything, which is what makes this a comparison
+rather than an isolated observation.
+
+### `ipAllowList: []` demonstrably works
+
+Attempting the direct database read through the external path:
+
+```
+$ render psql dpg-dbnp86rrjlhs739fsjdg-a -c "SELECT version_num FROM alembic_version;"
+Error: IP address (105.113.98.236) not in allow list for reckonai-db
+```
+
+That is Phase 1's security decision working, not an obstacle to report. An
+absent `ipAllowList` means *allow every IP* on a new Render database, and this
+repository becomes public at submission, so external access is off. The
+allowlist governs **only** external connections; a service inside Render uses
+the internal URL and bypasses it, which is why the migration itself connected
+without trouble.
+
+So `SELECT version_num FROM alembic_version` is reachable only from inside
+Render - the dashboard Shell, or `render ssh`, which needs an SSH public key
+registered on the account. It was not run, because the deploy log above
+establishes the same fact more directly: it shows the upgrade *executing*,
+where the version row would only show a stamp.
+
+### Two things worth carrying to Phase 8
+
+**Two workers ran concurrently for about 90 seconds**, which the worker log
+shows plainly - the outgoing instance at `tick=1045..1048` overlapping the
+incoming one at `tick=2,3,4`:
+
+```
+06:27:10  reckonai.worker.tick tick=2
+06:27:28  reckonai.worker.tick tick=1047
+06:27:40  reckonai.worker.tick tick=3
+06:27:58  reckonai.worker.tick tick=1048
+```
+
+This is ordinary rolling-deploy behaviour and it is **exactly** the condition
+Phase 8's exit criterion names: "two workers running concurrently never claim
+the same job". It is not a hypothetical to be constructed in a test - it happens
+on every deploy, so `FOR UPDATE SKIP LOCKED` has to be right before the first
+job type exists.
+
+**The Postgres instance reports `version=16`**, matching compose and CI. The
+parity that `tests/conftest.py` asserts locally holds against the deployed
+instance too.
+
+### Render CLI setup, for the next phase that needs it
+
+Installed with `brew install render` (homebrew-core, no tap). Authentication is
+`RENDER_API_KEY` in `~/.zshrc`, and two mechanics are worth recording because
+both cost a round trip here:
+
+- **A non-interactive shell does not read `~/.zshrc`.** zsh sources it for
+  interactive shells only, so every CLI invocation needs
+  `source ~/.zshrc` first, or the key moved to `~/.zshenv`. Without it the CLI
+  reports "run `render login` to authenticate", which looks like a bad key.
+- **`render workspace set` needs an argument in non-interactive mode**, and
+  there is no `workspace list` subcommand. The workspace id came from
+  `GET https://api.render.com/v1/owners`. Ids for this project:
+
+  | Resource | Id |
+  |---|---|
+  | Workspace | `tea-csppp356l47c73f6r3b0` |
+  | `reckonai-api` | `srv-dbnp8pbrjlhs739ftnj0` |
+  | `reckonai-worker` | `srv-dbnp8pbrjlhs739ftnig` |
+  | `reckonai-db` | `dpg-dbnp86rrjlhs739fsjdg-a` |
+
+- `render logs` emits a **stream of concatenated JSON objects**, not a JSON
+  array, so it needs `json.JSONDecoder().raw_decode` in a loop rather than
+  `json.load`.
+
+### Phase 2 is complete
+
+All five roadmap exit criteria pass, the 18-check pre-merge gate is green at
+858 tests, and both post-merge checks pass. Phase 3 is next and should start
+from the handoff under Phase 2 in `specs/roadmap.md`.

@@ -23,8 +23,21 @@ interchangeable:
 from __future__ import annotations
 
 
-class MoneyError(Exception):
-    """Base for every error raised by the money package."""
+class MoneyError(ValueError):
+    """Base for every error raised by the money package.
+
+    **Derives from `ValueError`, not `Exception`.** Each of these is literally a
+    bad value - an amount that is not one, a currency that is not one, two
+    amounts that cannot be combined - so `ValueError` is the accurate base, and
+    `except MoneyError` is unaffected by the choice.
+
+    It also earns its keep at the Pydantic boundary. A validator raising
+    `ValueError` is wrapped into a `ValidationError` automatically, so
+    `reckonai.schemas.money` needs no translation layer converting money errors
+    into something Pydantic recognises - and a JSON number arriving in a request
+    body is refused as an ordinary field validation failure rather than
+    escaping as a 500.
+    """
 
 
 class CurrencyMismatch(MoneyError):

@@ -96,3 +96,49 @@ residue case. Restored, and the full money suite is **616 passed**.
 This is the check `validation.md` §5 names first among the ways this phase could
 be green and wrong: a sum property written with a tolerance, or comparing
 rounded sums, would have passed with the distribution removed.
+
+## Group 3 — The JSON boundary · 2026-11-08
+
+**641 tests pass** across the three money suites. Two findings, one of which
+changed a class hierarchy.
+
+### `MoneyError` now derives from `ValueError`
+
+`tests/test_money_json.py::test_a_money_field_refuses_an_inexact_amount` failed
+on the first run: `InvalidAmount` escaped the Pydantic validator instead of
+becoming a `ValidationError`. Pydantic wraps `ValueError` and `AssertionError`
+raised inside a validator, and nothing else.
+
+Rather than translating money errors into `ValueError` at each boundary, the
+family's base was changed to derive from `ValueError`. That is the accurate base
+anyway - every one of these is a bad value - and `except MoneyError` is
+unaffected. The practical consequence is that a JSON number arriving in a
+request body is refused as an ordinary field validation failure rather than
+escaping as a 500.
+
+### Pydantic renders a `Decimal` as a JSON string, so the realistic regression is a float
+
+Worth recording because it changed what the fail-observation had to be.
+
+The first attempt at breaking the gate made `_serialize` return
+`quantized.amount` - a bare `Decimal` - rather than `str(...)`. **The suite
+stayed green: 25 passed.** Pydantic's JSON serializer renders a `Decimal` as a
+string, so a `Decimal` on the wire is already safe and the gate correctly did
+not flag it.
+
+Breaking it with an actual float did fire the gate. The body became:
+
+```
+{"amount":{"amount":104.05,"currency":"USD"}, ...}
+```
+
+and **9 tests failed**, including every currency case and the JPY one. So the
+gate distinguishes the harmless case from the harmful one, which is the right
+behaviour and not something the first observation would have shown.
+
+**The JPY case is why `_decode_strictly` is paired with an `isinstance` check.**
+`parse_float` never fires for a JSON integer, so a broken serializer emitting
+JPY's `1699` as a bare number would slip past the decoder hook alone. The
+docstring on `_reject_json_number` records this, since it is the reason the
+obvious `isinstance(body["amount"], str)` assertion is insufficient *and* the
+reason it is still present alongside the hook.

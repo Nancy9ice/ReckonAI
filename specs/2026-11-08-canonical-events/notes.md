@@ -184,3 +184,81 @@ property this test adds is that the lists are not empty. It now asserts Phase
 2's numbers as a **floor**, which still catches the failure it was written for,
 and keeps the rate columns enumerated because there are few of them and each
 carries a different precision for a stated reason.
+
+---
+
+## Groups 6 to 8 — disbursement, ledger, registry · 2026-11-08
+
+`disbursement` (Group 6), `seller_ledger_entry` plus `engine/ledger.py`
+(Group 7), the model-import gate (Group 8). Whole suite 1117 passed,
+`alembic check` clean, `ruff` clean.
+
+### Two columns renamed before implementation
+
+On the user's instruction, and applied to the specs before any model was
+written: the ledger's `direction` became **`transaction_type`**, and
+`entry_type` became **`entry_category`** so the two could not be confused. The
+reasoning for the unsigned amount is unchanged and is in `requirements.md` D7.
+
+A fourth vocabulary, `TRANSACTION_TYPES`, was added in Group 1 so the
+`CHECK` on `transaction_type` is generated from a tuple like every other state
+column rather than written out as a literal in one table.
+
+### Finding: the first version of the import gate could not fail
+
+The gate was written as: walk `src/reckonai/models/`, `importlib.import_module`
+each module, then assert `hasattr(reckonai.models, module_name)`.
+
+**It passes with the import commented out.** `importlib.import_module` binds the
+submodule as an attribute of its parent package, so the `hasattr` assertion
+passes *because the test itself just did the thing it was checking for*. Worse,
+that same import repairs `Base.metadata` in-process, so
+`test_the_metadata_holds_exactly_the_expected_tables` and
+`test_there_are_financial_tables_to_check` both passed too — the only
+observable difference was the parametrized test count dropping from 54 to 49,
+because the parametrize list is built at collection time and the repair happened
+during the run.
+
+Verified by commenting out the `ledger` import: **49 passed, 0 failed.**
+
+The gate now runs a subprocess that imports nothing but `reckonai.models` and
+prints `sorted(Base.metadata.tables)`, which is exactly what
+`src/reckonai/migrations/env.py` does before autogenerate compares metadata
+against the database. With the import removed it now fails and names the table:
+
+    At index 12 diff: 'tenant' != 'seller_ledger_entry'
+    Right contains one more item: 'tenant'
+
+The per-module `importlib` test is kept, retitled, and no longer asserts
+package membership — it catches a syntax error or a circular import, which the
+subprocess check would otherwise report as a missing table without saying why.
+
+**The general lesson is worth carrying into Phase 8 and Phase 11:** a gate whose
+own setup performs the action it is checking for cannot fail. Phase 2's `float`
+gate avoided this by construction — it parses source text with `ast` rather than
+importing it — and that now looks like a deliberate property rather than a
+convenience.
+
+### Finding: a stale `__pycache__` made the negative test look inconsistent
+
+While confirming the above, a restored import still reported the broken test
+count. `find . -name __pycache__ -path "*reckonai*" -delete` resolved it. Worth
+knowing when deliberately breaking and restoring a module to prove a gate works.
+
+### Finding: `VARCHAR(6)` rejects an over-long value before the CHECK is reached
+
+`transaction_type` is `VARCHAR(6)`, which fits `credit` exactly. A test probing
+the `CHECK` with the value `"nonsense"` fails with `DataError` from the column
+width rather than `CheckViolation` — and **would keep passing if the `CHECK`
+were dropped**, since it only ever asserted that *something* rejected the row.
+
+The test now uses `"DEBIT"` and `"dr"`, both within the width, and a separate
+test covers the width rejection with its own exception type. The same trap
+applies to any narrow checked column, which in this phase means every
+`VARCHAR(32)` state column with a long vocabulary.
+
+### `disbursement.released_at` is asserted twice, deliberately
+
+Once against the model and once against the reflected schema. A model with no
+default and a migration that added one would both pass the model-level
+assertion, and the schema is what a query runs against.

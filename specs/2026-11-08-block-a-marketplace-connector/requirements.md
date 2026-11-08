@@ -43,10 +43,26 @@ can enforce by test instead. Rejected: static JSON files — Phase 4's exit
 criterion is endpoints, and the demo loses a live marketplace to point at.
 
 **The risk D1 creates, named so it is guarded.** The sim lives in the same
-package as the canonical model, so it could import `reckonai.models` and emit
-canonical shapes by accident — which would make A3's mapping a no-op. Guard:
-a test asserting `reckonai.sim` imports nothing from `reckonai.models` or
-`reckonai.engine`. The sim builds its payloads from its own literals.
+package as the canonical model, so it could emit canonical field names by
+accident — which would make A3's mapping a no-op.
+
+*An earlier draft of this decision named the wrong guard*: "a test asserting
+`reckonai.sim` imports nothing from `reckonai.models`". That is unimplementable
+and was never the real risk. `seed.py` must import the models — writing those
+tables is its whole job — and `router.py` must read them. Import isolation was
+never what protected the mapping.
+
+**The guard that does work** is on the outward names, which is where the risk
+actually lives. Every outward JSON key comes from one map in
+`src/reckonai/sim/fields.py`, and a test asserts that map's value set is
+**disjoint** from the canonical column-name set drawn from `Base.metadata`.
+That is stronger than an import check — it fails on the actual mistake rather
+than on a proxy for it — and it is the same assertion D3 and R3's guard need,
+so there is one of it rather than three.
+
+`src/reckonai/sim/data.py`, which holds the literal dataset, does import
+nothing from `reckonai.models`. That is worth keeping as a property but it is a
+layering preference, not the mapping guard.
 
 ### D2. The sim serves its records from the database, not from memory
 
@@ -60,11 +76,26 @@ It also means the sim is a **presentation layer over the marketplace's own
 truth**, which is the honest model — a real marketplace has its own database.
 
 *The thing to not get wrong:* the seeded rows and the ingested rows land in the
-same tables. They are told apart by `raw_payload.source` — `marketplace_seed`
-for what the builder wrote, `marketplace_api` for what the connector ingested
-— exactly as Phase 3's handoff describes one table holding both sources.
-A3 therefore ingests into a **separate tenant** from the one the seed wrote,
-so a count comparison is meaningful rather than circular.
+same tables.
+
+**`raw_payload.source` cannot tell them apart, and an earlier draft of this
+decision was wrong to say it could.** `PAYLOAD_SOURCES` is a `CHECK`-constrained
+`("paypal", "marketplace")` — Phase 3's D3 deliberately made it the *only* place
+a record's origin is stored — so `marketplace_seed` and `marketplace_api` are
+values the database refuses outright. Widening that vocabulary to work around a
+test-fixture problem would be the wrong trade: it is a constitutional column,
+and the seed is not a third kind of system.
+
+Both sides therefore use `source="marketplace"`, and two things separate them:
+
+- **A separate tenant.** A3 ingests into its own tenant, which is what makes a
+  row-count comparison meaningful rather than circular. This was already the
+  decision and it is the load-bearing half.
+- **`raw_payload.endpoint`.** `NULL` for a row the builder wrote directly, and
+  the real path — `GET /sim/marketplace/orders` — for one the connector read.
+  This is exactly what that column exists for: Phase 3 added it because field
+  availability depends on the read path, and "there was no read path" is a
+  true and useful answer to record.
 
 ### D3. Field names are deliberately different, and that is enforced
 
@@ -108,10 +139,35 @@ they are not flagged:
 
 ### D5. Scale: small and hand-checkable
 
-4 sellers, 12 orders, ~25 order items, USD and EUR, one FX order, one `DELAYED`
-order. Small enough that "reconciles perfectly by hand" is literally true —
-`validation.md` §2 tabulates every expected entitlement, and that table is the
-hand-check. Faults sit on top of those 12 orders.
+4 sellers, **12 clean orders plus 6 faulty ones**, ~25 order items, USD and EUR,
+one FX order, one `DELAYED` order. Small enough that "reconciles perfectly by
+hand" is literally true — `validation.md` §2 tabulates every expected
+entitlement, and that table is the hand-check.
+
+*Amended while building:* the faults get their **own orders**, `ORD-0013`
+through `ORD-0018`, rather than perturbing the 12 clean ones. Two reasons. The
+clean baseline stays exactly as hand-tabulated, so a fault can be added later
+without re-deriving §2's table; and `verify()` excludes faulty rows by
+manifest id, which is far simpler to keep honest when the boundary is a whole
+order than when it is a column inside a clean one.
+
+The cost is that the faults are trivially separable by order reference, which
+is slightly less realistic. Accepted: the manifest names the ids anyway, so
+nothing downstream was ever discovering them by inference.
+
+### D5a. The expected figures are literals, so `verify()` is not circular
+
+`data.py` states each order's expected commission and per-seller entitlement as
+**hand-written literals**. `seed.py` writes the rows from those literals, and
+`verify()` **recomputes** them from the items and the commission rules and
+compares.
+
+That ordering is the point. If `verify()` checked figures that the builder had
+itself derived by the same arithmetic, it would be asserting that a function
+agrees with itself — the shape of Phase 3's gate that passed with its own
+subject commented out. Hand-written literals on one side and a recomputation on
+the other is a real check, and a disagreement means one of the two is wrong,
+which is worth knowing either way.
 
 *Rejected:* a generated medium dataset. It fills the AG Grid demo better, but
 "reconciles by hand" degrades to "reconciles by a second script", and a second
@@ -177,6 +233,38 @@ A record missing a required mapped field is quarantined: visible, countable,
 not skipped and not defaulted. A missing monetary value is a quarantine, never
 a `0` ([[tech-stack]] §9.6). Unmapped source fields survive in the retained
 raw payload, so a mapping gap is recoverable.
+
+### D12. The seed writes a PayPal side too, labelled synthetic, superseded by Block D
+
+**A sequencing gap in the replan, found while building.** Block C — matching and
+classification — is Day 1, and it compares the marketplace's records against
+**PayPal's reported** figures. Block D, which captures the real sandbox
+fixtures, is Day 2. So Block C as sequenced would have had nothing to match
+against.
+
+Resolution: this block's seed writes both sides. The marketplace side is the
+sim's own truth. The PayPal side — `capture`, `platform_fee`, `disbursement`,
+`fx_conversion`, with `raw_payload.source = "paypal"` — is **synthetic test
+data**, written so Block B and Block C can be built and tested on Day 1.
+Block D then replaces those rows with real captured sandbox responses through
+the same tables, and the manifest's expected figures do not change when it
+does, because they were derived from the marketplace side.
+
+**Why this does not breach P3.** P3 forbids fabricating or estimating a
+financial value *in reconciliation output* — presenting our own arithmetic as a
+provider's figure. These rows are a test fixture for a simulated marketplace,
+and every one of them is marked as such: `raw_payload.body` carries
+`{"_synthetic": true, "replaced_by": "block-d"}`, so a row that survives into a
+demo is identifiable rather than indistinguishable from a captured response.
+The distinction P3 protects is between a measured provider figure and an
+invented one, and a fixture that announces itself is neither a measurement nor
+a claim to be one.
+
+**What would breach it** is leaving these rows in place at demo time and
+letting the dashboard present them as PayPal's evidence. So Block D's
+validation owes one check: no `_synthetic` payload remains in the demo tenant
+after the replay ingester has run. That is recorded here because it is this
+block's debt, not Block D's discovery.
 
 ## 3. What this block hands forward
 

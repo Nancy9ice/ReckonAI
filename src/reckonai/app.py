@@ -28,6 +28,7 @@ from reckonai import __version__
 from reckonai.config import get_settings
 from reckonai.db import check_connection, create_app_engine
 from reckonai.logging import configure_logging, event
+from reckonai.sim import router as sim_router
 
 # This component's share of the connection budget. The cap it is drawn against
 # is `reckonai.db.USABLE_CONNECTIONS`; see that module and the phase's
@@ -76,6 +77,15 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# The simulated marketplace, under `/sim`
+# (specs/2026-11-08-block-a-marketplace-connector/requirements.md D1).
+#
+# **Mounted in this application rather than deployed as a second service**, so
+# there is one process, one deploy and one demo URL. It is the system under
+# integration, not part of the product: the connector reads it over HTTP as it
+# would any third party, pointed at `MARKETPLACE_BASE_URL`.
+app.include_router(sim_router, prefix="/sim")
+
 
 @app.get("/")
 def index() -> dict[str, str]:
@@ -95,6 +105,10 @@ def index() -> dict[str, str]:
         "docs": "/docs",
         "health": "/health",
         "readiness": "/health/ready",
+        # The simulated marketplace's own index, so the deployed URL leads
+        # somewhere rather than requiring the paths to be known in advance.
+        # The index itself reads no database - see `sim.router`.
+        "marketplace": "/sim/marketplace",
     }
 
 

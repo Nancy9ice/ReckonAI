@@ -31,7 +31,12 @@ def test_the_root_route_is_not_a_404(client: TestClient) -> None:
     assert body["service"] == "reckonai"
     assert body["version"] == __version__
     # The paths it advertises have to actually exist.
-    for path in (body["docs"], body["health"], body["readiness"]):
+    for path in (
+        body["docs"],
+        body["health"],
+        body["readiness"],
+        body["marketplace"],
+    ):
         assert client.get(path).status_code == 200
 
 

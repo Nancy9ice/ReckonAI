@@ -28,8 +28,26 @@ Also read, and in this order:
 - `specs/paypal-fields.md` — what PayPal actually returns, per field, with the
   evidence. The root specs state rules and point here; they do not repeat it.
 
-**Phases 0, 0b, 1, 2, 3, Block A (4 + 5 + 6) and the PayPal capture (R16) are
-complete. Block B is next** — Phase 10, the entitlement engine, ~3 h.
+**Phases 0, 0b, 1, 2, 3, Block A (4 + 5 + 6), the PayPal capture (R16) and
+Block B (Phase 10, the entitlement engine) are complete. Block C is next** —
+Phase 11, matching and exception classification, ~4 h.
+
+**Read `specs/2026-11-09-entitlement-engine/requirements.md` §4 first.** It is
+Block B's handoff: the engine's whole surface in one table, six things Block C
+must not get wrong, Block C's own first tasks carried over from earlier blocks,
+and four things not to spend time on. That directory's `validation.md` §7
+records six review findings — one of them a fabricated figure the engine
+produced on repeated partial refunds — and §8 the five mypy debts.
+
+The engine lives in `reckonai/engine/`: `rules.py`, `ledger.py`,
+`entitlement.py`, `refunds.py`, `positions.py`. **It compares nothing** — it
+answers only what should be true. Matching, classification and every tolerance
+decision are Block C's.
+
+Two things from Block B that change how other code is written. A **type checker
+is now wired in**: `uv run mypy`, strict, scoped to `src/reckonai/engine/` by
+`[tool.mypy]`, and gated in CI. And `src/reckonai/py.typed` now exists, so the
+package advertises its annotations.
 
 The capture is done: 18 real sandbox orders in `fixtures/paypal/`, replayed by
 `reckonai.paypal.replay`, with the marketplace seed re-pointed at the captured
@@ -38,19 +56,24 @@ touches the dataset** — its `validation.md` §2 is the current hand-check, and
 Block A's §2 is superseded. §7 there lists five things found by running it
 that are not obvious from any payload.
 
-Before Block B, read `specs/2026-11-09-paypal-capture/validation.md` §2 for
-the figures its output is checked against, and Block A's handoff in
-`specs/2026-11-08-block-a-marketplace-connector/requirements.md` §3 for the
-rest — **noting that §3's seller list is out of date**: `vendor-citrine` and
-`vendor-dunlin` no longer exist, and there is one commission rule, the
-tenant's 10%.
+`specs/2026-11-09-paypal-capture/validation.md` §2 holds the figures every
+expected amount is checked against. Block A's handoff in
+`specs/2026-11-08-block-a-marketplace-connector/requirements.md` §3 still has
+useful detail, but **its seller list is out of date**: `vendor-citrine` and
+`vendor-dunlin` no longer exist, and there is one commission rule, the tenant's
+10%. Its claim that "every seeded capture states a fee" is also now false — see
+below.
 
-Two things Phase 10 still must not do. **A capture fee is never defaulted to
-zero** — PayPal reports none on a capture and an explicit `0.00` on a refund,
-and those are different claims. And **the entitlement calculation should
-move** out of `seed._verify_order` into `reckonai/engine/` rather than be
-rewritten: two copies could disagree, and the one in the test fixture is the
-one nobody reviews.
+**Two measurements from Block B that Block C should not re-derive.** Across all
+21 captured captures, `net_amount` equals `gross_amount - platform_fees`
+**exactly, zero residual** — so the expected entitlement is directly comparable
+to PayPal's `net_amount`, with nothing between them. And **no capture states a
+`paypal_fee` at all** (a refund states an explicit `0.00`; a capture omits the
+key), which is why no fee-inclusive position is published and why an absent fee
+and a measured zero must stay different claims.
+
+The expected commission equals `platform_fee.amount` on all 15 clean purchase
+units, pinned by test. **Compare against that column, never a recomputation.**
 
 Block A delivered the simulated marketplace (`reckonai.sim`), the six seeded
 faults with their manifest, and the connector (`reckonai.connector`). That

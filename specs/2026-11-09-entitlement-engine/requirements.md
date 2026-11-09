@@ -307,7 +307,91 @@ exists — so a hand-computed fixture covers it instead of a seeded row.
 - **The `awaiting_evidence` classification** (R10). A classification, so Block
   C's.
 
-## 4. Inherited, so none of it is rediscovered
+## 4. What this block hands forward
+
+Written after building, so it records what is true rather than what was
+planned. `validation.md` §7 lists the six review findings and §8 the debts.
+
+### The engine's surface, which is all of it
+
+Everything is importable from `reckonai.engine`:
+
+| Function | Returns |
+|---|---|
+| `expected_entitlement(order, items, rules)` | `OrderEntitlement` — per-seller lines, order commission, gross |
+| `attribute_refund(refund, captures)` | `RefundAttribution` — the one seller, and how it was established |
+| `apply_refund(expected, attribution)` | a new `OrderEntitlement`, reduced |
+| `expected_positions(entitlements, captures)` | one `SellerPosition` per (seller, currency) |
+| `expected_commission(entitlements)` | `dict[currency, Money]` |
+| `commission_for(share, rate, fixed)` | the commission on a share |
+| `commission_reversal(refund, rate)` | the commission a refund reverses |
+| `split_by_rate(refund, shares, rates)` | per-item `(part, reversal)` pairs |
+| `allocate_refund_across_sellers(...)` | attributions for an order-level refund |
+
+**Nothing here compares anything.** The engine answers only what *should* be
+true. Matching, classification and every tolerance decision are Block C's.
+
+### Six things Block C must not get wrong
+
+1. **Do not recompute a commission reversal per refund.** `apply_refund`
+   computes it as the delta of a cumulative figure, because per-refund
+   quantization accumulates: twenty 0.05 refunds of a 1.00 share at 10% each
+   reverse 0.01, summing to 0.20 against a commission of 0.10. That drove the
+   commission negative and fabricated an entitlement. `validation.md` §7
+   finding 1. If Block C needs a per-refund figure to compare against PayPal's
+   own reversal record, that is `commission_reversal()` — but the *running
+   commission* comes from the engine's state, not from summing those.
+2. **A duplicate provider record is a finding, not an amount to subtract.**
+   `apply_refund` raises `RefundAlreadyApplied` on a repeated external id.
+   F4 in the manifest is a double credit, so Block C will meet one.
+3. **`CaptureNotSupplied` means the call was scoped wrongly, not that evidence
+   is missing.** It subclasses `UnattributableRefund`, so a general handler
+   still catches it — but classifying it as missing evidence would report a
+   bug in the caller as a finding about the data.
+4. **The expected entitlement is directly comparable to PayPal's
+   `net_amount`.** Measured: `net_amount == gross_amount - platform_fees`
+   exactly on all 21 captures, zero residual, so nothing sits between the two.
+   See D3.
+5. **The expected commission equals `platform_fee.amount`** on all 15 clean
+   purchase units, pinned by
+   `test_the_commission_equals_paypals_recorded_platform_fee`. Compare against
+   that column, never a recomputation.
+6. **The engine raises where a figure would be invented**, and Block C decides
+   what each raise becomes. `NoApplicableCommissionRule`,
+   `CommissionRuleAmbiguity`, `MixedCurrencyOrder`, `RefundExceedsShare`,
+   `UnattributableRefund`, `CaptureNotSupplied`, `RefundAlreadyApplied`,
+   `FlatComponentReversalUndefined`, `FixedCommissionCurrencyMismatch` — all
+   subclass `EngineError`. A quarantine or an escalation ([[mission]] P5), not
+   a coercion.
+
+### Still Block C's own first tasks, from earlier blocks
+
+- **Reconcile the exception vocabulary.** `reckonai.sim.manifest`'s six
+  classification strings are not a shared vocabulary yet — Block A's
+  `validation.md` §8 debt 1, and its stated first task for Block C.
+- **Take or decline the open-dispute trap deliberately.** A dispute reverting
+  its capture to `PENDING` loses the whole `seller_receivable_breakdown`. Block
+  A debt 3 keeps it out of the clean baseline on purpose; Block C should decide
+  rather than inherit.
+- **The two known false-positive traps** are [[roadmap]] Phase 11's own, and
+  neither is in the engine: compare against PayPal's **reported** settlement
+  rather than gross times rate, and treat held funds under `DELAYED` as
+  healthy. ORD-0005 and ORD-0008 are in the clean baseline for exactly this.
+- **Freeze the dashboard's JSON contract** at the end of Block C, per the
+  replan's Block C scope.
+
+### Do not spend time on
+
+- **A three-seller capture.** `validation.md` §2's note explains why cross-seller
+  allocation is unreachable from real records at any seller count.
+- **A fee-inclusive position.** D3, revised: no code path reads one and
+  `paypal_fee` is absent on every capture with no residual effect.
+- **Widening the mypy gate.** D9: two of the five remaining errors are a
+  checker limitation at the ORM/Protocol boundary, not defects.
+- **Enabling test randomisation or `-n auto`.** D6's guard makes the failure
+  legible; it does not make the suite safe to reorder.
+
+## 5. Inherited, so none of it is rediscovered
 
 - `resolve_commission_rule()` takes `at` as a parameter and raises on a naive
   timestamp. Callers pass the **order's** `placed_at`, not the run time, which

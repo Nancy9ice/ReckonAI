@@ -1,11 +1,12 @@
 # ReckonAI — Roadmap
 
 > **Status:** Constitution. Implementation order and phase boundaries.
-> **Next: Phase 10, the entitlement engine** (the replan's Block B). Phases 0,
-> 0b, 1, 2, 3, 4, 5 and 6 are complete; Phase 7 is partially complete and its
-> remainder is listed in its own section. Read
-> `specs/2026-11-09-paypal-capture/validation.md` §2 first — it holds the
-> figures Phase 10's output is checked against, and supersedes Block A's.
+> **Next: Phase 11, matching and exception classification** (the replan's Block
+> C). Phases 0, 0b, 1, 2, 3, 4, 5, 6 and 10 are complete; Phase 7 is partially
+> complete and its remainder is listed in its own section. Read
+> `specs/2026-11-09-entitlement-engine/requirements.md` §4 first — Phase 10's
+> handoff — and `specs/2026-11-09-paypal-capture/validation.md` §2 for the
+> figures every expected amount is checked against, which supersedes Block A's.
 > **Strategy:** Foundation-first — each layer is completed before the next begins.
 > **Budget:** ~1 week.
 > Governed by [[mission]]; technology per [[tech-stack]].
@@ -788,7 +789,72 @@ previously-missing related record arrives.
 
 ---
 
-## Phase 10 — Entitlement engine · 0.5 day
+## Phase 10 — Entitlement engine · 0.5 day · **COMPLETE 2026-11-09**
+
+> **Delivered as Block B.** `reckonai/engine/{entitlement,refunds,positions}.py`
+> — pure functions over `typing.Protocol` inputs. Spec, decisions, handoff and
+> merge gate are in `specs/2026-11-09-entitlement-engine/`; **§4 of its
+> `requirements.md` is the handoff Phase 11 should read first.**
+>
+> All six exit criteria below pass, each with a named test and a recorded
+> result in that directory's `validation.md` §1. Suite **1372**.
+>
+> **What Phase 11 inherits, so none of it is rediscovered:**
+>
+> - **The engine compares nothing.** It answers what *should* be true; every
+>   comparison, tolerance and classification is Phase 11's.
+> - **The expected commission equals `platform_fee.amount`** on all 15 clean
+>   purchase units, pinned by test against the captured payloads. Compare
+>   against that column, never a recomputation.
+> - **The expected entitlement is directly comparable to PayPal's
+>   `net_amount`**: measured, `net_amount == gross_amount - platform_fees`
+>   exactly on all 21 captures, zero residual.
+> - **No capture states a `paypal_fee`**, so no fee-inclusive position is
+>   published — `SellerPosition` carries the position plus
+>   `unknown_fee_capture_ids`. An absent fee and a stated `0.00` stay different
+>   claims. Block A's handoff said the opposite and is superseded.
+> - **A commission reversal is cumulative, not per refund.** Do not sum
+>   per-refund reversals to get a running commission; take it from the engine's
+>   state. See the finding below.
+> - **Nine `EngineError` subclasses mark where a figure would otherwise be
+>   invented**, and Phase 11 decides what each becomes — a quarantine or an
+>   escalation ([[mission]] P5), never a coercion.
+> - **A duplicated refund raises** `RefundAlreadyApplied`. F4 is a double
+>   credit, so this will be met; a duplicate is a finding, not an amount to
+>   subtract twice.
+>
+> **Four findings worth not relearning.**
+>
+> **Per-refund commission reversals accumulate rounding, and the engine
+> fabricated a figure.** Twenty 0.05 refunds of a 1.00 share at 10% each
+> reverse `quantize(0.005) = 0.01`, summing to 0.20 against a commission of
+> 0.10 — leaving `commission -0.10` and the engine asserting the marketplace
+> owed the seller 0.10 on an order refunded in full. Phase 11 would have raised
+> that as a discrepancy on a *correct* order. **Nothing already written caught
+> it:** `RefundExceedsShare` held, `share == commission + entitlement` held,
+> and the sequencing test happened to use amounts that divide evenly. Found by
+> `/code-review medium`, which returned six findings and no false ones.
+>
+> **`commission_rule.fixed` had existed since Phase 2 and was missing from the
+> engine's protocol**, so any rule carrying a flat per-transaction component
+> would have had it silently dropped. This is exactly what
+> `test_commission_rules.py`'s protocol test says it exists to catch, one phase
+> late. Whether a *partial* refund reverses a flat component is deliberately
+> left undefined and raises — the marketplace's rules decide, and a guess would
+> become a discrepancy in a correct order.
+>
+> **A `Mapped[X]` attribute does not satisfy a `Protocol` member declared as
+> `X`**, although instance access genuinely resolves to `X`. So the ORM classes
+> do satisfy these protocols and a type checker cannot see it; declaring the
+> members as read-only properties does not help. The runtime `isinstance` tests
+> remain the only check, and they verify attribute **presence, not type** —
+> which is how the `fixed` gap survived.
+>
+> **A type checker was addable all along.** `mypy` had been listed as a gate by
+> Block A, found unmeetable because it was not a dependency, and dropped
+> without being measured. Measured: 39 errors, of which **32 were one
+> inaccurate `Money` constructor annotation**. It is now strict over
+> `src/reckonai/engine/` and gated in CI.
 
 **Goal:** The deterministic financial core. The highest-value phase here.
 
@@ -856,6 +922,15 @@ Three further matching constraints from Phase 0:
   quoted FX rate is never substituted for a conversion record ([[mission]] P3).
 
 **Depends on:** Phases 6, 7, 10.
+
+> **Read Phase 10's handoff before starting**, in
+> `specs/2026-11-09-entitlement-engine/requirements.md` §4. Beyond the
+> inheritance listed under Phase 10 above, three tasks are already assigned
+> here: reconciling `reckonai.sim.manifest`'s six classification strings into a
+> shared exception vocabulary (Block A's `validation.md` §8 debt 1, named as
+> this phase's first task), taking or declining the open-dispute trap of debt 3
+> deliberately, and freezing the dashboard's JSON contract at the end of the
+> block.
 
 ---
 

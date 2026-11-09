@@ -18,7 +18,7 @@
 | 3 | No database handle, HTTP client or clock read in the module | `tests/test_money_purity.py`, already watching `reckonai/engine/` | |
 | 4 | Hand-computed fixtures cover each refund and commission policy | The fixture table in §2 | |
 | 5 | Expected commission is a figure comparable to PayPal's platform fee | `test_commission_is_per_seller_not_a_residue` — the per-seller commission equals that purchase unit's `platform_fees` value for every captured order | |
-| 6 | A capture fee is never defaulted to zero | `test_absent_capture_fee_leaves_position_unknown` and `test_stated_zero_refund_fee_is_not_unknown` | |
+| 6 | A capture fee is never defaulted to zero | `test_a_capture_with_no_stated_fee_is_recorded_as_unknown` and `test_a_stated_fee_leaves_nothing_unknown`. **No fee-inclusive position is published** — D3 revised, with the measurement in §3 | |
 
 ## 2. Hand-computed fixture coverage
 
@@ -39,8 +39,9 @@ from the code under test.
 | a refund naming no capture | fixture only | `UnattributableRefund` raised, not split (D1 case 2) |
 | a stated 0% rule | fixture only | a stated zero resolves (D7) |
 | no applicable rule | fixture only | `NoApplicableCommissionRule` raised, not a zero rate (D7) |
-| a capture with no `paypal_fee` key | `ORD-0001` | fee-inclusive position is `None` (D3) |
-| a refund with `paypal_fee: "0.00"` | `ORD-0011` | a stated zero, position stays known (D3) |
+| a capture with no `paypal_fee` key | every capture in the dataset | the capture id is recorded as unknown (D3) |
+| a refund with `paypal_fee: "0.00"` | `ORD-0011` | a stated zero leaves nothing unknown (D3) |
+| a known and an unknown fee side by side | fixture only | **the position is identical either way** — the measurement that revised D3 |
 
 ## 3. Agreement with the hand-check table
 
@@ -53,6 +54,7 @@ per-seller positions, hand-written and independently derived.
 | Net positions match: aurora USD 349.50, EUR 73.37; bellweather USD 256.47, EUR 324.02 | `data.EXPECTED_POSITIONS` against `seed.verify()` | |
 | Commission totals match: USD 67.33, EUR 44.15 | same | |
 | The engine is the only implementation | no entitlement arithmetic remains in `seed.py` — grep for `rule.rate` outside `reckonai/engine/` | |
+| **`net_amount == gross_amount - platform_fees` on every capture, zero residual** — the measurement D3 rests on | re-run the arithmetic over `fixtures/paypal/*.json` | **Pass, 21 of 21** |
 
 Three independent derivations survive the move: the literals in `data.py`, the
 table in §2, and the engine. D5a's independence is preserved because the

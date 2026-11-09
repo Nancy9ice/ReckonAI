@@ -71,10 +71,16 @@ and not a `capture_id`.
 ### D2. Results are frozen dataclasses, not Money or dicts
 
 `SellerEntitlement` (seller id, gross share, commission, entitlement, the
-resolved rule id), `OrderEntitlement` (per-seller lines, order commission
-total, currency, refund provenance), `SellerPosition` (seller, currency,
-fee-exclusive position, optional fee-inclusive position, unknown-fee capture
-ids).
+resolved rule id and its rate, the flat component if any, contributing item
+ids), `OrderEntitlement` (per-seller lines, order commission total, gross,
+currency, refunds applied), `RefundAttribution` (seller, amount, how it was
+established, whether the linkage was derived), `SellerPosition` (seller,
+currency, expected position, contributing order ids, unknown-fee capture ids).
+
+`commission_rate` was added to `SellerEntitlement` during implementation: a
+refund needs the rate to compute its reversal, and re-resolving the rule to get
+it would have the engine resolve the same rule twice per order with a chance of
+disagreeing. It also gives Phase 12 the rate to cite, not only the rule's id.
 
 Frozen and immutable. Three reasons over flat `Money` returns: Block C compares
 a **per-seller breakdown** against `platform_fee.amount` and would otherwise
@@ -85,22 +91,54 @@ shape rather than a hand-assembled dict.
 No `__post_init__` arithmetic. A dataclass that recomputes its own fields is a
 second implementation of the calculation.
 
-### D3. A capture fee is never defaulted to zero, and never estimated
+### D3. A capture fee is never defaulted to zero — and no fee-inclusive position is published
 
-`SellerPosition` always carries the **fee-exclusive** position. It carries a
-**fee-inclusive** position only when every contributing capture states a fee;
-otherwise that field is `None` and `unknown_fee_capture_ids` lists the captures
-responsible.
+**Revised during implementation**, after the operator asked whether the
+reconciliation needs `paypal_fee` at all. It does not, and the evidence is
+decisive.
 
-The payloads make the distinction concrete, which is why it cannot be collapsed:
-a refund's `seller_payable_breakdown` states `paypal_fee: "0.00"` explicitly,
-while a capture's `seller_receivable_breakdown` carries **no `paypal_fee` key at
-all**. An absent fee and a measured fee of nothing are different claims
-([[mission]] P3, [[tech-stack]] §9.6).
+**Measured across all 21 captured captures: `net_amount` equals
+`gross_amount - platform_fees` exactly, with zero residual.** The refunds close
+the same way (`20.00 - 0.00 - 2.00 = 18.00`). So PayPal's own breakdown is
+arithmetically complete without a processing fee, and the expected entitlement
+this engine computes is directly comparable to PayPal's `net_amount` — 90.00
+against 90.00, with nothing deducted in between.
 
-`None` rather than an exception: an unknown fee is a routine gap in this
-dataset, and making it raise would put a `try` around every Block C call site
-for a condition that is a limitation to report, not an error to handle.
+Which checks need the fee:
+
+| Check | Needs `paypal_fee` |
+|---|---|
+| Expected commission vs `platform_fee.amount` — the central check | No |
+| Expected entitlement vs PayPal's `net_amount` | No, per the measurement above |
+| FX, against PayPal's reported settlement | No |
+| Disbursement vs obligation | No |
+| What a seller banked after PayPal's own cut | Yes — and that is the seller financial position view, **dropped by R13** |
+
+So the only consumer of a fee-inclusive figure is a view the MVP does not
+build.
+
+[[roadmap]] Phase 10's criterion reads "**A capture fee is never defaulted to
+zero.** Phase 0 could not establish whether PayPal assessed one, so a
+fee-inclusive position treats it as unknown and says so." The binding
+requirement is *never defaulted to zero*, not *publish a fee-inclusive
+position*. **`SellerPosition` therefore carries one position plus
+`unknown_fee_capture_ids`**, and no optional fee-inclusive amount.
+
+An optional field that is `None` for every real record would be *worse* than
+its absence: the next reader treats `None` as "no fee", which is the exact
+collapse the criterion forbids. `fee_is_known` is a property computed from the
+ids rather than a stored field, so the two cannot drift.
+
+The distinction the engine must not collapse remains, and is still pinned by
+test: a refund's `seller_payable_breakdown` states `paypal_fee: "0.00"`
+explicitly, while a capture's `seller_receivable_breakdown` carries **no
+`paypal_fee` key at all**. An absent fee and a measured fee of nothing are
+different claims ([[mission]] P3, [[tech-stack]] §9.6).
+
+*Limitation to record:* PayPal reports no processing fee on a capture, so no
+claim is made about what a seller received net of PayPal's own charges. Every
+figure here is the marketplace's obligation, which is what reconciliation
+compares.
 
 ### D4. Expected commission is computed as a figure comparable to a platform fee
 

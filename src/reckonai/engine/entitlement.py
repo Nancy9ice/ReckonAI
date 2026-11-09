@@ -102,6 +102,12 @@ class SellerEntitlement:
     commission: Money
     entitlement: Money
     commission_rule_id: uuid.UUID
+
+    #: The resolved rule's rate, carried so a refund can be commissioned at the
+    #: same rate without re-resolving the rule - and so an investigation can
+    #: cite the rate a figure rests on rather than only the rule's id.
+    commission_rate: Decimal
+
     fixed_component: Money | None = None
 
     #: Line ids that made up `gross_share`, so Phase 12 can cite them.
@@ -262,6 +268,7 @@ def expected_entitlement(
                 commission=commission,
                 entitlement=share - commission,
                 commission_rule_id=rule.id,
+                commission_rate=rule.rate,
                 fixed_component=fixed,
                 item_ids=item_ids,
             )

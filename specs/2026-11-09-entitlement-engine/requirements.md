@@ -222,6 +222,31 @@ mean suppressing a false report at every call site.
 The five remaining errors are a recorded debt in `validation.md` §7, not
 suppressions.
 
+### D10. A refund against a flat-component rule raises rather than guessing
+
+Decided while implementing refunds, and the one genuinely open question D8
+left behind. If a commission rule carries a flat per-transaction component,
+whether a **partial** refund reverses it has two defensible answers — retained,
+because the transaction was still processed, or reversed pro rata — and the
+marketplace's own rules are what decide. PayPal publishes nothing to settle it,
+because the platform fee it reverses is the one the platform set.
+
+So `apply_refund` raises `FlatComponentReversalUndefined`.
+
+The reasoning is not squeamishness about a hard case. The commission figure
+this engine produces is what Block C compares against `platform_fee.amount`, so
+a wrong guess surfaces as a **discrepancy in a correct order** — which is the
+false positive Phase 11's hardest criterion forbids, manufactured by the engine
+itself. [[mission]] P5 prefers an escalation to an assembled answer.
+
+Nothing is blocked: no rule in the dataset carries a flat component. A tenant
+that configures one has to state the policy first, and then this raise is the
+thing that tells them so.
+
+Note the asymmetry with D8, which is deliberate. Computing the *original*
+commission with a flat component is unambiguous — add it. Only the reversal is
+undefined.
+
 ### D7. No applicable rule still raises; a stated zero still resolves
 
 Unchanged from `rules.py` and restated because the dataset changed. A stated

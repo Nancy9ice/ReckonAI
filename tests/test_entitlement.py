@@ -368,6 +368,7 @@ def test_the_result_dataclasses_recompute_nothing() -> None:
         commission=Money("10.00", "USD"),
         entitlement=Money("1.00", "USD"),
         commission_rule_id=uuid.uuid4(),
+        commission_rate=Decimal("0.1"),
     )
     assert nonsense.entitlement == Money("1.00", "USD")
 

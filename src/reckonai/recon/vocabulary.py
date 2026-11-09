@@ -152,6 +152,15 @@ class EvidenceBasis(StrEnum):
     #: a field. True of every refund-to-capture link.
     DERIVED_LINKAGE = "derived_linkage"
 
+    #: The two records share no identifier at all and were paired on equal
+    #: amount within one order. The weakest basis, and the only one available
+    #: cross-source for refunds: a marketplace refund carries the
+    #: marketplace's reference and PayPal's carries PayPal's, with nothing in
+    #: common. Two refunds of equal value on one order are genuinely
+    #: ambiguous, and `matcher.match_refunds` reports that rather than
+    #: guessing.
+    AMOUNT_WITHIN_ORDER = "amount_within_order"
+
 
 #: Each `EngineError` subclass, mapped to the code it becomes.
 #:

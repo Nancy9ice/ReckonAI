@@ -67,6 +67,21 @@ class Settings(BaseSettings):
     # is set at the point of use.
     marketplace_base_url: str | None = None
 
+    # PayPal sandbox credentials, for the demo's one live order (R15).
+    #
+    # **All optional, and the service runs without them.** R6 means the
+    # reconciliation never calls PayPal - records are replayed from captured
+    # fixtures - so these are needed only for the opening flourish. Absent
+    # credentials make `try_live_order` return None and the demo proceeds
+    # from the seeded data, which is exactly R15's stated behaviour.
+    #
+    # Sandbox only. `reckonai.paypal.capture` refuses a non-sandbox base URL
+    # rather than trusting this default.
+    paypal_client_id: SecretStr | None = None
+    paypal_client_secret: SecretStr | None = None
+    paypal_bn_code: str | None = None
+    paypal_api_base: str = "https://api-m.sandbox.paypal.com"
+
     # Injected by Render into web services; absent locally, in CI, and in the
     # worker, which has no public URL. Logged on startup so a deployed service
     # announces its own address rather than it having to be found in a

@@ -37,7 +37,6 @@ from sqlalchemy.orm import Session
 
 from reckonai.models import (
     CommissionRule,
-    Disbursement,
     Dispute,
     Order,
     OrderItem,
@@ -192,7 +191,6 @@ def marketplace_index() -> dict[str, Any]:
                 "ledger-entries",
                 "disputes",
                 "entitlements",
-                "releases",
             )
         ],
     }
@@ -535,44 +533,6 @@ def list_entitlements(session: SessionDep) -> dict[str, Any]:
                 f["owed_amount"]: str(owed_q.amount),
                 f["commission_amount"]: str(amounts["retained"].quantize().amount),
                 f["currency"]: owed_q.currency,
-            }
-        )
-    return _envelope(records)
-
-
-@router.get("/releases")
-def list_releases(session: SessionDep) -> dict[str, Any]:
-    """Release records for `DELAYED` disbursement.
-
-    Replaces the marketplace-run payout batch the first-party model assumed:
-    under multiparty PayPal pays the seller, so what the marketplace holds is a
-    record of release, not of payment (specs/roadmap.md Phase 3's amendment).
-
-    `released_on` is `NULL` for held funds and stays that way. PayPal's release
-    record carries no usable timestamp, and presenting an ingestion time as a
-    provider one is the substitution specs/mission.md P3 forbids.
-    """
-    tenant_id = _tenant_id(session)
-    f = fields.DISBURSEMENT_FIELDS
-    sellers = _seller_refs(session, tenant_id)
-    rows = session.scalars(
-        select(Disbursement)
-        .where(Disbursement.tenant_id == tenant_id)
-        .order_by(Disbursement.external_id)
-    )
-    records = []
-    for row in rows:
-        amount = row.amount.quantize()
-        records.append(
-            {
-                f["external_id"]: row.external_id,
-                f["seller_id"]: sellers.get(row.seller_id) if row.seller_id else None,
-                f["amount_amount"]: str(amount.amount),
-                f["amount_currency"]: amount.currency,
-                f["state"]: row.state,
-                f["released_at"]: (
-                    row.released_at.isoformat() if row.released_at else None
-                ),
             }
         )
     return _envelope(records)

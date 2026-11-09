@@ -39,7 +39,6 @@ LIST_ENDPOINTS: tuple[tuple[str, str], ...] = (
     ("/sim/marketplace/ledger-entries", "ledger_entries"),
     ("/sim/marketplace/disputes", "disputes"),
     ("/sim/marketplace/entitlements", "entitlements"),
-    ("/sim/marketplace/releases", "releases"),
 )
 
 
@@ -248,7 +247,6 @@ def test_every_amount_is_a_string_with_a_currency_beside_it(
         "disputed_amount",
         "owed_amount",
         "retained_amount",
-        "released_amount",
     }
 
     for path, _ in LIST_ENDPOINTS:
@@ -312,17 +310,6 @@ def test_the_worked_example_is_served_as_specified(
         if record["order_ref"] == "ORD-0001"
     ]
     assert {r["item_total"] for r in items} == {"100.00", "60.00"}
-
-
-def test_the_held_release_record_states_no_release_timestamp(
-    seeded_client: TestClient,
-) -> None:
-    """Non-fault 1, over the wire. P3: no provider timestamp, so none is sent."""
-    records = seeded_client.get("/sim/marketplace/releases").json()["records"]
-
-    assert len(records) == 1
-    assert records[0]["release_state"] == "funds_held"
-    assert records[0]["released_on"] is None
 
 
 def test_an_unseeded_marketplace_is_a_404_not_an_empty_list(

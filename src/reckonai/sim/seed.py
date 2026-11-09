@@ -1,32 +1,32 @@
 """The seed builder, and the consistency check that makes its output trustworthy.
 
-specs/2026-11-08-block-a-marketplace-connector/requirements.md D2, D6, D5a and
-D12.
+`specs/2026-11-08-block-a-marketplace-connector/requirements.md` D6 and D5a,
+amended by the replan's R16.
 
-**`verify()` is not optional and not a convenience.** Phase 2's D13 ties no
-constraint between an order's total and the sum of its items - a marketplace
-whose own records disagree is exactly what this product exists to find, so a
-`CHECK` would turn a Phase 11 finding into an ingestion crash. The consequence
-is that the clean baseline has **no database backstop**: a silent inconsistency
-here would be measured by Block C as a false positive forever, and
-specs/roadmap.md Phase 11's hardest exit criterion would be scored against a
-baseline that was never clean.
+**This writes the marketplace's books and nothing else.** Orders, items,
+sellers, commission rules, the seller ledger, and the marketplace's own
+payment and refund records. It writes no capture, no platform fee, no
+conversion and no disbursement: those are PayPal's, they are captured in
+`fixtures/paypal/`, and `reckonai.paypal.replay` loads them. Block A's
+synthetic provider side (its D12) is gone - R16 retired it rather than
+scheduling its removal.
 
-So `verify()` recomputes every figure `data.py` states as a literal, using the
-real `reckonai.engine` resolver rather than a shortcut, and raises naming the
-row. D5a explains why the two sides are derived independently.
+**`verify()` is not optional.** Phase 2's D13 ties no constraint between an
+order's total and the sum of its items, because a marketplace whose own
+records disagree is what this product exists to find. The consequence is that
+the clean baseline has **no database backstop**: a silent inconsistency would
+be measured by Block C as a false positive forever. So `verify()` recomputes
+every figure `data.py` states as a literal, using the real `reckonai.engine`
+resolver, and raises naming the row.
 
-**Three things bite a seed builder here**, all inherited from Phase 3 and all
-worth meeting in writing rather than at a stack trace:
+**Three things bite a seed builder here**, all inherited from Phase 3:
 
-  1. The `raw_payload` link is **NOT NULL** on every financial table, so a
-     financial row cannot be inserted without a payload row to point at.
-  2. `seller_ledger_entry.amount` is **unsigned**, with `CHECK (> 0)`, and
-     needs a `transaction_type` of `debit` or `credit`.
+  1. The `raw_payload` link is **NOT NULL** on every financial table.
+  2. `seller_ledger_entry.amount` is **unsigned**, `CHECK (> 0)`, and needs a
+     `transaction_type`.
   3. **Flush order between unrelated mappers is not derived from foreign
-     keys.** This project declares no `relationship()` anywhere, so
-     SQLAlchemy's unit of work has no mapper dependency to sort on and will
-     insert a child before its parent. Every stage below flushes explicitly.
+     keys.** No `relationship()` is declared anywhere, so SQLAlchemy's unit of
+     work has no mapper dependency to sort on. Every stage flushes explicitly.
 """
 
 from __future__ import annotations
@@ -44,14 +44,10 @@ from sqlalchemy.orm import Session
 from reckonai.engine.ledger import position, signed
 from reckonai.engine.rules import resolve_commission_rule
 from reckonai.models import (
-    Capture,
     CommissionRule,
-    Disbursement,
-    FxConversion,
     Order,
     OrderItem,
     Payment,
-    PlatformFee,
     RawPayload,
     Refund,
     Seller,
@@ -62,45 +58,25 @@ from reckonai.money import Money
 from reckonai.sim import data
 from reckonai.sim.data import Dataset, OrderSpec
 
-#: Marks a row written as synthetic provider evidence rather than captured from
-#: PayPal (requirements.md D12). Block D replaces every row carrying it, and
-#: owes a check that none survives into the demo tenant.
-SYNTHETIC_MARKER = {"_synthetic": True, "replaced_by": "block-d"}
-
 
 class SeedInconsistency(AssertionError):
     """The seeded dataset disagrees with the figures `data.py` states.
 
-    An `AssertionError` subclass so a failure reads as a broken invariant
-    rather than as an exceptional condition the caller might handle. Nothing
-    should handle this: it means the baseline is not clean.
+    An `AssertionError` subclass so a failure reads as a broken invariant.
+    Nothing should handle it: it means the baseline is not clean.
     """
 
 
 @dataclass
 class SeedResult:
-    """What the builder wrote, so callers and tests can address it."""
-
     tenant_id: uuid.UUID
     seller_ids: dict[str, uuid.UUID] = field(default_factory=dict)
     order_ids: dict[str, uuid.UUID] = field(default_factory=dict)
     rule_ids: dict[str, uuid.UUID] = field(default_factory=dict)
-    capture_ids: dict[str, uuid.UUID] = field(default_factory=dict)
     refund_ids: dict[str, uuid.UUID] = field(default_factory=dict)
 
 
-# ---------------------------------------------------------------------------
-# Payload helpers
-# ---------------------------------------------------------------------------
-
-
 def _digest(body: dict) -> str:
-    """SHA-256 of a canonical serialization of `body`.
-
-    `sort_keys` and `separators` fixed, so two equal bodies hash equally
-    regardless of construction order. The column is `VARCHAR(64)`, which is
-    exactly a hex digest.
-    """
     canonical = json.dumps(body, sort_keys=True, separators=(",", ":"), default=str)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
@@ -109,91 +85,38 @@ def _payload(
     session: Session,
     *,
     tenant_id: uuid.UUID,
-    source: str,
     record_type: str,
     record_id: str,
     body: dict,
     retrieved_at: datetime,
 ) -> RawPayload:
-    """Write one `raw_payload` row and return it, flushed.
+    """One `raw_payload` row for a marketplace record, flushed.
 
-    `endpoint` is left `NULL` deliberately, and that is requirements.md D2's
-    second separator. Phase 3 added the column because **field availability
-    depends on the read path**, and a row the builder wrote directly had no read
-    path - so `NULL` is the true answer, and it is what tells a seeded row from
-    one the connector fetched through `GET /sim/marketplace/...`.
+    **The body carries its own record id, and must.** `raw_payload` is unique
+    on `(tenant_id, source, source_record_type, body_sha256)`, so two
+    different records with byte-identical bodies collide - which happened
+    immediately when two orders shared a commission figure. Embedding the id
+    is also what a real response does.
 
-    Flushed before return because the caller is about to point a NOT NULL
-    foreign key at it, and flush order between unrelated mappers is not derived
-    from that key.
+    `endpoint` is `NULL`: Phase 3 added that column because field
+    availability depends on the read path, and a row the builder wrote
+    directly had no read path. That is what tells a seeded row from one the
+    connector fetched.
     """
-    # **The body carries its own record id, and must.** `raw_payload` is unique
-    # on `(tenant_id, source, source_record_type, body_sha256)`, so two
-    # genuinely different records whose bodies happen to be byte-identical
-    # collide. That is the constraint working: Phase 3 built it so an unchanged
-    # re-read stores nothing, which is what makes ingestion idempotent.
-    #
-    # It bit this builder immediately - `ORD-0003` and `ORD-0008` both carry a
-    # commission of 12.00 USD, so their platform-fee bodies were identical and
-    # the second insert failed. Embedding the id is also what a real provider
-    # response does, so this is the payload becoming more faithful rather than
-    # a hash being worked around.
-    full_body = {"id": record_id, **body}
-
+    full = {"id": record_id, **body}
     row = RawPayload(
         tenant_id=tenant_id,
-        source=source,
+        source="marketplace",
         source_record_type=record_type,
         source_record_id=record_id,
         endpoint=None,
         retrieved_at=retrieved_at,
-        body=full_body,
-        body_sha256=_digest(full_body),
+        body=full,
+        body_sha256=_digest(full),
     )
     session.add(row)
     session.flush()
     return row
-
-
-def _marketplace_payload(
-    session: Session, result: SeedResult, record_type: str, record_id: str, body: dict,
-    retrieved_at: datetime,
-) -> RawPayload:
-    return _payload(
-        session,
-        tenant_id=result.tenant_id,
-        source="marketplace",
-        record_type=record_type,
-        record_id=record_id,
-        body=body,
-        retrieved_at=retrieved_at,
-    )
-
-
-def _paypal_payload(
-    session: Session, result: SeedResult, record_type: str, record_id: str, body: dict,
-    retrieved_at: datetime,
-) -> RawPayload:
-    """A synthetic provider payload, marked as such (requirements.md D12).
-
-    The marker is inside `body` rather than beside it, so it travels with the
-    evidence and cannot be separated from it by a query that selects the body
-    alone.
-    """
-    return _payload(
-        session,
-        tenant_id=result.tenant_id,
-        source="paypal",
-        record_type=record_type,
-        record_id=record_id,
-        body={**body, **SYNTHETIC_MARKER},
-        retrieved_at=retrieved_at,
-    )
-
-
-# ---------------------------------------------------------------------------
-# The builder
-# ---------------------------------------------------------------------------
 
 
 def build(
@@ -203,18 +126,12 @@ def build(
     tenant_slug: str = data.TENANT_SLUG,
     tenant_name: str = data.TENANT_NAME,
 ) -> SeedResult:
-    """Write the dataset and return what was written.
-
-    Stages flush in dependency order: tenant, sellers, rules, orders, items,
-    then the event side. See the module docstring's third point for why that is
-    explicit rather than left to SQLAlchemy.
-    """
+    """Write the marketplace's dataset and return what was written."""
     spec = dataset if dataset is not None else data.CLEAN
 
     tenant = Tenant(name=tenant_name, slug=tenant_slug)
     session.add(tenant)
     session.flush()
-
     result = SeedResult(tenant_id=tenant.id)
 
     for seller_spec in spec.sellers:
@@ -236,7 +153,7 @@ def build(
             tenant_id=tenant.id,
             seller_id=(
                 result.seller_ids[rule_spec.seller_ref]
-                if rule_spec.seller_ref is not None
+                if rule_spec.seller_ref
                 else None
             ),
             category=rule_spec.category,
@@ -255,7 +172,6 @@ def build(
 
 
 def _build_order(session: Session, result: SeedResult, spec: OrderSpec) -> None:
-    """One order, its items, and the whole event chain hanging off it."""
     order = Order(
         tenant_id=result.tenant_id,
         external_ref=spec.ref,
@@ -282,266 +198,221 @@ def _build_order(session: Session, result: SeedResult, spec: OrderSpec) -> None:
         )
     session.flush()
 
-    settles_to = spec.settles_to or spec.items[0].seller_ref
-    seller_id = result.seller_ids[settles_to]
+    first_seller = result.seller_ids[spec.items[0].seller_ref]
 
-    # --- the marketplace's payment record ---------------------------------
-    payment_payload = _marketplace_payload(
+    payload = _payload(
         session,
-        result,
-        "payment",
-        f"PAY-{spec.ref}",
-        {
-            "payment_ref": f"PAY-{spec.ref}",
-            "order_ref": spec.ref,
-            "paid_amount": spec.total,
-            "ccy": spec.currency,
-        },
-        spec.placed_at,
-    )
-    payment = Payment(
         tenant_id=result.tenant_id,
-        raw_payload_id=payment_payload.id,
-        external_id=f"PAY-{spec.ref}",
-        seller_id=seller_id,
-        order_id=order.id,
-        amount=Money(spec.total, spec.currency),
-        status="COMPLETED",
-        intent="CAPTURE",
-        payer_reference="BUYER-SANDBOX-01",
-        disbursement_mode=spec.disbursement_mode,
-        occurred_at=spec.placed_at,
+        record_type="payment",
+        record_id=f"PAY-{spec.ref}",
+        body={"order_ref": spec.ref, "paid_amount": spec.total,
+              "ccy": spec.currency},
+        retrieved_at=spec.placed_at,
     )
-    session.add(payment)
+    session.add(
+        Payment(
+            tenant_id=result.tenant_id,
+            raw_payload_id=payload.id,
+            external_id=f"PAY-{spec.ref}",
+            seller_id=first_seller,
+            order_id=order.id,
+            amount=Money(spec.total, spec.currency),
+            status="COMPLETED",
+            intent="CAPTURE",
+            # **No payer reference.** A card-funded order carries no `payer`
+            # block at all - confirmed against the real captures. Phase 0b
+            # section 4.6 concluded buyer identity lives on the order, but
+            # that was a wallet payment; it does not hold for card.
+            payer_reference=None,
+            disbursement_mode=spec.disbursement_mode,
+            occurred_at=spec.placed_at,
+        )
+    )
     session.flush()
 
-    # --- PayPal's capture (synthetic, per D12) -----------------------------
-    #
-    # `disbursement_state` is what says whether the seller actually has the
-    # money. `status` does not: a `DELAYED` capture reads `COMPLETED` while
-    # PayPal still holds the funds, which is why the two columns exist.
-    held = spec.disbursement_mode == "DELAYED"
-    if not held:
-        capture_state = "disbursed_at_capture"
-    elif spec.release_override is not None:
-        # F6's release completed, so the capture says so too. Leaving it at
-        # `funds_held` would make the disagreement look like an in-flight
-        # release, and R10 is explicit that a state still in motion is not a
-        # discrepancy - the fault has to be unambiguously settled to be one.
-        capture_state = spec.release_override[1]
-    else:
-        capture_state = "funds_held"
-
-    capture_payload = _paypal_payload(
-        session,
-        result,
-        "capture",
-        f"CAP-{spec.ref}",
-        {"id": f"CAP-{spec.ref}", "amount": {"value": spec.total,
-                                             "currency_code": spec.currency}},
-        spec.placed_at,
-    )
-    capture = Capture(
-        tenant_id=result.tenant_id,
-        raw_payload_id=capture_payload.id,
-        external_id=f"CAP-{spec.ref}",
-        payment_id=payment.id,
-        seller_id=seller_id,
-        amount=Money(spec.total, spec.currency),
-        gross_amount=Money(spec.total, spec.currency),
-        # **Never defaulted to zero.** `None` means PayPal did not state a fee,
-        # which is a different claim from a fee of nothing
-        # (specs/roadmap.md Phase 10, specs/tech-stack.md section 9.6).
-        paypal_fee=(
-            Money(spec.paypal_fee, spec.currency)
-            if spec.paypal_fee is not None
-            else None
-        ),
-        net_amount=(
-            Money(spec.total, spec.currency) - Money(spec.paypal_fee, spec.currency)
-            if spec.paypal_fee is not None
-            else None
-        ),
-        settlement_amount=(
-            Money(spec.fx.settlement_amount, spec.fx.target_currency)
-            if spec.fx is not None
-            else None
-        ),
-        settlement_currency=spec.fx.target_currency if spec.fx is not None else None,
-        status="COMPLETED",
-        disbursement_mode=spec.disbursement_mode,
-        disbursement_state=capture_state,
-        occurred_at=spec.placed_at,
-    )
-    session.add(capture)
-    session.flush()
-    result.capture_ids[spec.ref] = capture.id
-
-    # --- PayPal's platform fee, where the seller can carry one -------------
-    #
-    # Omitted entirely for a seller without `PARTNER_FEE`: PayPal cannot take a
-    # platform fee there, so no row is the accurate record. A zero-amount row
-    # would assert a measured fee of nothing, which is the substitution P3
-    # forbids.
-    # **What PayPal took, which is not always what the marketplace believes.**
-    # `paypal_platform_fee` is the F2 lever: with the fee derived from
-    # `expected_commission` the provider would echo a wrong commission
-    # faithfully and the fault would be undetectable.
-    commission = Money(
-        spec.paypal_platform_fee
-        if spec.paypal_platform_fee is not None
-        else spec.expected_commission,
-        spec.currency,
-    )
-    if data.seller(settles_to).partner_fee_enabled and not commission.is_zero():
-        fee_payload = _paypal_payload(
-            session,
-            result,
-            "platform_fee",
-            f"FEE-{spec.ref}",
-            {"platform_fees": [{"amount": {"value": spec.expected_commission,
-                                           "currency_code": spec.currency}}]},
-            spec.placed_at,
-        )
-        session.add(
-            PlatformFee(
-                tenant_id=result.tenant_id,
-                raw_payload_id=fee_payload.id,
-                external_id=f"FEE-{spec.ref}",
-                capture_id=capture.id,
-                refund_id=None,
-                seller_id=seller_id,
-                payee_reference=data.seller(settles_to).merchant_id,
-                amount=commission,
-                settlement_reference=None,
-                occurred_at=spec.placed_at,
-            )
-        )
-        session.flush()
-
-    # --- the conversion PayPal reported, where there was one ---------------
-    if spec.fx is not None:
-        entitlement = Money(
-            spec.expected_entitlements[settles_to], spec.currency
-        )
-        fx_payload = _paypal_payload(
-            session,
-            result,
-            "fx_conversion",
-            f"FX-{spec.ref}",
-            {"exchange_rate": {"value": spec.fx.rate,
-                               "source_currency": spec.currency,
-                               "target_currency": spec.fx.target_currency}},
-            spec.placed_at,
-        )
-        session.add(
-            FxConversion(
-                tenant_id=result.tenant_id,
-                raw_payload_id=fx_payload.id,
-                capture_id=capture.id,
-                refund_id=None,
-                source=entitlement,
-                target=Money(spec.fx.settlement_amount, spec.fx.target_currency),
-                rate=Decimal(spec.fx.rate),
-                converted_at=spec.placed_at,
-                # PayPal reported this rate, so it is not derived.
-                is_derived=False,
-                # **Stays NULL.** PayPal publishes no conversion fee, and the
-                # table's CHECK refuses a zero one: an absent fee and a
-                # measured fee of nothing are different claims (P3).
-                fee=None,
-                provider="paypal",
-            )
-        )
-        session.flush()
-
-    # --- the release record, for a DELAYED order ---------------------------
-    if held:
-        # `release_override` is F6's lever: what PayPal actually released,
-        # where that disagrees with the obligation behind it.
-        released, release_state = spec.release_override or (
-            spec.expected_entitlements[settles_to],
-            "funds_held",
-        )
-        release_payload = _paypal_payload(
-            session,
-            result,
-            "disbursement",
-            f"REL-{spec.ref}",
-            {"status": release_state.upper()},
-            spec.placed_at,
-        )
-        session.add(
-            Disbursement(
-                tenant_id=result.tenant_id,
-                raw_payload_id=release_payload.id,
-                external_id=f"REL-{spec.ref}",
-                capture_id=capture.id,
-                seller_id=seller_id,
-                recipient_reference=data.seller(settles_to).merchant_id,
-                payout_transaction_id=None,
-                amount=Money(released, spec.currency),
-                provider_status=release_state.upper(),
-                state=release_state,
-                # **No default, ever.** PayPal's release record carries no
-                # usable timestamp, and writing an ingestion time here would
-                # present our clock as a provider timestamp (P3).
-                released_at=None,
-                provider_errors=None,
-            )
-        )
-        session.flush()
-
-    # --- the marketplace's ledger entries ----------------------------------
     _build_ledger(session, result, spec, order.id)
 
-    # --- refunds, and their ledger effect ----------------------------------
     for refund_spec in spec.refunds:
-        _build_refund(session, result, spec, refund_spec, capture.id, order.id)
+        _build_refund(session, result, spec, refund_spec, order.id)
 
-    # --- disputes ----------------------------------------------------------
     for dispute_spec in spec.disputes:
-        _build_dispute(session, result, spec, dispute_spec, capture.id)
+        _build_dispute(session, result, spec, dispute_spec)
 
 
-def _build_dispute(
+def _build_ledger(
+    session: Session, result: SeedResult, spec: OrderSpec, order_id: uuid.UUID
+) -> None:
+    """A sale credit and a commission debit per seller.
+
+    Amounts are **unsigned** with the direction in its own column, which is
+    what buys `CHECK (amount_amount > 0)`. A position is
+    `SUM(credit) - SUM(debit)`, and the sign is applied in exactly one place:
+    `reckonai.engine.ledger.signed`.
+    """
+    for seller_ref, owed in spec.expected_entitlements.items():
+        seller_id = result.seller_ids[seller_ref]
+        share = sum(
+            (
+                Money(item.line_total, spec.currency)
+                for item in spec.items
+                if item.seller_ref == seller_ref
+            ),
+            Money("0", spec.currency),
+        )
+        commission = share - Money(owed, spec.currency)
+
+        # F3: the marketplace records the sale in its home currency at a
+        # stale rate. F6: it credits less than the entitlement.
+        credit = share
+        currency = spec.currency
+        if seller_ref in spec.recorded_in_currency:
+            currency, amount = spec.recorded_in_currency[seller_ref]
+            credit = Money(amount, currency)
+            commission = Money("0", currency)
+        elif seller_ref in spec.understated_credit:
+            credit = Money(spec.understated_credit[seller_ref], spec.currency)
+            commission = Money("0", spec.currency)
+
+        _entry(session, result, spec, order_id, seller_id, seller_ref,
+               "sale", "credit", credit, currency, "sale")
+
+        if spec.duplicate_ledger_entry:
+            # **A distinct reference, which is what makes this a realistic
+            # duplicate.** `UNIQUE (tenant_id, external_ref)` refuses a
+            # literal repeat, and a real double-post carries its own id. The
+            # fault is two entries describing one sale.
+            _entry(session, result, spec, order_id, seller_id, seller_ref,
+                   "sale", "credit", credit, currency, "sale-dup")
+
+        # A commission of zero gets no entry: `CHECK (amount_amount > 0)`
+        # refuses one, and that is right - an entry moving nothing is not a
+        # movement.
+        if not commission.is_zero():
+            _entry(session, result, spec, order_id, seller_id, seller_ref,
+                   "commission", "debit", commission, currency, "comm")
+
+
+def _entry(
     session: Session,
     result: SeedResult,
     spec: OrderSpec,
-    dispute_spec: data.DisputeSpec,
-    capture_id: uuid.UUID,
+    order_id: uuid.UUID | None,
+    seller_id: uuid.UUID,
+    seller_ref: str,
+    category: str,
+    direction: str,
+    amount: Money,
+    currency: str,
+    suffix: str,
 ) -> None:
-    """One dispute, with only the fields a marketplace would certainly hold.
+    ref = f"LED-{spec.ref}-{seller_ref}-{suffix}"
+    payload = _payload(
+        session,
+        tenant_id=result.tenant_id,
+        record_type="ledger_entry",
+        record_id=ref,
+        body={"txn_kind": category, "direction": direction,
+              "entry_amount": str(amount.quantize().amount), "ccy": currency},
+        retrieved_at=spec.placed_at,
+    )
+    session.add(
+        SellerLedgerEntry(
+            tenant_id=result.tenant_id,
+            raw_payload_id=payload.id,
+            seller_id=seller_id,
+            order_id=order_id,
+            entry_category=category,
+            transaction_type=direction,
+            amount=amount,
+            occurred_at=spec.placed_at,
+            external_ref=ref,
+        )
+    )
+    session.flush()
+
+
+def _build_refund(
+    session: Session,
+    result: SeedResult,
+    spec: OrderSpec,
+    refund_spec: data.RefundSpec,
+    order_id: uuid.UUID,
+) -> None:
+    """The marketplace's refund record, and - unless F1 - its ledger effect."""
+    seller_id = result.seller_ids[refund_spec.seller_ref]
+    amount = Money(refund_spec.amount, spec.currency)
+    reversal = Money(refund_spec.expected_commission_reversal, spec.currency)
+
+    payload = _payload(
+        session,
+        tenant_id=result.tenant_id,
+        record_type="refund",
+        record_id=refund_spec.ref,
+        body={"order_ref": spec.ref, "refund_amount": refund_spec.amount,
+              "ccy": spec.currency},
+        retrieved_at=spec.placed_at,
+    )
+    refund = Refund(
+        tenant_id=result.tenant_id,
+        raw_payload_id=payload.id,
+        external_id=refund_spec.ref,
+        # **No capture link.** The marketplace has no capture id - that is
+        # PayPal's, and tying the two together is Block C's decision, not a
+        # column here. `False` says no linkage was derived, which is the
+        # honest value; `True` would claim a derivation that never ran.
+        capture_id=None,
+        capture_linkage_is_derived=False,
+        capture_linkage_href=None,
+        seller_id=seller_id,
+        amount=amount,
+        status="COMPLETED",
+        occurred_at=spec.placed_at,
+    )
+    session.add(refund)
+    session.flush()
+    result.refund_ids[refund_spec.ref] = refund.id
+
+    if not refund_spec.reflected_in_ledger:
+        # F1: the refund exists and the ledger never heard about it.
+        return
+
+    for category, direction, value, suffix in (
+        ("refund", "debit", amount, "refund"),
+        ("commission_reversal", "credit", reversal, "revrs"),
+    ):
+        if not value.is_zero():
+            _entry(session, result, spec, order_id, seller_id,
+                   refund_spec.seller_ref, category, direction, value,
+                   spec.currency, suffix)
+
+
+def _build_dispute(
+    session: Session, result: SeedResult, spec: OrderSpec,
+    dispute_spec: data.DisputeSpec,
+) -> None:
+    """One dispute, with only the fields a marketplace would hold.
 
     **Writes no ledger entry.** An open dispute moves no money: PayPal has not
-    decided it, so there is nothing to debit. specs/mission.md P4 is the
-    principle - an unresolved state is not a discrepancy - and writing a
-    speculative debit here would make the seller's position wrong in the clean
-    baseline, which is the one thing this dataset cannot afford.
-
-    Every field Phase 0 did not observe stays `NULL`. See `DisputeSpec`.
+    decided it, so there is nothing to debit, and a speculative debit would
+    make the seller's position wrong in the clean baseline (P4).
     """
     from reckonai.models import Dispute
 
-    payload = _marketplace_payload(
+    payload = _payload(
         session,
-        result,
-        "dispute",
-        dispute_spec.ref,
-        {
-            "dispute_ref": dispute_spec.ref,
-            "disputed_amount": dispute_spec.amount,
-            "ccy": spec.currency,
-            "case_reason": dispute_spec.reason,
-        },
-        spec.placed_at,
+        tenant_id=result.tenant_id,
+        record_type="dispute",
+        record_id=dispute_spec.ref,
+        body={"disputed_amount": dispute_spec.amount, "ccy": spec.currency,
+              "case_reason": dispute_spec.reason},
+        retrieved_at=spec.placed_at,
     )
     session.add(
         Dispute(
             tenant_id=result.tenant_id,
             raw_payload_id=payload.id,
             external_id=dispute_spec.ref,
-            capture_id=capture_id,
+            capture_id=None,
             buyer_transaction_id=None,
             seller_id=result.seller_ids[dispute_spec.seller_ref],
             amount=Money(dispute_spec.amount, spec.currency),
@@ -559,247 +430,6 @@ def _build_dispute(
     session.flush()
 
 
-def _build_ledger(
-    session: Session, result: SeedResult, spec: OrderSpec, order_id: uuid.UUID
-) -> None:
-    """A sale credit and a commission debit per seller on the order.
-
-    Amounts are **unsigned** and the direction is its own column - the whole
-    reason `CHECK (amount_amount > 0)` is possible. A seller's position is
-    `SUM(credit) - SUM(debit)`, applied in exactly one place,
-    `reckonai.engine.ledger.signed`.
-    """
-    for seller_ref, owed in spec.expected_entitlements.items():
-        seller_id = result.seller_ids[seller_ref]
-        share = sum(
-            (
-                Money(item.line_total, spec.currency)
-                for item in spec.items
-                if item.seller_ref == seller_ref
-            ),
-            Money("0", spec.currency),
-        )
-        commission = share - Money(owed, spec.currency)
-
-        payload = _marketplace_payload(
-            session,
-            result,
-            "ledger_entry",
-            f"LED-{spec.ref}-{seller_ref}-sale",
-            {"entry_ref": f"LED-{spec.ref}-{seller_ref}-sale",
-             "txn_kind": "sale", "direction": "credit",
-             "entry_amount": str(share.quantize().amount), "ccy": spec.currency},
-            spec.placed_at,
-        )
-        session.add(
-            SellerLedgerEntry(
-                tenant_id=result.tenant_id,
-                raw_payload_id=payload.id,
-                seller_id=seller_id,
-                order_id=order_id,
-                entry_category="sale",
-                transaction_type="credit",
-                amount=share,
-                occurred_at=spec.placed_at,
-                external_ref=f"LED-{spec.ref}-{seller_ref}-sale",
-            )
-        )
-        session.flush()
-
-        # F4: the same sale credited twice, under a distinct reference.
-        #
-        # A *distinct* reference is what makes this a realistic duplicate
-        # rather than an impossible one: `UNIQUE (tenant_id, external_ref)`
-        # refuses a literal repeat, and a marketplace's double-post usually
-        # does carry its own id. So the fault is two entries describing one
-        # sale, which is what overstates the seller's position - not a
-        # constraint violation.
-        if spec.duplicate_ledger_entry:
-            dup_ref = f"LED-{spec.ref}-{seller_ref}-sale-dup"
-            dup_payload = _marketplace_payload(
-                session,
-                result,
-                "ledger_entry",
-                dup_ref,
-                {"entry_ref": dup_ref, "txn_kind": "sale",
-                 "direction": "credit",
-                 "entry_amount": str(share.quantize().amount),
-                 "ccy": spec.currency},
-                spec.placed_at,
-            )
-            session.add(
-                SellerLedgerEntry(
-                    tenant_id=result.tenant_id,
-                    raw_payload_id=dup_payload.id,
-                    seller_id=seller_id,
-                    order_id=order_id,
-                    entry_category="sale",
-                    transaction_type="credit",
-                    amount=share,
-                    occurred_at=spec.placed_at,
-                    external_ref=dup_ref,
-                )
-            )
-            session.flush()
-
-        # A commission of zero gets no entry. `CHECK (amount_amount > 0)`
-        # refuses one anyway, and that constraint is right: an entry moving
-        # nothing is not a movement.
-        if commission.is_zero():
-            continue
-
-        payload = _marketplace_payload(
-            session,
-            result,
-            "ledger_entry",
-            f"LED-{spec.ref}-{seller_ref}-comm",
-            {"entry_ref": f"LED-{spec.ref}-{seller_ref}-comm",
-             "txn_kind": "commission", "direction": "debit",
-             "entry_amount": str(commission.quantize().amount),
-             "ccy": spec.currency},
-            spec.placed_at,
-        )
-        session.add(
-            SellerLedgerEntry(
-                tenant_id=result.tenant_id,
-                raw_payload_id=payload.id,
-                seller_id=seller_id,
-                order_id=order_id,
-                entry_category="commission",
-                transaction_type="debit",
-                amount=commission,
-                occurred_at=spec.placed_at,
-                external_ref=f"LED-{spec.ref}-{seller_ref}-comm",
-            )
-        )
-        session.flush()
-
-
-def _build_refund(
-    session: Session,
-    result: SeedResult,
-    spec: OrderSpec,
-    refund_spec: data.RefundSpec,
-    capture_id: uuid.UUID,
-    order_id: uuid.UUID,
-) -> None:
-    """A refund, and - unless F1 suppresses them - its two ledger entries."""
-    seller_id = result.seller_ids[refund_spec.seller_ref]
-    amount = Money(refund_spec.amount, spec.currency)
-    reversal = Money(refund_spec.expected_commission_reversal, spec.currency)
-
-    payload = _marketplace_payload(
-        session,
-        result,
-        "refund",
-        refund_spec.ref,
-        {"refund_ref": refund_spec.ref, "order_ref": spec.ref,
-         "refund_amount": refund_spec.amount, "ccy": spec.currency},
-        spec.placed_at,
-    )
-    refund = Refund(
-        tenant_id=result.tenant_id,
-        raw_payload_id=payload.id,
-        external_id=refund_spec.ref,
-        capture_id=capture_id,
-        # **Derived, and recorded as derived.** PayPal supplies no capture
-        # identifier on a refund; the only route back is `links[rel=up]`, whose
-        # href has to be parsed. The marketplace's own refund does carry the
-        # order, but the capture link is still a derivation, so the provenance
-        # is stated rather than left to be assumed.
-        capture_linkage_is_derived=True,
-        capture_linkage_href=(
-            f"https://api-m.sandbox.paypal.com/v2/payments/captures/CAP-{spec.ref}"
-        ),
-        seller_id=seller_id,
-        amount=amount,
-        status="COMPLETED",
-        occurred_at=spec.placed_at,
-    )
-    session.add(refund)
-    session.flush()
-    result.refund_ids[refund_spec.ref] = refund.id
-
-    # --- PayPal's own refund record, where it has arrived ------------------
-    #
-    # F5 is the case where it has not. The default is present, and has to be:
-    # if no refund ever had a provider counterpart then "the counterpart is
-    # missing" would describe every refund in the dataset, and
-    # `awaiting_evidence` would be the answer for all of them rather than for
-    # the one that earns it.
-    #
-    # A distinct `external_id`, because PayPal's refund id is its own and the
-    # table is unique on `(tenant_id, external_id)`. Tying the two together is
-    # Block C's work, not a column here - Phase 3 omitted any `matched_*_id`
-    # deliberately, pinned by test.
-    if refund_spec.paypal_record_present:
-        pp_ref = f"PPRF-{refund_spec.ref}"
-        pp_payload = _paypal_payload(
-            session,
-            result,
-            "refund",
-            pp_ref,
-            {"status": "COMPLETED",
-             "amount": {"value": refund_spec.amount,
-                        "currency_code": spec.currency}},
-            spec.placed_at,
-        )
-        session.add(
-            Refund(
-                tenant_id=result.tenant_id,
-                raw_payload_id=pp_payload.id,
-                external_id=pp_ref,
-                capture_id=capture_id,
-                capture_linkage_is_derived=True,
-                capture_linkage_href=(
-                    "https://api-m.sandbox.paypal.com/v2/payments/captures/"
-                    f"CAP-{spec.ref}"
-                ),
-                seller_id=seller_id,
-                amount=amount,
-                status="COMPLETED",
-                occurred_at=spec.placed_at,
-            )
-        )
-        session.flush()
-
-    if not refund_spec.reflected_in_ledger:
-        # Fault F1: the refund exists and the ledger never heard about it.
-        # specs/mission.md section 6 scenario 1.
-        return
-
-    for category, direction, value, suffix in (
-        ("refund", "debit", amount, "refund"),
-        ("commission_reversal", "credit", reversal, "revrs"),
-    ):
-        if value.is_zero():
-            continue
-        ref = f"LED-{refund_spec.ref}-{suffix}"
-        entry_payload = _marketplace_payload(
-            session,
-            result,
-            "ledger_entry",
-            ref,
-            {"entry_ref": ref, "txn_kind": category, "direction": direction,
-             "entry_amount": str(value.quantize().amount), "ccy": spec.currency},
-            spec.placed_at,
-        )
-        session.add(
-            SellerLedgerEntry(
-                tenant_id=result.tenant_id,
-                raw_payload_id=entry_payload.id,
-                seller_id=seller_id,
-                order_id=order_id,
-                entry_category=category,
-                transaction_type=direction,
-                amount=value,
-                occurred_at=spec.placed_at,
-                external_ref=ref,
-            )
-        )
-        session.flush()
-
-
 # ---------------------------------------------------------------------------
 # The consistency check (requirements.md D6)
 # ---------------------------------------------------------------------------
@@ -810,21 +440,15 @@ def verify(
 ) -> None:
     """Recompute every stated figure and raise on the first disagreement.
 
-    Four invariants, over the **clean** orders only - faulty ones are excluded
-    by reference from `dataset.faulty_order_refs`, which the builder populates,
-    never by a heuristic. The builder knows which rows it broke.
+    Over the **clean** orders only - faulty ones are excluded by reference
+    from `dataset.faulty_order_refs`, never by a heuristic.
 
       1. Each line total equals unit price times quantity.
       2. Each order total equals the sum of its line totals.
       3. Each seller's commission and entitlement, recomputed through
-         `reckonai.engine.rules.resolve_commission_rule`, equal the literals
-         `data.py` states.
+         `resolve_commission_rule`, equal `data.py`'s literals.
       4. Each seller's ledger position, per currency, equals
          `data.EXPECTED_POSITIONS`.
-
-    Raises `SeedInconsistency`, naming the row and both figures. A caller that
-    catches this is wrong: it means the baseline Block C is measured against is
-    not clean.
     """
     spec = dataset if dataset is not None else data.CLEAN
     clean = [o for o in spec.orders if o.ref not in spec.faulty_order_refs]
@@ -848,9 +472,7 @@ def verify(
 
 
 def _verify_order(
-    order: OrderSpec,
-    rules: list[CommissionRule],
-    sellers: dict[str, Seller],
+    order: OrderSpec, rules: list[CommissionRule], sellers: dict[str, Seller]
 ) -> None:
     item_sum = Money("0", order.currency)
 
@@ -873,7 +495,6 @@ def _verify_order(
         )
 
     commission_sum = Money("0", order.currency)
-
     for seller_ref, owed in order.expected_entitlements.items():
         share = Money("0", order.currency)
         category: str | None = None
@@ -892,41 +513,35 @@ def _verify_order(
         entitlement = share - commission
         commission_sum = commission_sum + commission
 
-        stated_owed = Money(owed, order.currency)
-        if entitlement != stated_owed:
+        if entitlement != Money(owed, order.currency):
             raise SeedInconsistency(
-                f"{order.ref} / {seller_ref}: stated entitlement {stated_owed} "
-                f"but {share} at rate {rule.rate} leaves {entitlement}"
+                f"{order.ref} / {seller_ref}: stated entitlement {owed} but "
+                f"{share} at rate {rule.rate} leaves {entitlement}"
             )
 
-    stated_commission = Money(order.expected_commission, order.currency)
-    if commission_sum != stated_commission:
+    if commission_sum != Money(order.expected_commission, order.currency):
         raise SeedInconsistency(
-            f"{order.ref}: stated commission {stated_commission} but the "
-            f"per-seller figures sum to {commission_sum}"
+            f"{order.ref}: stated commission {order.expected_commission} but "
+            f"the per-seller figures sum to {commission_sum}"
         )
 
 
 def _verify_positions(
-    session: Session,
-    tenant_id: uuid.UUID,
-    clean: list[OrderSpec],
-    spec: Dataset,
+    session: Session, tenant_id: uuid.UUID, clean: list[OrderSpec], spec: Dataset
 ) -> None:
-    """Every seller's ledger position, per currency, against the literals.
+    """Each seller's ledger position, per currency, against the literals.
 
-    Read back from the database rather than recomputed from the specs, so this
-    also proves the rows the builder wrote carry the directions it intended -
-    a sale credited and a commission debited. A sign error would pass invariant
-    3 and fail here.
+    Read back from the database rather than recomputed from the specs, so
+    this also proves the rows carry the directions intended - a sale credited
+    and a commission debited. A sign error passes invariant 3 and fails here.
     """
-    clean_refs = {o.ref for o in clean}
-    expected = {
-        key: value
-        for key, value in data.EXPECTED_POSITIONS.items()
-        if _positions_apply(key, clean_refs, spec)
-    }
+    if len(clean) != len(data.CLEAN_ORDERS) or spec.faulty_order_refs:
+        # Stated for the full clean set only. A caller seeding a subset would
+        # otherwise fail against totals that were never going to be reached.
+        if spec.faulty_order_refs != data.FAULTY_ORDER_REFS:
+            return
 
+    clean_refs = {o.ref for o in clean}
     entries = list(
         session.scalars(
             select(SellerLedgerEntry).where(
@@ -949,30 +564,17 @@ def _verify_positions(
         )
     }
 
-    for (seller_ref, currency), stated in expected.items():
+    for (seller_ref, currency), stated in data.EXPECTED_POSITIONS.items():
         mine = [
-            entry
-            for entry in entries
-            if seller_refs.get(entry.seller_id) == seller_ref
-            and entry.order_id in clean_order_ids
+            e
+            for e in entries
+            if seller_refs.get(e.seller_id) == seller_ref
+            and e.order_id in clean_order_ids
         ]
         found = position(mine, currency).quantize()
         if found != Money(stated, currency):
             raise SeedInconsistency(
                 f"{seller_ref} {currency}: stated position {stated} but the "
-                f"ledger sums to {found.amount}. Entries considered: "
-                f"{len(mine)}. Check the direction on each - "
+                f"ledger sums to {found.amount} over {len(mine)} entries. "
                 f"{signed.__module__}.signed is where a sign is applied."
             )
-
-
-def _positions_apply(
-    key: tuple[str, str], clean_refs: set[str], spec: Dataset
-) -> bool:
-    """Whether a stated position is checkable for the dataset in hand.
-
-    `data.EXPECTED_POSITIONS` is stated for the full clean set. A caller
-    seeding a subset - which the tests do, to perturb one order - would
-    otherwise fail against totals that were never going to be reached.
-    """
-    return len(clean_refs) == len(data.CLEAN_ORDERS) and not spec.faulty_order_refs

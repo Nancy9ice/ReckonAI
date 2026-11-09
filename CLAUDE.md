@@ -35,9 +35,10 @@ classification) are complete. Block D is next** — `jobs`, `SKIP LOCKED`,
 table** Block C assigned to it.
 
 **Read `specs/2026-11-09-matching-classification/requirements.md` §4 first.**
-It is Block C's handoff. That directory's `validation.md` §9 lists four
-corrections this block made to earlier documents and §10 what it did not
-prove.
+It is Block C's handoff. In that directory's `validation.md`, **§9 tabulates
+the nine code-review findings and their fixes** — read it before extending the
+classifier — §10 lists the corrections this block made to earlier documents,
+and §11 what it did not prove.
 
 The engine lives in `reckonai/engine/`: `rules.py`, `ledger.py`,
 `entitlement.py`, `refunds.py`, `positions.py`. **It compares nothing** — it
@@ -62,10 +63,13 @@ tolerance** — it rests on two measurements across all 21 captures, and F2's
 whole fault is 10.00 of commission. **One fault must stay one finding**:
 specific rules account for an amount and a residual check reports only the
 remainder, so a new rule that does not credit `explained` will double-report
-an existing fault. And **two of the sim manifest's impact figures were stale**
-(F3, F6) — corrected against the fixtures and now pinned by
-`tests/test_manifest_agrees_with_seed.py`, which is the guard that was
-missing.
+an existing fault. And **the sim manifest was stale in two ways** — F3's and F6's
+impact figures, and four evidence references naming records that exist
+nowhere, all of them Block A synthetic rows retired by R16. Corrected against
+the fixtures and now pinned by `tests/test_manifest_agrees_with_seed.py` and
+`test_every_reference_the_manifest_names_is_a_real_record`, the two guards
+that were missing. **Cite the capture, never `platform_fee.external_id`** —
+the latter is built from a payload UUID and changes on every seed.
 
 Two things from Block B that change how other code is written. A **type checker
 is now wired in**: `uv run mypy`, strict, scoped to `src/reckonai/engine/` by

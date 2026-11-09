@@ -44,6 +44,7 @@ oversight:
 | **Seller financial position view** in the dashboard | The investigation detail carries the underpaid-seller story better, with evidence attached. The exception queue, investigation detail, run summary and approve/reject all ship |
 | **Tuned retry backoff** on the job queue | Attempt count, `run_after` and a terminal failed state with the error recorded. The `jobs` table, `FOR UPDATE SKIP LOCKED` claiming, the `processed_events` unique constraint and the scheduled Cron Job all ship |
 | **Platform fee settlement reconciliation** | Unchanged from `mission.md` §7: this is settlement-account reconciliation, and PayPal's partner fee cost detail arrives only as a monthly, SFTP-delivered report for approved partners. Blocked on data we do not ingest. The per-transaction check — the platform fee PayPal recorded against the commission the marketplace's rules specify — is in scope and ships |
+| **Dispute matching** | No sandbox fixture carries a disputed capture, so the dispute path is unverified against real provider data. The rule it needs *is* implemented and unit-tested: a capture whose `seller_receivable_breakdown` is absent - which an open dispute causes - is classified `awaiting_evidence`, never "no fee charged" and never a discrepancy. A quoted FX rate is never substituted for a conversion record (`mission.md` P3) |
 | **Bryntum** | Below the cutline by definition |
 
 **Not reduced, under any pressure.** Every monetary figure comes from the

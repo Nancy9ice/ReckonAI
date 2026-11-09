@@ -474,8 +474,16 @@ exit criteria pass against the seeded tenant: six faults detected with the
 manifest's own impact figures, and **zero exceptions on the fifteen clean
 purchase units**.
 
-Three things worth carrying at this level. **Two of the manifest's six impact
-figures were stale** — F3 and F6 described no record in the dataset, left
+**A `/code-review medium` on Block C returned nine findings, all nine real**,
+two of them reproducible false positives on correct data - the worst reported a
+clean equal-share two-seller order as duplicated, which no seeded order could
+show because none splits equally. Block C's `validation.md` §9 tabulates all
+nine with their fixes, and each has a regression test. The lesson worth
+carrying past this block: **the gate proves the dataset, not the logic** - a
+rule can be wrong in a shape the eighteen seeded orders do not contain.
+
+Three further things worth carrying at this level. **Two of the manifest's six
+impact figures were stale** — F3 and F6 described no record in the dataset, left
 behind when R16's capture re-pointed the seed at real provider figures — so the
 gate would have failed against a correct implementation; they are corrected
 against the fixtures and now pinned by `tests/test_manifest_agrees_with_seed.py`.

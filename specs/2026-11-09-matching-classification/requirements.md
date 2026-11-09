@@ -75,6 +75,39 @@ Stated here as decisions, not discovered as constants while chasing noise.
 T2 applies only to the sum-versus-total shape. It is not a general FX slack: a
 single reported settlement is compared exactly against the reported figure.
 
+### D4a. T2 is a guard with no caller, and that is the right outcome
+
+*Added after building.* No classifier path reaches
+`compare_converted_total`, and the reason is D3 rather than an omission.
+
+The one-cent artefact arises only when a sum of separately-converted legs is
+compared against a total converted in one step. **That total is not a figure
+PayPal reports** - producing it means multiplying a net by a rate, which D3
+forbids. So ORD-0008 is clean because the forbidden arithmetic is absent, not
+because a tolerance absorbs it, and the FX guard is realised as "compare only
+reported figures" rather than as slack.
+
+T2 stays implemented and tested. It is the documented decision for the
+sum-versus-total shape should a provider-reported total ever appear, and the
+roadmap requires the rounding tolerance to be recorded as a decision rather
+than discovered later. Deleting it would mean rediscovering ORD-0008's
+arithmetic the first time that shape occurs.
+
+### D4b. The held-funds guard is proven in unit tests, not by the gate
+
+*Added after building, because the gate looks like it covers this and does
+not.* Measured: deleting `funds_held` from `HEALTHY_HELD_STATES` does **not**
+fail the database gate. ORD-0005's ledger credits its full 180.00 EUR
+entitlement, so the residual is zero and the guard is never reached on that
+order.
+
+It is genuinely proven - removing the state fails three unit tests - and
+`test_the_held_funds_order_is_clean_for_the_reason_we_think` pins the two
+facts that make the gate pass, so the clean result is not mistaken for
+coverage. Closing the gap needs a seeded order where funds are held *and* the
+ledger is short, which would add a third non-fault and change what the gate is
+measured against (D7's reasoning). Recorded as a limitation instead.
+
 ### D5. Each `EngineError` becomes a named classification, never a coerced figure
 
 The engine raises where a figure would be invented, and this block decides what
@@ -135,39 +168,6 @@ The table belongs to Block D, which owns the date-windowed run that would
 write it. Keeping it out holds `recon/` pure and keeps the purity gate honest.
 **Block F depends on this**: its dashboard renders rows that Block D must
 persist, and nobody owned the table before this decision.
-
-### D4a. T2 is a guard with no caller, and that is the right outcome
-
-*Added after building.* No classifier path reaches
-`compare_converted_total`, and the reason is D3 rather than an omission.
-
-The one-cent artefact arises only when a sum of separately-converted legs is
-compared against a total converted in one step. **That total is not a figure
-PayPal reports** - producing it means multiplying a net by a rate, which D3
-forbids. So ORD-0008 is clean because the forbidden arithmetic is absent, not
-because a tolerance absorbs it, and the FX guard is realised as "compare only
-reported figures" rather than as slack.
-
-T2 stays implemented and tested. It is the documented decision for the
-sum-versus-total shape should a provider-reported total ever appear, and the
-roadmap requires the rounding tolerance to be recorded as a decision rather
-than discovered later. Deleting it would mean rediscovering ORD-0008's
-arithmetic the first time that shape occurs.
-
-### D4b. The held-funds guard is proven in unit tests, not by the gate
-
-*Added after building, because the gate looks like it covers this and does
-not.* Measured: deleting `funds_held` from `HEALTHY_HELD_STATES` does **not**
-fail the database gate. ORD-0005's ledger credits its full 180.00 EUR
-entitlement, so the residual is zero and the guard is never reached on that
-order.
-
-It is genuinely proven - removing the state fails three unit tests - and
-`test_the_held_funds_order_is_clean_for_the_reason_we_think` pins the two
-facts that make the gate pass, so the clean result is not mistaken for
-coverage. Closing the gap needs a seeded order where funds are held *and* the
-ledger is short, which would add a third non-fault and change what the gate is
-measured against (D7's reasoning). Recorded as a limitation instead.
 
 ### D9. Evidence basis is carried, because one linkage is derived
 
@@ -267,10 +267,29 @@ implementation.
   false-positive gate while being entirely correct.
 - **Do not widen T1.** The zero tolerance rests on two measurements across all
   21 captures, and F2's whole fault is 10.00 of commission.
-- **One fault must stay one finding.** Specific rules account for an amount
-  and the residual check reports only the remainder; an unreflected refund is
-  held out of the expected position rather than reconciled afterwards. A new
-  rule that does not credit `explained` will double-report an existing fault.
+- **One fault must stay one finding.** Two mechanisms, and a new rule must
+  use one of them: a defect's own row is **held out** of every later
+  comparison (an unreflected refund, a duplicate's surplus row), or the rule
+  **credits `explained`** so the residual check reports only the remainder. A
+  rule that does neither will double-report an existing fault - that is what
+  two of the nine code-review findings were.
+- **Cite the capture, not the platform fee.** `platform_fee.external_id` is
+  built as `f"pf-{payload_uuid}-{index}"` and changes on every seed, so it can
+  name fee evidence but cannot be used to find it again. Block E's exit
+  criterion is that every cited id resolves to a real record; the capture is
+  the stable reference.
+- **Both sides of the held-funds question must be read.** A capture's
+  `disbursement_state` never carries `release_requested` or
+  `disbursement_pending` - those exist only on the `disbursement` row. A rule
+  that consults only the capture reports a release in flight as a mismatch.
+- **Three cross-source linkages are claims made in `reconcile.py`, not
+  columns** (D10). A fourth - the disbursement-to-capture link - was added
+  after the review. Resolving a new one belongs there, with the others.
+- **Read `validation.md` §9 before extending the classifier.** The nine
+  code-review findings are tabulated with their fixes; two were false
+  positives on correct data that the seeded dataset could not show, and the
+  shapes that caused them (equal seller shares, a duplicated debit) now have
+  regression tests rather than only the gate.
 
 ## Related
 

@@ -1,7 +1,16 @@
 # Matching and exception classification — task groups
 
-> Decisions in `requirements.md`; proof in `validation.md`. One commit for the
-> block (replan R2). Groups run in order; each ends at a check that can fail.
+> Decisions in `requirements.md`; proof in `validation.md`.
+>
+> **This is the plan as written before the work, kept as the record of the
+> intended shape.** It is not maintained against what was built - that is what
+> `validation.md` is for, and the replan's R1 drops `plan.md` for exactly this
+> reason. Where the two disagree, `validation.md` is right. The notable
+> divergences: a foreign-currency ledger with no reported settlement is
+> *reported* rather than passed over (group 4), the block took six commits
+> rather than R2's one because each group was validated and committed
+> separately, and `reckonai/reconcile.py` was added in group 5 so the query
+> layer was not test-only code.
 
 ## 1. Exception vocabulary · ~30 min
 

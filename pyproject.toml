@@ -47,6 +47,15 @@ dev = [
     # uvicorn[standard]: tests/test_render_blueprint.py parses render.yaml, and
     # a test's dependency should not vanish because a runtime extra changed.
     "pyyaml>=6",
+    # Added in Phase 10. A dev dependency, so specs/tech-stack.md section 1 -
+    # which locks *runtime* dependencies - does not need amending.
+    #
+    # Scoped to `src/reckonai/engine/` by the [tool.mypy] config below, and
+    # gated in CI there only. The reasoning is in
+    # specs/2026-11-09-entitlement-engine/requirements.md D9: the engine is the
+    # module where a type error is a wrong financial answer rather than a
+    # crash, and it is the only package that already passes --strict.
+    "mypy>=1.13,<2",
 ]
 
 # ---------------------------------------------------------------------------
@@ -86,3 +95,28 @@ select = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+
+# ---------------------------------------------------------------------------
+# Mypy. Added in Phase 10, deliberately **narrow**: strict over
+# `src/reckonai/engine/` and nothing else.
+#
+# Why not the whole package. Running it over `src/` for the first time reported
+# 39 errors, of which 32 were a single inaccurate annotation on `Money` (now
+# fixed - see the TYPE_CHECKING block in money/value.py). Of the seven that
+# remain, two are a **mypy limitation rather than a defect**: a SQLAlchemy
+# `Mapped[X]` attribute does not satisfy a Protocol member declared as `X`,
+# although instance access genuinely resolves to `X` at runtime and the ORM
+# classes do satisfy these protocols. Gating on that would mean suppressing a
+# false report at every ORM-to-engine boundary.
+#
+# So the gate goes where it pays: the engine is pure functions where a type
+# error is a wrong financial answer rather than a crash, it imports no ORM by
+# design (specs/tech-stack.md section 6), and it is the one package that
+# already passes --strict. The remaining five errors are recorded as a debt in
+# specs/2026-11-09-entitlement-engine/validation.md section 7 rather than
+# suppressed here.
+# ---------------------------------------------------------------------------
+[tool.mypy]
+files = ["src/reckonai/engine"]
+python_version = "3.12"
+strict = true

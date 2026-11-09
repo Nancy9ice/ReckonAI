@@ -87,6 +87,12 @@ jobs:
       - name: Lint
         run: uv run ruff check
 
+      # Scoped to src/reckonai/engine/ by [tool.mypy] in pyproject.toml, not by
+      # a path argument here - so the gate's scope is one decision in one place
+      # and a local `uv run mypy` checks exactly what CI does.
+      - name: Typecheck the engine
+        run: uv run mypy
+
       - name: Apply migrations
         run: uv run alembic upgrade head
 

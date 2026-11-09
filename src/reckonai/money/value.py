@@ -41,7 +41,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .currency import exponent, normalise, quantum
 from .errors import CurrencyMismatch, InvalidAmount
@@ -104,6 +104,27 @@ class Money:
 
     amount: Decimal
     currency: str
+
+    if TYPE_CHECKING:
+        # The dataclass-generated `__init__` reuses the field annotation above
+        # for its parameter, which declares a *narrower* constructor than this
+        # class documents and than `_coerce_amount` actually accepts. Every
+        # `Money("160.00", "USD")` in the codebase - the canonical form, and
+        # the one PayPal's JSON strings arrive as - then fails a type check
+        # while being entirely correct.
+        #
+        # Declared here so the constructor's type matches its behaviour, while
+        # `money.amount` still reads as a `Decimal` downstream because
+        # `__post_init__` has normalised it by then. Under TYPE_CHECKING only:
+        # this adds no runtime `__init__` and the dataclass machinery is
+        # untouched.
+        #
+        # Found by Phase 10 when the type checker was first run against this
+        # project: 32 of its 39 errors were this one annotation
+        # (specs/2026-11-09-entitlement-engine/requirements.md D9).
+        def __init__(
+            self, amount: Decimal | int | str, currency: str
+        ) -> None: ...
 
     def __post_init__(self) -> None:
         # Validate, canonicalise, then write back through object.__setattr__,

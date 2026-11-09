@@ -40,6 +40,8 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Protocol, runtime_checkable
 
+from reckonai.money import Money
+
 
 class EngineError(Exception):
     """Base for errors raised by the reconciliation engine.
@@ -78,6 +80,15 @@ class CommissionRuleLike(Protocol):
     seller_id: uuid.UUID | None
     category: str | None
     rate: Decimal
+
+    #: The rule's optional flat per-transaction component, alongside `rate`.
+    #: Added in Phase 10: `commission_rule.fixed` has existed since Phase 2 and
+    #: was absent from this protocol, so a rule carrying one would have had its
+    #: flat part silently dropped by every consumer. `None` means the rule
+    #: declares none, which is a stated structure rather than a defaulted
+    #: amount - see specs/2026-11-09-entitlement-engine/requirements.md D8.
+    fixed: Money | None
+
     valid_from: datetime
     valid_to: datetime | None
 

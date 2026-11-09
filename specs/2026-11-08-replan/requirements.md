@@ -453,15 +453,31 @@ record of completed phases and record what was true when written.
 
 ## State
 
-**Updated 2026-11-08 after Block A merged.** This section is the first thing a
-new session reads, so it is kept current rather than left as a record of when
-the replan was written.
+**Updated 2026-11-09 after Block B.** This section is the first thing a new
+session reads, so it is kept current rather than left as a record of when the
+replan was written.
 
 Phases 0, 0b, 1, 2, 3 and **Block A (4 + 5 + 6) are complete and merged** — PR
 #14, merge commit `2d002b1`, CI green.
 
-**The PayPal capture (R16) is complete**, and **Block B is next** (Phase 10,
-the entitlement engine, ~3 h).
+**The PayPal capture (R16) and Block B (Phase 10) are complete**, and **Block C
+is next** (Phase 11, matching and exception classification, ~4 h).
+
+Block B delivered `reckonai/engine/{entitlement,refunds,positions}.py` — pure
+functions over `typing.Protocol` inputs, with all six [[roadmap]] Phase 10 exit
+criteria met and `seed.verify()` now recomputing through the real engine rather
+than a second copy. **Read
+`specs/2026-11-09-entitlement-engine/requirements.md` §4 before Block C**: it
+is the handoff, and it names four things not to spend time on as well as six to
+get right.
+
+Two things worth carrying at this level. A `/code-review medium` on Block B
+returned **six findings, all six real**, the worst of which had the engine
+fabricating an entitlement on repeated partial refunds — per-refund commission
+reversals accumulate rounding, and nothing already written caught it because
+every stated invariant still held. And a **type checker is now wired in**:
+strict mypy over `src/reckonai/engine/` only, gated in CI, with the reasoning
+and the five out-of-scope errors in that directory's D9 and `validation.md` §8.
 
 The capture produced 18 real sandbox orders in `fixtures/paypal/`, replayed by
 `reckonai.paypal.replay`, with the marketplace seed re-pointed at the captured
@@ -470,10 +486,14 @@ figures and Block A's synthetic provider side deleted. Read
 `validation.md` §2 is the current hand-check, Block A's §2 is superseded, and
 §7 lists five things found only by running it.
 
-Before starting it, read
-`specs/2026-11-08-block-a-marketplace-connector/requirements.md` §3 — Block A's
-handoff — and that directory's `validation.md` §8, which lists four debts
-handed forward. Two of them are Block B's or Block C's to settle.
+`specs/2026-11-08-block-a-marketplace-connector/requirements.md` §3 remains
+useful but its seller list is stale, and its claim that every seeded capture
+states a fee is now false. That directory's `validation.md` §8 listed five
+debts: **debt 2 was retired by the capture, debt 4 was settled by Block B**
+(the test-order guard), and **debt 1 — reconciling `manifest.py`'s
+classification strings into a shared exception vocabulary — is Block C's stated
+first task**. Debt 3 (the open-dispute trap) is Block C's to take or decline
+deliberately, and debt 5 (seeding the deployed database) is Block F's.
 
 **The deploy budget below is spent.** R2 allowed one deploy, in Block F. Block A
 was merged to `main`, and both Render services track `main` with no

@@ -29,6 +29,7 @@ from reckonai.engine import (
     NoApplicableCommissionRule,
     resolve_commission_rule,
 )
+from reckonai.money import Money
 
 SELLER = uuid.uuid4()
 OTHER_SELLER = uuid.uuid4()
@@ -52,6 +53,10 @@ class Rule:
     valid_to: datetime | None = None
     seller_id: uuid.UUID | None = None
     category: str | None = None
+    #: Phase 10 added this to the protocol. It had existed on the ORM class
+    #: since Phase 2 and was missing here, which is the divergence
+    #: `test_the_test_fixture_satisfies_the_protocol` exists to catch.
+    fixed: Money | None = None
     id: uuid.UUID = field(default_factory=uuid.uuid4)
 
 
@@ -208,9 +213,7 @@ def test_a_rule_outside_its_validity_period_is_ignored() -> None:
 def test_valid_from_is_inclusive() -> None:
     rule = Rule(rate=Decimal("0.100000"), valid_from=JUNE)
 
-    chosen = resolve_commission_rule(
-        [rule], seller_id=SELLER, category=None, at=JUNE
-    )
+    chosen = resolve_commission_rule([rule], seller_id=SELLER, category=None, at=JUNE)
 
     assert chosen is rule
 
@@ -266,9 +269,7 @@ def test_a_historical_timestamp_resolves_the_historical_rule() -> None:
     though the rate has since changed. Without dating, correcting a rate today
     would silently rewrite what January's run meant.
     """
-    january_rate = Rule(
-        rate=Decimal("0.200000"), valid_from=JANUARY, valid_to=JUNE
-    )
+    january_rate = Rule(rate=Decimal("0.200000"), valid_from=JANUARY, valid_to=JUNE)
     current_rate = Rule(rate=Decimal("0.100000"), valid_from=JUNE)
     rules = [january_rate, current_rate]
 

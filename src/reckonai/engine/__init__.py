@@ -23,14 +23,33 @@ This is also why the AI agent can safely call this code as a tool
 (specs/tech-stack.md section 5): the agent cannot produce a number the engine
 would not produce, because it is the same function.
 
-Phase 2 establishes the package with commission-rule resolution. Phase 3 adds
+Phase 2 established the package with commission-rule resolution. Phase 3 added
 `signed` and `position`, the one place a ledger direction becomes a sign - see
-`ledger.py`. Phase 10 adds expected entitlement, proportional refund
-allocation and commission adjustment.
+`ledger.py`. Phase 10 added the rest, in three modules:
+
+  - `entitlement.py` - what each seller is owed on an order, and the
+    commission due, as a figure comparable to PayPal's platform fee.
+  - `refunds.py` - a refund's attribution to one seller through its capture,
+    the commission reversal, and the two allocation paths.
+  - `positions.py` - per-seller, per-currency expected position, carrying the
+    ids of any captures whose processing fee is unknown.
+
+Nothing here compares anything. Phase 11 owns matching and classification;
+this package answers only what *should* be true.
 """
 
 from __future__ import annotations
 
+from .entitlement import (
+    FixedCommissionCurrencyMismatch,
+    MixedCurrencyOrder,
+    OrderEntitlement,
+    OrderItemLike,
+    OrderLike,
+    SellerEntitlement,
+    commission_for,
+    expected_entitlement,
+)
 from .ledger import (
     CREDIT,
     DEBIT,
@@ -38,6 +57,28 @@ from .ledger import (
     UnknownTransactionType,
     position,
     signed,
+)
+from .positions import (
+    CaptureFeeLike,
+    SellerPosition,
+    expected_commission,
+    expected_positions,
+)
+from .refunds import (
+    CaptureLike,
+    CaptureNotSupplied,
+    FlatComponentReversalUndefined,
+    RefundAlreadyApplied,
+    RefundAttribution,
+    RefundExceedsShare,
+    RefundLike,
+    UnattributableRefund,
+    allocate_refund_across_sellers,
+    apply_refund,
+    attribute_refund,
+    commission_reversal,
+    split_by_rate,
+    total_refunded,
 )
 from .rules import (
     CommissionRuleAmbiguity,
@@ -52,11 +93,37 @@ __all__ = [
     "DEBIT",
     "CommissionRuleAmbiguity",
     "CommissionRuleLike",
+    "CaptureFeeLike",
+    "CaptureLike",
+    "CaptureNotSupplied",
     "EngineError",
+    "FixedCommissionCurrencyMismatch",
+    "FlatComponentReversalUndefined",
     "LedgerEntry",
+    "MixedCurrencyOrder",
     "NoApplicableCommissionRule",
+    "OrderEntitlement",
+    "OrderItemLike",
+    "OrderLike",
+    "RefundAlreadyApplied",
+    "RefundAttribution",
+    "RefundExceedsShare",
+    "RefundLike",
+    "SellerEntitlement",
+    "SellerPosition",
+    "UnattributableRefund",
     "UnknownTransactionType",
+    "allocate_refund_across_sellers",
+    "apply_refund",
+    "attribute_refund",
+    "commission_for",
+    "commission_reversal",
+    "expected_commission",
+    "expected_entitlement",
+    "expected_positions",
     "position",
     "resolve_commission_rule",
     "signed",
+    "split_by_rate",
+    "total_refunded",
 ]

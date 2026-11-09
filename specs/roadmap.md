@@ -1,6 +1,11 @@
 # ReckonAI — Roadmap
 
 > **Status:** Constitution. Implementation order and phase boundaries.
+> **Next: Phase 10, the entitlement engine** (the replan's Block B). Phases 0,
+> 0b, 1, 2, 3, 4, 5 and 6 are complete; Phase 7 is partially complete and its
+> remainder is listed in its own section. Read
+> `specs/2026-11-09-paypal-capture/validation.md` §2 first — it holds the
+> figures Phase 10's output is checked against, and supersedes Block A's.
 > **Strategy:** Foundation-first — each layer is completed before the next begins.
 > **Budget:** ~1 week.
 > Governed by [[mission]]; technology per [[tech-stack]].
@@ -578,8 +583,70 @@ normalization into Phases 2–3 tables with raw payloads retained.
 
 ---
 
-## Phase 7 — PayPal ingestion · 0.5 day
+## Phase 7 — PayPal ingestion · 0.5 day · **PARTIALLY COMPLETE 2026-11-09**
 
+> **The capture and replay half is delivered**, as the replan's R16 brought it
+> ahead of Block B. `scripts/capture_paypal.py` captured 18 real multiparty
+> orders into `fixtures/paypal/`, and `reckonai.paypal.replay` normalizes them
+> into the canonical model. Spec and evidence:
+> `specs/2026-11-09-paypal-capture/`.
+>
+> **Met:** sandbox records appear as canonical rows alongside marketplace
+> ones; absent fields are recorded as limitations and nothing is invented
+> (`capture.paypal_fee` NULL, `fx_conversion.fee` NULL,
+> `disbursement.released_at` NULL); retrieval is idempotent; **refunds are read
+> through the order**, confirmed against real responses which return
+> `seller_payable_breakdown: null` from the refund endpoint; raw payloads are
+> retained.
+>
+> **Four criteria are unmet, and three of them are R6 rather than debt.**
+> R6 removed live PayPal from the reconciliation path, and these follow from
+> that decision rather than from anything being skipped. They are real
+> requirements for a production client, and this MVP does not have one.
+>
+> - **No `403` / `5xx` handling, because nothing retries.** Nothing calls
+>   PayPal during a run. The only live call is the demo's opening order, which
+>   already fails safe and which nothing depends on (R15).
+> - **The reporting endpoints are not read at all.** Their payoff is a
+>   conversion timestamp and per-event fees. [[mission]] §6 scenario 3 needs
+>   the rate and the amounts, which the capture supplies, so
+>   `fx_conversion.converted_at` is `NULL` and nothing in the demo wants it.
+> - **`items[].errors` is unread** — it needs a failed disbursement, and the
+>   dataset has none. Phase 12's `insufficient_evidence` branch does not
+>   depend on this field.
+>
+> **The fourth is genuine, and was reduced rather than deferred.** "Raw
+> payloads are retained **and diffed against the model**": retention is done;
+> the diff is not. Its full form watches for live schema drift, which frozen
+> fixtures cannot have — but the question it would answer is worth answering
+> once, and now is.
+>
+> `tests/test_paypal_replay.py` asserts that no money-bearing field in the
+> captures is silently ignored. Of 69 distinct fields, four look monetary and
+> are unconsumed: `network` and `network_transaction_reference` are card
+> routing metadata, and `exchange_rate.source_currency` / `target_currency`
+> are **stated by PayPal and derived by the ingester from the amounts
+> instead**. A second test asserts the two agree on all six conversions,
+> because if they ever disagreed a real money figure would carry the wrong
+> currency and both sides would still look internally consistent
+> ([[mission]] P2).
+>
+> **What a live client would still owe:** the ongoing diff, the reporting
+> join, retry and status rules, and `items[].errors`. None blocks the MVP.
+>
+> **One criterion needs reading precisely rather than ticking.** This phase
+> says "nothing in this client moves money ... it never sends a referenced
+> payout release". The **runtime** client, `reckonai.paypal.capture`, sends
+> none: it creates one order and reads it back, nothing else.
+> `scripts/capture_paypal.py` does issue two refunds and one release — in
+> sandbox, run by hand, to build the test dataset that the demo then replays.
+>
+> That is consistent with [[mission]] P6, which forbids a code path that moves
+> money **without human approval**: an operator running a dataset builder is
+> the approval. But the distinction is real and worth stating, because the
+> criterion as written would otherwise read as broken. **The product never
+> releases funds; the fixture builder does, once, under a hand.**
+>
 > **Replanned 2026-11-08 (R6, R15):** narrowed to a capture script that writes
 > real sandbox responses to fixtures, plus a replay ingester that normalizes
 > them through this same path. Sandbox throughout; nothing production, ever.

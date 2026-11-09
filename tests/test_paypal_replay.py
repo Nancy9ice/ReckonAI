@@ -492,3 +492,94 @@ def test_a_marketplace_seller_is_reachable_from_a_payee(
         )
     }
     assert merchants == {s.merchant_id for s in data.SELLERS}
+
+
+def test_paypals_stated_conversion_currencies_match_the_amounts_it_converted(
+) -> None:
+    """The one assumption the ingester makes without checking.
+
+    `fx_conversion.source` and `.target` are built from `net_amount` and
+    `receivable_amount`, so their currencies are **derived** from the amounts
+    rather than read from `exchange_rate.source_currency` and
+    `.target_currency`, which PayPal also states and which the ingester never
+    reads.
+
+    They agree on every captured conversion. If they ever did not, the row
+    would carry a real money figure under the wrong currency - and nothing
+    downstream could tell, because both sides would look internally
+    consistent. specs/mission.md P2: an amount is meaningless without its
+    currency, and a *wrong* currency is worse than a missing one.
+
+    This is the useful half of Phase 7's "raw payloads are diffed against the
+    model" criterion, reduced to the one case where a mismatch would change a
+    financial conclusion. The full diff watches for live schema drift, which
+    frozen fixtures cannot have.
+    """
+    checked = 0
+    for path in sorted(FIXTURES.glob("*.json")):
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        for unit in doc["order"]["purchase_units"]:
+            for cap in unit.get("payments", {}).get("captures", []):
+                breakdown = cap.get("seller_receivable_breakdown") or {}
+                rate = breakdown.get("exchange_rate")
+                if not rate:
+                    continue
+                checked += 1
+                assert rate["source_currency"] == (
+                    breakdown["net_amount"]["currency_code"]
+                ), f"{path.stem}: PayPal converted from a currency it did not state"
+                assert rate["target_currency"] == (
+                    breakdown["receivable_amount"]["currency_code"]
+                ), f"{path.stem}: PayPal converted to a currency it did not state"
+
+    assert checked == 6, (
+        f"{checked} conversions checked; the dataset has 6, so this is no "
+        "longer covering what it claims to"
+    )
+
+
+def test_no_money_bearing_field_in_the_fixtures_is_silently_ignored() -> None:
+    """A field PayPal sends that nothing reads is a figure nobody sees.
+
+    Deliberately a **named allow-list** rather than a count: a new
+    money-shaped field appearing in a re-captured fixture should fail here
+    and be looked at, not absorbed by a threshold.
+    """
+    import re
+
+    source = (
+        pathlib.Path(__file__).resolve().parent.parent
+        / "src" / "reckonai" / "paypal" / "replay.py"
+    ).read_text()
+    consumed = set(re.findall(r"""(?:get|\[)\(?["']([a-z_]+)["']""", source))
+
+    def leaves(node, out):
+        if isinstance(node, dict):
+            for key, value in node.items():
+                out.add(key)
+                leaves(value, out)
+        elif isinstance(node, list):
+            for item in node:
+                leaves(item, out)
+
+    found: set[str] = set()
+    for path in FIXTURES.glob("*.json"):
+        leaves(json.loads(path.read_text(encoding="utf-8")), found)
+
+    moneyish = re.compile(
+        r"amount|value|fee|total|gross|net|rate|currency|receivable|payable"
+    )
+    ignored = {k for k in found if moneyish.search(k)} - consumed
+
+    # Each of these is accounted for, by name:
+    #   network, network_transaction_reference - card routing metadata,
+    #     carrying no financial value
+    #   source_currency, target_currency - stated by PayPal inside
+    #     `exchange_rate`, and derived by the ingester from the amounts
+    #     instead. The test above asserts the two agree.
+    assert ignored == {
+        "network",
+        "network_transaction_reference",
+        "source_currency",
+        "target_currency",
+    }, f"unaccounted money-bearing fields: {sorted(ignored)}"

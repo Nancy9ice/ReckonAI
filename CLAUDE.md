@@ -28,15 +28,15 @@ Also read, and in this order:
 - `specs/paypal-fields.md` — what PayPal actually returns, per field, with the
   evidence. The root specs state rules and point here; they do not repeat it.
 
-**Phases 0, 0b, 1, 2, 3 and Block A (4 + 5 + 6) are complete. The PayPal
-capture is next, then Block B** — see the replan's **R16**, which moved the
-capture script, the fixtures and the replay ingester ahead of the remaining
-blocks and **retired Block A's synthetic PayPal side**.
+**Phases 0, 0b, 1, 2, 3, Block A (4 + 5 + 6) and the PayPal capture (R16) are
+complete. Block B is next** — Phase 10, the entitlement engine, ~3 h.
 
-The capture is the one piece of remaining work that cannot proceed unattended:
-it needs live sandbox credentials and operator decisions about which orders,
-sellers and currencies to push. Block B is unaffected and does not move — it is
-pure functions over hand-computed fixtures.
+The capture is done: 18 real sandbox orders in `fixtures/paypal/`, replayed by
+`reckonai.paypal.replay`, with the marketplace seed re-pointed at the captured
+figures. **Read `specs/2026-11-09-paypal-capture/` before anything that
+touches the dataset** — its `validation.md` §2 is the current hand-check, and
+Block A's §2 is superseded. §7 there lists five things found by running it
+that are not obvious from any payload.
 
 Before Block B, read Block A's handoff in
 `specs/2026-11-08-block-a-marketplace-connector/requirements.md` §3: it names

@@ -56,6 +56,34 @@ from the code under test.
 | a refund with `paypal_fee: "0.00"` | `ORD-0011` | a stated zero leaves nothing unknown (D3) |
 | a known and an unknown fee side by side | fixture only | **the position is identical either way** — the measurement that revised D3 |
 
+### Why criterion 2 is fixture-only, and should stay that way
+
+Raised in session as a possible gap — the dataset's largest order has two
+sellers, so "allocation across three or more" is never exercised against real
+provider records. **Checked, and there is nothing to close.**
+
+`reckonai.money.allocate` has exactly two callers in all of `src/`, both in
+`engine/refunds.py`: `allocate_refund_across_sellers` and `split_by_rate`. And
+**nothing in `src/` calls either of those** — only tests do.
+
+That follows from D1. Cross-seller allocation is reachable only from an
+order-level refund naming no capture, and neither source produces one: PayPal
+issues a refund against one capture, which has one payee, and every
+`RefundSpec` carries a `seller_ref`. So `attribute_refund` raises instead, and
+the proportional path is a caller's explicit choice.
+
+A three-seller captured order would therefore exercise nothing extra — a refund
+in one still attributes to a single capture. What would activate that code is
+an *unattributed* refund, which no capture produces. Capturing one would cost a
+sandbox order and a re-derived §2 table to cover a path real data cannot reach.
+
+Residue does not arise elsewhere either: commission is `share * rate` per
+seller, quantized independently, so no whole is being split. ORD-0008's
+one-cent artefact is FX, not allocation.
+
+**Block C should not re-raise this.** If a tenant ever has a genuine
+order-level refund, the path activates and these fixtures are what covers it.
+
 ## 3. Agreement with the hand-check table
 
 `specs/2026-11-09-paypal-capture/validation.md` §2 is eighteen orders and four

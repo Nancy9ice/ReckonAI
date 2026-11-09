@@ -118,7 +118,7 @@ no threshold can confuse them, and Phase 11 forbids introducing one.
 
 | Gate | Result |
 |---|---|
-| `uv run pytest` | **1283 passed** |
+| `uv run pytest` | **1285 passed** |
 | `uv run ruff check` | **Pass** |
 | Migration reverses, autogenerate empty | Unchanged — this block adds no table |
 | CI on the branch | Pending push |
@@ -162,6 +162,30 @@ Verified by hand against the local database and pinned by
 `ensure`, so a deploy cannot load an inconsistent baseline - which caught a
 leftover perturbation during development, refusing to seed ORD-0002 at 51.00
 against items summing to 50.00.
+
+## 7b. Phase 7's unmet criteria, classified
+
+Three follow from R6 rather than from anything skipped: no retry or
+`403`/`5xx` rules, the reporting endpoints unread, and `items[].errors`
+unexercised. Each is a production-client requirement that this MVP does not
+have a production client for. The roadmap's Phase 7 section carries the
+reasoning.
+
+The fourth — payload diffing — was **reduced rather than deferred**. Its full
+form watches for live schema drift that frozen fixtures cannot have, so what
+is implemented instead is the question it would have answered:
+
+| Check | Result |
+|---|---|
+| Money-bearing fields in the captures that the ingester ignores | 4 of 69, each named and accounted for |
+| `network`, `network_transaction_reference` | card routing metadata, no financial value |
+| `exchange_rate.source_currency` / `target_currency` | stated by PayPal, derived by the ingester from the amounts |
+| Do the stated and derived currencies agree? | **Yes, all 6 conversions** |
+
+Both are pinned, and both were verified to fail when perturbed. The second
+matters most: a disagreement would put a real money figure under the wrong
+currency with both sides looking internally consistent, which is P2's exact
+hazard.
 
 ## 8. Not proven here
 

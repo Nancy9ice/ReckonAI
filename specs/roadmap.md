@@ -599,17 +599,40 @@ normalization into Phases 2–3 tables with raw payloads retained.
 > `seller_payable_breakdown: null` from the refund endpoint; raw payloads are
 > retained.
 >
-> **Not met, and deliberately left for a later block:**
+> **Four criteria are unmet, and three of them are R6 rather than debt.**
+> R6 removed live PayPal from the reconciliation path, and these follow from
+> that decision rather than from anything being skipped. They are real
+> requirements for a production client, and this MVP does not have one.
 >
-> - **Raw payloads are not diffed against the model.** They are retained, which
->   is the harder half, but nothing compares a payload's keys against what the
->   model consumes. That is what would have caught Phase 0's three undeclared
->   fields.
-> - **The reporting endpoints are not read at all.** The eventual-consistency
->   rule, the conversion timestamp and the per-event fees all depend on them.
-> - **No `403` / `5xx` handling, because nothing retries.** The capture is a
->   one-shot operator-run script; a live client needs the rule.
-> - **`items[].errors` is unread** — no failed disbursement was produced.
+> - **No `403` / `5xx` handling, because nothing retries.** Nothing calls
+>   PayPal during a run. The only live call is the demo's opening order, which
+>   already fails safe and which nothing depends on (R15).
+> - **The reporting endpoints are not read at all.** Their payoff is a
+>   conversion timestamp and per-event fees. [[mission]] §6 scenario 3 needs
+>   the rate and the amounts, which the capture supplies, so
+>   `fx_conversion.converted_at` is `NULL` and nothing in the demo wants it.
+> - **`items[].errors` is unread** — it needs a failed disbursement, and the
+>   dataset has none. Phase 12's `insufficient_evidence` branch does not
+>   depend on this field.
+>
+> **The fourth is genuine, and was reduced rather than deferred.** "Raw
+> payloads are retained **and diffed against the model**": retention is done;
+> the diff is not. Its full form watches for live schema drift, which frozen
+> fixtures cannot have — but the question it would answer is worth answering
+> once, and now is.
+>
+> `tests/test_paypal_replay.py` asserts that no money-bearing field in the
+> captures is silently ignored. Of 69 distinct fields, four look monetary and
+> are unconsumed: `network` and `network_transaction_reference` are card
+> routing metadata, and `exchange_rate.source_currency` / `target_currency`
+> are **stated by PayPal and derived by the ingester from the amounts
+> instead**. A second test asserts the two agree on all six conversions,
+> because if they ever disagreed a real money figure would carry the wrong
+> currency and both sides would still look internally consistent
+> ([[mission]] P2).
+>
+> **What a live client would still owe:** the ongoing diff, the reporting
+> join, retry and status rules, and `items[].errors`. None blocks the MVP.
 >
 > **One criterion needs reading precisely rather than ticking.** This phase
 > says "nothing in this client moves money ... it never sends a referenced

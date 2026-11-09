@@ -41,6 +41,7 @@ from reckonai.models.connector import (
     QuarantinedRecord,
 )
 from reckonai.models.conversions import FxConversion
+from reckonai.models.demo import DemoSeed
 from reckonai.models.disbursements import Disbursement
 from reckonai.models.disputes import Dispute
 from reckonai.models.events import Capture, Payment, Refund
@@ -77,6 +78,7 @@ __all__ = [
     "Capture",
     "CommissionRule",
     "ConnectorMapping",
+    "DemoSeed",
     "Disbursement",
     "Dispute",
     "FxConversion",

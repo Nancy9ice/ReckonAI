@@ -49,10 +49,14 @@ CONNECTOR_TABLES: tuple[str, ...] = (
     "quarantined_record",
 )
 
+#: What demo dataset a database holds, so a deploy can tell stale from
+#: current. specs/2026-11-09-paypal-capture/requirements.md D13.
+DEMO_TABLES: tuple[str, ...] = ("demo_seed",)
+
 #: Every table in `Base.metadata`. Excludes `alembic_version`, which Alembic
 #: owns and which never appears in the declarative metadata.
 MODEL_TABLES: tuple[str, ...] = tuple(
-    sorted(CATALOGUE_TABLES + EVENT_TABLES + CONNECTOR_TABLES)
+    sorted(CATALOGUE_TABLES + EVENT_TABLES + CONNECTOR_TABLES + DEMO_TABLES)
 )
 
 #: Every table in the database, which is the above plus Alembic's own.

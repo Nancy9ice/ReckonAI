@@ -163,6 +163,36 @@ PayPal's `disbursement`. Serving provider data as the marketplace's would be
 worse than not serving it. The field map is kept, so the endpoint returns the
 moment that table exists.
 
+### D13. The loader fingerprints what it loaded, so a deploy cannot go stale
+
+**D11's early return had a second edge.** Returning early whenever the demo
+tenant existed stops a redeploy duplicating anything - and also means
+production never picks up a dataset change. Alter an amount, deploy, and the
+check finds the tenant and stops: no error, no warning, and the demo runs on
+figures the repository no longer states. That is worse than duplication,
+because duplication is visible.
+
+So `demo_seed` records a SHA-256 over **both** the marketplace dataset and
+the captured fixtures, and `--ensure` resets and re-seeds when it no longer
+matches. Either input changing alone makes what is loaded wrong, so both are
+hashed.
+
+*A dedicated table rather than somewhere convenient.* A `raw_payload` row was
+the alternative, and Phase 3's D2 defines that as "one retrieved source
+document, kept verbatim" - a fingerprint is not that, and using the evidence
+store as a key-value store would make every later query over it wrong.
+
+*A tenant with no recorded fingerprint is treated as stale*, not as current:
+that is a database seeded before this table existed, and assuming it is
+up to date would be the same silent staleness in a new form.
+
+**The bug this nearly shipped with.** `Dataset.faulty_order_refs` is a
+`frozenset`, and serialising it through `str()` renders it in an order that
+varies with Python's hash randomisation - so two identical runs produced
+different fingerprints and `--ensure` re-seeded on every deploy, defeating
+the mechanism entirely. Only running it twice shows this, and
+`test_the_fingerprint_is_stable_across_calls` is what keeps it shown.
+
 ## 3. Open, and deliberately not decided here
 
 **`RATE_SCALE = 10` against a 15-decimal rate.** `fx_conversion.rate` is

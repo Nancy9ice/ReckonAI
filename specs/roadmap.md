@@ -1,6 +1,11 @@
 # ReckonAI — Roadmap
 
 > **Status:** Constitution. Implementation order and phase boundaries.
+> **Next: Phase 10, the entitlement engine** (the replan's Block B). Phases 0,
+> 0b, 1, 2, 3, 4, 5 and 6 are complete; Phase 7 is partially complete and its
+> remainder is listed in its own section. Read
+> `specs/2026-11-09-paypal-capture/validation.md` §2 first — it holds the
+> figures Phase 10's output is checked against, and supersedes Block A's.
 > **Strategy:** Foundation-first — each layer is completed before the next begins.
 > **Budget:** ~1 week.
 > Governed by [[mission]]; technology per [[tech-stack]].
@@ -578,8 +583,47 @@ normalization into Phases 2–3 tables with raw payloads retained.
 
 ---
 
-## Phase 7 — PayPal ingestion · 0.5 day
+## Phase 7 — PayPal ingestion · 0.5 day · **PARTIALLY COMPLETE 2026-11-09**
 
+> **The capture and replay half is delivered**, as the replan's R16 brought it
+> ahead of Block B. `scripts/capture_paypal.py` captured 18 real multiparty
+> orders into `fixtures/paypal/`, and `reckonai.paypal.replay` normalizes them
+> into the canonical model. Spec and evidence:
+> `specs/2026-11-09-paypal-capture/`.
+>
+> **Met:** sandbox records appear as canonical rows alongside marketplace
+> ones; absent fields are recorded as limitations and nothing is invented
+> (`capture.paypal_fee` NULL, `fx_conversion.fee` NULL,
+> `disbursement.released_at` NULL); retrieval is idempotent; **refunds are read
+> through the order**, confirmed against real responses which return
+> `seller_payable_breakdown: null` from the refund endpoint; raw payloads are
+> retained.
+>
+> **Not met, and deliberately left for a later block:**
+>
+> - **Raw payloads are not diffed against the model.** They are retained, which
+>   is the harder half, but nothing compares a payload's keys against what the
+>   model consumes. That is what would have caught Phase 0's three undeclared
+>   fields.
+> - **The reporting endpoints are not read at all.** The eventual-consistency
+>   rule, the conversion timestamp and the per-event fees all depend on them.
+> - **No `403` / `5xx` handling, because nothing retries.** The capture is a
+>   one-shot operator-run script; a live client needs the rule.
+> - **`items[].errors` is unread** — no failed disbursement was produced.
+>
+> **One criterion needs reading precisely rather than ticking.** This phase
+> says "nothing in this client moves money ... it never sends a referenced
+> payout release". The **runtime** client, `reckonai.paypal.capture`, sends
+> none: it creates one order and reads it back, nothing else.
+> `scripts/capture_paypal.py` does issue two refunds and one release — in
+> sandbox, run by hand, to build the test dataset that the demo then replays.
+>
+> That is consistent with [[mission]] P6, which forbids a code path that moves
+> money **without human approval**: an operator running a dataset builder is
+> the approval. But the distinction is real and worth stating, because the
+> criterion as written would otherwise read as broken. **The product never
+> releases funds; the fixture builder does, once, under a hand.**
+>
 > **Replanned 2026-11-08 (R6, R15):** narrowed to a capture script that writes
 > real sandbox responses to fixtures, plus a replay ingester that normalizes
 > them through this same path. Sandbox throughout; nothing production, ever.

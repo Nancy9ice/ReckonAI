@@ -164,6 +164,37 @@ def order_references(order_body: dict[str, object]) -> tuple[str, ...]:
     return tuple(found)
 
 
+def capture_reference_from_href(href: str | None) -> str | None:
+    """The capture id inside a refund's HATEOAS `up` link.
+
+    **The derived linkage**, and the reason `EvidenceBasis.DERIVED_LINKAGE`
+    exists. PayPal supplies no capture id on a refund; the only route back is
+    `links[rel=up]`, whose href has to be parsed. `reckonai.paypal.replay`
+    retains the href and deliberately leaves `refund.capture_id` NULL, because
+    resolving it is a matching claim rather than an ingestion fact - so this
+    is where the claim is made.
+
+    Returns the last path segment of a `.../payments/captures/<id>` href, or
+    `None` for anything else. A `self` link points at `/payments/refunds/<id>`
+    and must not be mistaken for a capture: the shapes are identical apart
+    from that one segment, so the collection name is checked rather than
+    assumed.
+
+    specs/roadmap.md Phase 11 requires an exception resting on this to say so,
+    which is why the caller pairs the result with `DERIVED_LINKAGE`.
+    """
+    if not href:
+        return None
+
+    path = href.split("?", 1)[0].split("#", 1)[0].rstrip("/")
+    head, _, candidate = path.rpartition("/")
+
+    if not candidate or not head.endswith("/payments/captures"):
+        return None
+
+    return candidate
+
+
 def order_ref_for_reference(reference: str, known_refs: frozenset[str]) -> str | None:
     """Which marketplace order a purchase-unit reference belongs to.
 

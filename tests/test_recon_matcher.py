@@ -16,6 +16,7 @@ import pytest
 
 from reckonai.money import Money
 from reckonai.recon.matcher import (
+    capture_reference_from_href,
     ledger_by_category,
     match_orders,
     match_refunds,
@@ -440,3 +441,58 @@ def test_the_index_is_ordered_deterministically() -> None:
         "LED-b",
         "LED-c",
     ]
+
+
+# ---------------------------------------------------------------------------
+# The derived refund-to-capture linkage
+# ---------------------------------------------------------------------------
+
+
+def test_the_capture_id_is_parsed_out_of_the_up_link() -> None:
+    """The real href, as `reckonai.paypal.replay` retains it."""
+    href = "https://api.sandbox.paypal.com/v2/payments/captures/8F044077K7411563J"
+
+    assert capture_reference_from_href(href) == "8F044077K7411563J"
+
+
+def test_a_refund_self_link_is_not_mistaken_for_a_capture() -> None:
+    """The two hrefs differ by one path segment.
+
+    A parser that took the last segment unconditionally would resolve a
+    refund's `self` link to a capture id that happens to be the refund's own,
+    match nothing, and silently drop the refund from its order.
+    """
+    href = "https://api.sandbox.paypal.com/v2/payments/refunds/7DE24497M24248828"
+
+    assert capture_reference_from_href(href) is None
+
+
+@pytest.mark.parametrize(
+    "href",
+    [
+        None,
+        "",
+        "https://api.sandbox.paypal.com/v2/payments/captures/",
+        "https://api.sandbox.paypal.com/v2/checkout/orders/0Y157906SJ4811901",
+        "not a url",
+        "/v2/payments/authorizations/3RT12345",
+    ],
+)
+def test_an_unusable_href_resolves_to_nothing(href: str | None) -> None:
+    """`None` rather than a guess.
+
+    A refund that resolves to no capture belongs to no order's
+    reconciliation, which is the honest answer: inventing one would attach a
+    real refund to the wrong seller's position.
+    """
+    assert capture_reference_from_href(href) is None
+
+
+def test_query_strings_and_trailing_slashes_are_tolerated() -> None:
+    """Phase 0 saw PayPal's responses change shape between reads, so the
+    parser is forgiving about the parts that carry no meaning."""
+    base = "https://api.sandbox.paypal.com/v2/payments/captures/8F044077K7411563J"
+
+    assert capture_reference_from_href(base + "/") == "8F044077K7411563J"
+    assert capture_reference_from_href(base + "?fields=all") == "8F044077K7411563J"
+    assert capture_reference_from_href(base + "#frag") == "8F044077K7411563J"

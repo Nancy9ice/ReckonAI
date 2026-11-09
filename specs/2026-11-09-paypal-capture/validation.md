@@ -34,7 +34,7 @@ matches a real capture.
 | ORD-0006 | A, B | USD | 75.00 | 7.50 | A 27.00; B 40.50 | |
 | ORD-0007 | A | USD | 33.33 | 3.33 | A 30.00 | 3.3330 → 3.33 |
 | ORD-0008 | A, B | EUR | 121.54 | 12.15 | B 36.02; A 73.37 | **non-fault**: the rounding artefact |
-| ORD-0009 | B | USD | 59.97 | 6.00 | B 53.97 | 5.9970 → 6.00; open dispute |
+| ORD-0009 | B | USD | 59.97 | 6.00 | B 53.97 | 5.9970 → 6.00 |
 | ORD-0010 | A | USD | 45.00 | 4.50 | A 40.50 | |
 | ORD-0011 | A | USD | 70.00 | 7.00 | A 63.00 | refund 20.00, reversal 2.00 |
 | ORD-0012 | B | EUR | 120.00 | 12.00 | B 108.00 | |
@@ -59,6 +59,16 @@ Total expected commission: **USD 67.33**, **EUR 44.15**.
 Hand-written in `data.EXPECTED_POSITIONS`, recomputed from the rows by
 `seed.verify()`, asserted against this table by `tests/test_sim_seed.py`.
 Three independent derivations.
+
+> **Corrected 2026-11-09 by Block C.** ORD-0009's note read "open dispute".
+> It is not one: the fixture's note is `rounding`, the capture is `COMPLETED`
+> with its `seller_receivable_breakdown` intact, and the only dispute-adjacent
+> field on it is a `HIGH_RISK` risk indicator. Checked across all 18 fixtures,
+> **no capture is `PENDING` and none is missing its breakdown** - so the
+> dataset contains no disputed-capture case, and `specs/paypal-fields.md`'s
+> rule that an absent breakdown is not evidence of no fee has no fixture
+> exercising it. Block C's `requirements.md` D7 records what was done about
+> that instead.
 
 ### The two non-faults, from PayPal's own arithmetic
 

@@ -110,6 +110,18 @@ class SellerEntitlement:
 
     fixed_component: Money | None = None
 
+    #: Gross refunded against this line so far, cumulative. `None` means no
+    #: refund has been applied.
+    #:
+    #: Carried because the commission reversal must be computed from the
+    #: **cumulative** refund rather than per refund. Quantizing each refund's
+    #: reversal independently accumulates rounding: twenty 0.05 refunds of a
+    #: 1.00 share at 10% each reverse `quantize(0.005) = 0.01`, summing to 0.20
+    #: against a commission of 0.10 - which drove the commission negative and
+    #: left the engine claiming a seller was owed 0.10 on a fully refunded
+    #: order. See `reckonai.engine.refunds.apply_refund`.
+    refunded_gross: Money | None = None
+
     #: Line ids that made up `gross_share`, so Phase 12 can cite them.
     item_ids: tuple[uuid.UUID, ...] = ()
 

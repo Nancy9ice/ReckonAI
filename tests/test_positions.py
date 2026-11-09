@@ -308,6 +308,50 @@ def test_a_capture_with_no_seller_is_skipped() -> None:
     assert expected_positions(results, orphan)[0].unknown_fee_capture_ids == ()
 
 
+def test_an_unknown_fee_for_a_seller_with_no_entitlement_still_reaches_a_row() -> None:
+    """Found by review, 2026-11-09.
+
+    `unknown` was read only for `(seller, currency)` keys that already had an
+    entitlement line, so a capture for a seller with no order in this set was
+    discarded and the result reported `fee_is_known` as True - the exact
+    collapse this module exists to prevent.
+
+    The zero expected position is a real answer rather than an invented one:
+    the currency came from the capture and the sum of no entitlements is
+    genuinely nothing. What would be invented is a fee, and none is.
+    """
+    results = [_entitlement(AURORA, "100.00")]
+    captures = [
+        Capture(
+            amount=Money("50.00", "USD"), seller_id=BELLWEATHER, external_id="CAP-B"
+        )
+    ]
+
+    by_seller = {p.seller_id: p for p in expected_positions(results, captures)}
+
+    assert BELLWEATHER in by_seller, "the capture's seller was dropped entirely"
+    assert by_seller[BELLWEATHER].unknown_fee_capture_ids == ("CAP-B",)
+    assert not by_seller[BELLWEATHER].fee_is_known
+    assert by_seller[BELLWEATHER].expected == Money("0.00", "USD")
+    assert by_seller[BELLWEATHER].order_ids == ()
+
+
+def test_an_unknown_fee_in_an_unentitled_currency_still_reaches_a_row() -> None:
+    """The same drop, by currency rather than by seller: a EUR capture for a
+    seller who has only a USD entitlement."""
+    results = [_entitlement(AURORA, "100.00", "USD")]
+    captures = [
+        Capture(amount=Money("50.00", "EUR"), seller_id=AURORA, external_id="CAP-EUR")
+    ]
+
+    by_currency = {p.currency: p for p in expected_positions(results, captures)}
+
+    assert "EUR" in by_currency, "the EUR capture's fee gap was dropped"
+    assert by_currency["EUR"].unknown_fee_capture_ids == ("CAP-EUR",)
+    assert by_currency["EUR"].expected == Money("0.00", "EUR")
+    assert by_currency["USD"].expected == Money("90.00", "USD")
+
+
 def test_fee_is_known_cannot_disagree_with_the_ids() -> None:
     """A property rather than a stored field, so the two cannot drift."""
     position = SellerPosition(

@@ -36,7 +36,7 @@ from dataclasses import dataclass, replace
 from decimal import Decimal
 from typing import Protocol, runtime_checkable
 
-from reckonai.money import Money, allocate
+from reckonai.money import InvalidAmount, Money, allocate
 
 from .entitlement import OrderEntitlement, commission_for
 from .rules import EngineError
@@ -50,6 +50,31 @@ class UnattributableRefund(EngineError):
     silently become a proportional allocation (D1). A caller that genuinely
     holds an order-level refund calls `allocate_refund_across_sellers`
     deliberately.
+    """
+
+
+class CaptureNotSupplied(UnattributableRefund):
+    """The refund names a capture that is not among those supplied.
+
+    A subclass of `UnattributableRefund`, so a caller catching that still
+    catches this - but told apart because the two mean different things. "The
+    provider gave no capture link" is a gap in the evidence; "the caller scoped
+    `captures` too narrowly" is a bug in the call. Falling through to
+    `refund.seller_id` in the second case would reduce *some* seller's line
+    using the weaker source and report `via="refund_seller_id"` as though no
+    link existed - and if that seller happens to have a line on the order being
+    processed, silently reduce the wrong order. Found by review, 2026-11-09.
+    """
+
+
+class RefundAlreadyApplied(EngineError):
+    """This refund's external id is already recorded on the order.
+
+    Raised rather than applied twice. `OrderEntitlement.refunds_applied` has
+    carried exactly what is needed to detect this since it was added; it simply
+    was not consulted. A duplicated provider record is a finding for Phase 11,
+    not an amount to subtract again - and the dataset deliberately seeds a
+    duplicate-record fault, so a run that iterates refund rows will meet one.
     """
 
 
@@ -136,13 +161,27 @@ def attribute_refund(
     The capture is preferred over the refund's own `seller_id` because it is
     the provider's link rather than a column we wrote.
 
-    Raises `UnattributableRefund` when neither resolves a seller.
+    Raises `CaptureNotSupplied` if the refund names a capture that is not in
+    `captures` - which is a scoping bug in the call rather than missing
+    evidence, and must not fall through to the weaker source. Raises
+    `UnattributableRefund` when there is genuinely nothing to resolve from.
 
         >>> attribute_refund(refund, {capture.id: capture}).seller_id
     """
     if refund.capture_id is not None:
         capture = captures.get(refund.capture_id)
-        if capture is not None and capture.seller_id is not None:
+
+        if capture is None:
+            raise CaptureNotSupplied(
+                f"refund {refund.external_id} names capture "
+                f"{refund.capture_id}, which is not among the "
+                f"{len(captures)} capture(s) supplied. That is a scoping "
+                "error in the call, not an absent provider link: falling back "
+                "to the refund's own seller_id here could reduce a different "
+                "order's entitlement with no error at all."
+            )
+
+        if capture.seller_id is not None:
             return RefundAttribution(
                 refund_id=refund.id,
                 refund_external_id=refund.external_id,
@@ -162,11 +201,18 @@ def attribute_refund(
             linkage_is_derived=refund.capture_linkage_is_derived,
         )
 
+    if refund.capture_id is None:
+        detail = "it names no capture and carries no seller_id"
+    else:
+        detail = (
+            f"capture {refund.capture_id} resolves to no seller and the refund "
+            "carries no seller_id either"
+        )
+
     raise UnattributableRefund(
-        f"refund {refund.external_id} resolves to no seller: capture "
-        f"{refund.capture_id} is not among the captures supplied and the "
-        "refund carries no seller_id. This is a gap in the evidence, not a "
-        "refund to split proportionally - see requirements.md D1."
+        f"refund {refund.external_id} resolves to no seller: {detail}. This is "
+        "a gap in the evidence, not a refund to split proportionally - see "
+        "requirements.md D1."
     )
 
 
@@ -178,19 +224,44 @@ def apply_refund(
     Returns a new `OrderEntitlement`; the input is frozen and untouched, so an
     order's pre-refund and post-refund states can both be cited.
 
-    The reversal is `commission_for(refund_amount, that seller's rate)` -
-    computed on the refunded amount, matching the reversal PayPal records. The
-    seller's commission becomes `original - reversal` and their entitlement
-    `share - commission`, so the parts still sum exactly.
+    The reversal is computed from the **cumulative** refund against this line,
+    as `commission_for(refunded_so_far + this_refund) - commission_for(
+    refunded_so_far)`. For a single refund that is exactly
+    `commission_for(refund, rate)` - the figure PayPal reports - and for a
+    sequence it avoids accumulating the per-refund rounding error.
 
-    Raises `RefundExceedsShare` if the refund is larger than the share, and
-    `FlatComponentReversalUndefined` if the rule carries a flat component.
+    *Why it cannot be a plain per-refund reversal.* Quantizing each refund's
+    reversal independently drifts upward: twenty 0.05 refunds of a 1.00 share
+    at 10% each reverse `quantize(0.005) = 0.01`, which sums to 0.20 against a
+    commission of 0.10. That drove the commission to -0.10 and left this
+    function asserting the marketplace owed the seller 0.10 on an order
+    refunded in full - a fabricated figure ([[mission]] P3) that Phase 11 would
+    then raise as a discrepancy on a correct order. Found by review, 2026-11-09.
+
+    Computing the cumulative total and taking the delta keeps the running
+    commission equal to `quantize(remaining_share * rate)` at every step, so it
+    reaches exactly zero on a full refund and never goes below it.
+
+    Raises `RefundExceedsShare` if the refund is larger than the remaining
+    share, `RefundAlreadyApplied` if this refund's external id is already on
+    the order, and `FlatComponentReversalUndefined` if the rule carries a flat
+    component.
 
         >>> apply_refund(expected, attribution).for_seller(a).entitlement
         Money(amount=Decimal('54.00'), currency='USD')
     """
     line = expected.for_seller(attribution.seller_id)
     refund = attribution.amount
+
+    if attribution.refund_external_id in expected.refunds_applied:
+        raise RefundAlreadyApplied(
+            f"refund {attribution.refund_external_id} has already been applied "
+            f"to order {expected.order_id}. Applying it twice would reduce the "
+            "seller's entitlement by a refund that happened once - which is an "
+            "understatement this engine would then report as a discrepancy. A "
+            "duplicated provider record is a finding for Phase 11, not an "
+            "amount to subtract again."
+        )
 
     if refund.currency != expected.currency:
         raise EngineError(
@@ -215,12 +286,21 @@ def apply_refund(
             "than this engine's to infer."
         )
 
-    reversal = commission_for(refund, line.commission_rate)
+    # The cumulative figure, not a per-refund one. See the docstring.
+    refunded_before = line.refunded_gross or Money("0", expected.currency)
+    refunded_after = refunded_before + refund
+    reversal = commission_for(refunded_after, line.commission_rate) - commission_for(
+        refunded_before, line.commission_rate
+    )
+
+    share_after = line.gross_share - refund
+    commission_after = line.commission - reversal
     reduced = replace(
         line,
-        gross_share=line.gross_share - refund,
-        commission=line.commission - reversal,
-        entitlement=(line.gross_share - refund) - (line.commission - reversal),
+        gross_share=share_after,
+        commission=commission_after,
+        entitlement=share_after - commission_after,
+        refunded_gross=refunded_after,
     )
 
     return replace(
@@ -277,7 +357,21 @@ def allocate_refund_across_sellers(
         )
 
     weights = [line.gross_share.amount for line in expected.sellers]
-    parts = allocate(refund, weights)
+
+    # `allocate` raises `InvalidAmount` from the money layer when the weights
+    # sum to zero - every line already fully refunded, or a zero-value order.
+    # Every other refusal in this module is an `EngineError`, so letting that
+    # through would escape the module's own contract and slip past a caller
+    # catching `EngineError`. Found by review, 2026-11-09.
+    try:
+        parts = allocate(refund, weights)
+    except InvalidAmount as exc:
+        raise UnattributableRefund(
+            f"order {expected.order_id} cannot take an allocated refund of "
+            f"{refund}: its seller lines carry no gross share to weight by "
+            f"({exc}). A refund against an order with nothing left to refund "
+            "is a finding, not a split."
+        ) from exc
 
     return tuple(
         RefundAttribution(
@@ -330,7 +424,27 @@ def split_by_rate(
                 f"{refund.currency} refund: this module converts nothing."
             )
 
-    parts = allocate(refund, [share.amount for share in shares])
+    # The same bound `apply_refund` enforces, and for the same reason: parts
+    # exceeding the shares they split would carry reversals larger than the
+    # commissions originally taken on them, which is a figure this module
+    # would have invented. Found by review, 2026-11-09.
+    total_share = shares[0]
+    for share in shares[1:]:
+        total_share = total_share + share
+
+    if refund > total_share:
+        raise RefundExceedsShare(
+            f"a refund of {refund} exceeds the {total_share} of shares it "
+            "would be split across. Continuing would produce reversals larger "
+            "than the commissions taken on those items."
+        )
+
+    try:
+        parts = allocate(refund, [share.amount for share in shares])
+    except InvalidAmount as exc:
+        raise EngineError(
+            f"cannot split {refund} across shares that sum to nothing ({exc})."
+        ) from exc
 
     return tuple(
         (part, commission_for(part, rate))
@@ -355,7 +469,9 @@ def total_refunded(attributions: Iterable[RefundAttribution], currency: str) -> 
 
 __all__ = [
     "CaptureLike",
+    "CaptureNotSupplied",
     "FlatComponentReversalUndefined",
+    "RefundAlreadyApplied",
     "RefundAttribution",
     "RefundExceedsShare",
     "RefundLike",

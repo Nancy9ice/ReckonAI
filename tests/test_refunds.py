@@ -25,8 +25,10 @@ import pytest
 
 from reckonai.engine import (
     CaptureLike,
+    CaptureNotSupplied,
     EngineError,
     FlatComponentReversalUndefined,
+    RefundAlreadyApplied,
     RefundExceedsShare,
     RefundLike,
     UnattributableRefund,
@@ -244,6 +246,214 @@ def test_two_refunds_apply_in_sequence() -> None:
     assert twice.for_seller(AURORA).commission == Money("5.00", "USD")
     assert twice.for_seller(AURORA).entitlement == Money("45.00", "USD")
     assert twice.refunds_applied == ("R1", "R2")
+
+
+# --- regressions found by review, 2026-11-09 --------------------------------
+
+
+@pytest.mark.parametrize(
+    ("share", "chunk", "times", "commission"),
+    [
+        ("1.00", "0.05", 20, "0.10"),
+        ("10.05", "3.35", 3, "1.01"),
+        ("33.33", "0.01", 3333, "3.33"),
+    ],
+)
+def test_repeated_partial_refunds_never_drive_the_commission_negative(
+    share: str, chunk: str, times: int, commission: str
+) -> None:
+    """The reversal is cumulative, not per refund.
+
+    Quantizing each refund's reversal independently drifts upward: twenty 0.05
+    refunds of a 1.00 share at 10% each reverse `quantize(0.005) = 0.01`,
+    summing to 0.20 against a commission of 0.10. That drove the commission to
+    -0.10 and left the engine asserting the marketplace owed the seller 0.10 on
+    an order refunded in full - a fabricated figure ([[mission]] P3) that Phase
+    11 would raise as a discrepancy on a correct order.
+
+    `RefundExceedsShare` and the `share == commission + entitlement` invariant
+    both still held throughout, which is why nothing else caught it.
+    """
+    order = Order(total=Money(share, "USD"))
+    items = [Item(seller_id=AURORA, line_total=Money(share, "USD"))]
+    state = expected_entitlement(order, items, [TENTH])
+    assert state.for_seller(AURORA).commission == Money(commission, "USD")
+
+    capture = Capture(seller_id=AURORA)
+    captures = {capture.id: capture}
+
+    for i in range(times):
+        state = apply_refund(
+            state,
+            attribute_refund(
+                Refund(
+                    amount=Money(chunk, "USD"),
+                    external_id=f"R{i}",
+                    capture_id=capture.id,
+                ),
+                captures,
+            ),
+        )
+        line = state.for_seller(AURORA)
+        assert not line.commission.is_negative(), f"negative after {i + 1} refunds"
+        assert line.gross_share == line.commission + line.entitlement
+
+    final = state.for_seller(AURORA)
+    assert final.gross_share == Money("0.00", "USD")
+    assert final.commission == Money("0.00", "USD")
+    assert final.entitlement == Money("0.00", "USD")
+    assert state.commission == Money("0.00", "USD")
+
+
+def test_the_running_commission_tracks_the_remaining_share() -> None:
+    """At every step the commission equals what a one-off calculation on the
+    remaining share would give. That is the property that makes the figure
+    comparable to a platform fee after a refund as well as before."""
+    order = Order(total=Money("10.05", "USD"))
+    items = [Item(seller_id=AURORA, line_total=Money("10.05", "USD"))]
+    state = expected_entitlement(order, items, [TENTH])
+    capture = Capture(seller_id=AURORA)
+    captures = {capture.id: capture}
+
+    for i in range(3):
+        state = apply_refund(
+            state,
+            attribute_refund(
+                Refund(
+                    amount=Money("3.35", "USD"),
+                    external_id=f"R{i}",
+                    capture_id=capture.id,
+                ),
+                captures,
+            ),
+        )
+        line = state.for_seller(AURORA)
+        assert line.commission == commission_reversal(
+            line.gross_share, Decimal("0.1")
+        ), f"after {i + 1} refunds"
+
+
+def test_a_single_refund_still_reverses_exactly_what_paypal_reports() -> None:
+    """The cumulative form must not change the one-refund case, because that is
+    the figure PayPal states: 20.00 of 70.00 at 10% reverses 2.00."""
+    order = Order(total=Money("70.00", "USD"))
+    items = [Item(seller_id=AURORA, line_total=Money("70.00", "USD"))]
+    before = expected_entitlement(order, items, [TENTH])
+    capture = Capture(seller_id=AURORA)
+    refund = Refund(amount=Money("20.00", "USD"), capture_id=capture.id)
+
+    after = apply_refund(before, attribute_refund(refund, {capture.id: capture}))
+
+    reversed_amount = (
+        before.for_seller(AURORA).commission - after.for_seller(AURORA).commission
+    )
+    assert reversed_amount == Money("2.00", "USD")
+
+
+def test_the_same_refund_cannot_be_applied_twice() -> None:
+    """`refunds_applied` carried what was needed to detect this and was not
+    consulted. The dataset seeds a duplicate-record fault, so a run iterating
+    refund rows will meet one - and double-subtracting understates the seller
+    rather than flagging the duplicate."""
+    order = Order(total=Money("100.00", "USD"))
+    items = [Item(seller_id=AURORA, line_total=Money("100.00", "USD"))]
+    state = expected_entitlement(order, items, [TENTH])
+    capture = Capture(seller_id=AURORA)
+    refund = Refund(
+        amount=Money("10.00", "USD"), external_id="DUP", capture_id=capture.id
+    )
+    attribution = attribute_refund(refund, {capture.id: capture})
+
+    once = apply_refund(state, attribution)
+
+    with pytest.raises(RefundAlreadyApplied):
+        apply_refund(once, attribution)
+
+    assert once.refunds_applied == ("DUP",)
+    assert once.for_seller(AURORA).gross_share == Money("90.00", "USD")
+
+
+def test_a_capture_named_but_not_supplied_raises_rather_than_falling_through() -> None:
+    """A scoping error in the call, not an absent provider link.
+
+    Falling through to `refund.seller_id` reported `via="refund_seller_id"` as
+    though no link existed - and if that seller has a line on the order being
+    processed, it would reduce the wrong order's entitlement with no error.
+    """
+    elsewhere = uuid.uuid4()
+    refund = Refund(
+        amount=Money("10.00", "USD"),
+        capture_id=elsewhere,
+        seller_id=AURORA,
+    )
+
+    with pytest.raises(CaptureNotSupplied, match="scoping error"):
+        attribute_refund(refund, {})
+
+
+def test_capture_not_supplied_is_still_an_unattributable_refund() -> None:
+    """A caller catching the general case must keep catching this one."""
+    refund = Refund(amount=Money("10.00", "USD"), capture_id=uuid.uuid4())
+
+    with pytest.raises(UnattributableRefund):
+        attribute_refund(refund, {})
+
+
+def test_the_unattributable_message_names_no_nonexistent_capture() -> None:
+    """It previously read "capture None is not among the captures supplied"."""
+    refund = Refund(amount=Money("10.00", "USD"), capture_id=None, seller_id=None)
+
+    with pytest.raises(UnattributableRefund) as raised:
+        attribute_refund(refund, {})
+
+    assert "None" not in str(raised.value)
+    assert "names no capture" in str(raised.value)
+
+
+def test_an_order_with_nothing_left_to_refund_raises_an_engine_error() -> None:
+    """`allocate` raises `InvalidAmount` from the money layer when the weights
+    sum to zero. Every other refusal in the module is an `EngineError`, so
+    letting that through escaped the module's own contract."""
+    order = Order(total=Money("0.00", "USD"))
+    items = [Item(seller_id=AURORA, line_total=Money("0.00", "USD"))]
+    state = expected_entitlement(order, items, [TENTH])
+
+    with pytest.raises(EngineError):
+        allocate_refund_across_sellers(state, Money("1.00", "USD"), "RFND")
+
+
+def test_split_by_rate_refuses_a_refund_exceeding_its_shares() -> None:
+    """The bound `apply_refund` enforces, for the same reason: parts exceeding
+    their shares carry reversals larger than the commissions taken on them."""
+    with pytest.raises(RefundExceedsShare):
+        split_by_rate(
+            Money("100.01", "USD"),
+            [Money("60.00", "USD"), Money("40.00", "USD")],
+            [Decimal("0.1"), Decimal("0.2")],
+        )
+
+
+def test_split_by_rate_allows_the_exact_total() -> None:
+    """The boundary the test above sits just past."""
+    pairs = split_by_rate(
+        Money("100.00", "USD"),
+        [Money("60.00", "USD"), Money("40.00", "USD")],
+        [Decimal("0.1"), Decimal("0.2")],
+    )
+
+    assert [part for part, _ in pairs] == [
+        Money("60.00", "USD"),
+        Money("40.00", "USD"),
+    ]
+
+
+def test_split_by_rate_refuses_shares_summing_to_nothing() -> None:
+    with pytest.raises(EngineError):
+        split_by_rate(
+            Money("1.00", "USD"),
+            [Money("0.00", "USD"), Money("0.00", "USD")],
+            [Decimal("0.1"), Decimal("0.1")],
+        )
 
 
 # --- attribution -------------------------------------------------------------

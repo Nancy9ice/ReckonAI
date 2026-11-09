@@ -138,6 +138,24 @@ def expected_positions(
             capture.external_id
         )
 
+    # Every unknown-fee capture must reach a row, including one whose
+    # (seller, currency) has no entitlement line at all - a capture for a
+    # seller with no order in this set, or in a currency that seller has no
+    # entitlement in. Reading `unknown` only for keys already in `totals`
+    # dropped those silently and then reported `fee_is_known` as True, which is
+    # the exact collapse this module exists to prevent. Found by review,
+    # 2026-11-09.
+    #
+    # A zero expected position is a real answer here rather than an invented
+    # one, for the same reason `reckonai.engine.ledger.position` gives: the
+    # currency came from the capture, and the sum of no entitlements is
+    # genuinely nothing. What would be invented is a *fee*, and none is.
+    for seller_id, currency in unknown:
+        if seller_id not in seller_order:
+            seller_order.append(seller_id)
+        totals.setdefault((seller_id, currency), Money("0", currency))
+        orders.setdefault((seller_id, currency), [])
+
     return tuple(
         SellerPosition(
             seller_id=seller_id,

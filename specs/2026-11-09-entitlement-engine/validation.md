@@ -30,7 +30,7 @@ block that touches provider data.
 
 **Test counts:** `test_entitlement` 22, `test_refunds` 29, `test_positions` 14,
 `test_order_dependence_guard` 4, with `test_sim_seed` 14 and
-`test_commission_rules` 25 still passing unchanged. **Full suite 1357**,
+`test_commission_rules` 25 still passing unchanged. **Full suite 1372**,
 against Phase 3's 1117 and Block A's run.
 
 ## 2. Hand-computed fixture coverage
@@ -116,7 +116,7 @@ do is compute a figure that *forces* a later flag.
 | Check | Proof | Result |
 |---|---|---|
 | `tests/test_migrations.py` fails loudly, not silently, if tenant rows exist | `no_committed_marketplace_rows`, requested by `at_base`. **Function-scoped, not session-scoped** — stronger than the debt proposed, since it runs immediately before each downgrade and so also catches a module that commits mid-session | **Pass, observed for real.** A tenant row was planted by hand, `test_migrations` failed with the intended message naming the cause, the fix and debt 4, and the row was removed; `tests/test_order_dependence_guard.py` pins both directions without committing anything |
-| The suite still passes in its current collection order | full run | **Pass, 1357** |
+| The suite still passes in its current collection order | full run | **Pass, 1372** |
 | Randomisation is still not enabled | no `pytest-randomly`, no `-n auto` in `pyproject.toml` or CI | **Confirmed, no hits.** The guard makes the failure legible; it does not make the suite safe to randomise |
 
 ## 6. Standing gates
@@ -129,10 +129,48 @@ do is compute a figure that *forces* a later flag.
 | `uv run ruff check` clean | **Pass** |
 | `uv run mypy` clean — strict over `src/reckonai/engine/`, the scope set in `[tool.mypy]` (D9). **This line previously read "`ruff` and the type checker", naming a checker the project did not have** — the same error Block A's §9 recorded and corrected | **Pass**, 6 source files |
 | `uv.lock` re-locked and committed, since CI asserts it is unchanged | **Done** in `22b3910` |
-| Full suite green, count recorded against Phase 3's 1117 | **Pass, 1357** |
-| `/code-review medium` (R2 allows it on Blocks B and C) | Operator-run; not yet done |
+| Full suite green, count recorded against Phase 3's 1117 | **Pass, 1372** after the review fixes |
+| `/code-review medium` (R2 allows it on Blocks B and C) | **Done.** Six findings, all six fixed — §7 |
 
-## 7. Debts handed on
+## 7. Review findings, and what each cost
+
+`/code-review medium` over `main...HEAD`, 2026-11-09. Six findings, **all six
+legitimate and all six fixed** — none was argued down. Each was reproduced with
+a probe script before being accepted, and each now has a regression test.
+
+| # | Where | Finding | Fix |
+|---|---|---|---|
+| 1 | `refunds.py` `apply_refund` | **Repeated partial refunds drove the commission negative and left a phantom entitlement.** Per-refund reversals each round up: twenty 0.05 refunds of a 1.00 share at 10% reverse `quantize(0.005) = 0.01` each, summing to 0.20 against a commission of 0.10. Final state was `gross_share 0.00`, `commission -0.10`, `entitlement +0.10` | The reversal is now the delta of a **cumulative** figure, `commission_for(refunded_after) - commission_for(refunded_before)`, with `refunded_gross` carried on the line. Reaches exactly zero on a full refund |
+| 2 | `positions.py` | **Unknown-fee capture ids were silently dropped** when no entitlement row matched their `(seller, currency)`, and the result then reported `fee_is_known` as `True` | Those keys now get a row with a zero expected position and the ids listed |
+| 3 | `refunds.py` `attribute_refund` | A refund naming a capture **not among those supplied** fell through to the weaker `refund.seller_id`, reporting `via="refund_seller_id"` as though no link existed. Also printed "capture None is not among the captures supplied" when `capture_id` was `None` | New `CaptureNotSupplied`, a subclass of `UnattributableRefund` so existing handlers still catch it. Message corrected |
+| 4 | `refunds.py` `apply_refund` | **No idempotency guard**, although `refunds_applied` held exactly what was needed. Applying the same attribution twice double-reduced the line | New `RefundAlreadyApplied` |
+| 5 | `refunds.py` ×2 | `allocate` raises `InvalidAmount` from the money layer when weights sum to zero, so a caller catching `EngineError` missed it — escaping the module's own contract | Caught and re-raised as `EngineError` in both call sites |
+| 6 | `refunds.py` `split_by_rate` | No counterpart to `RefundExceedsShare`: a refund larger than the shares it splits returned reversals exceeding the commissions taken | The same bound now applies |
+
+**Finding 1 is the one that mattered.** It is a [[mission]] P3 violation produced
+by the engine itself — a fabricated figure asserting the marketplace owed a
+seller 0.01 on an order refunded in full — and Phase 11 would have raised it as
+a discrepancy on a correct order, which is the exact false positive its hardest
+criterion forbids. **Nothing already written would have caught it:**
+`RefundExceedsShare` still held, the `share == commission + entitlement`
+invariant still held, and `test_two_refunds_apply_in_sequence` happened to use
+amounts that divide evenly.
+
+Worth recording that the per-refund reversal was not a careless choice — D4
+argues for it explicitly, because PayPal reports a per-refund reversal and the
+figure has to be comparable to it. The cumulative form preserves that: for a
+single refund it is identical, which
+`test_a_single_refund_still_reverses_exactly_what_paypal_reports` pins.
+
+**Three non-findings were checked and cleared**, recorded so they are not
+re-examined: the `TYPE_CHECKING` `__init__` on `Money` is runtime-inert under
+`slots=True`; `_gross_share`'s `categories.pop()`-then-`if categories` logic is
+correct for 0, 1 and n categories; and the seed's move to the engine is safe
+for the current dataset, since no order has one seller spanning two categories.
+
+**+15 regression tests**, suite 1357 → **1372**.
+
+## 8. Debts handed on
 
 **Five mypy errors outside `engine/`, left reported rather than suppressed.**
 D9 scopes the gate to `engine/`, so these do not fail CI. Counted here so the
@@ -151,7 +189,7 @@ attribute **presence, not type**, and D9 records why the static check cannot
 cover the ORM boundary. A third consumer of these protocols would find the next
 missing field the way Phase 10 found `fixed` — by being wrong first.
 
-## 8. Not proven here, and who proves it
+## 9. Not proven here, and who proves it
 
 - That the faults are **detected** and the clean baseline produces **zero
   exceptions** — Block C. This block supplies the expected figures the
@@ -161,9 +199,9 @@ missing field the way Phase 10 found `fixed` — by being wrong first.
 - That `awaiting_evidence` is reached for F5 — Block C.
 - That the figures score against the manifest — Block G.
 
-## 9. Merge condition
+## 10. Merge condition
 
 Every result cell in §1 through §6 filled and passing, the full suite green in
-CI, §7's debts carried forward with their owners named, and §8 left to its
-owners. No deploy — R2's single deploy was spent on Block A's merge and this
+CI, §7's review findings all fixed, §8's debts carried forward with their
+owners named, and §9 left to its owners. No deploy — R2's single deploy was spent on Block A's merge and this
 block needs none.

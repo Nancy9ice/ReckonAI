@@ -15,6 +15,15 @@ replan's R15: the demo opens with a live order so a judge sees real PayPal,
 and "the reconciliation then proceeds from fixtures whether or not that call
 succeeded". A failure is logged and the command still exits 0.
 
+**`--ensure` commits, so it is not for a developer's test database.** It
+writes the `reckonmarket` tenant and leaves it there, and
+`tests/test_catalogue_constraints.py` then fails on a conflicting external
+reference - observed 2026-11-09, immediately after the first local run. Use
+`--reset` afterwards, or point `DATABASE_URL` somewhere disposable. This is
+`specs/2026-11-08-block-a-marketplace-connector/validation.md` section 8
+debt 4 in a new form: rows that outlive a transaction interfere with tests
+that assume they own the schema.
+
 **The capture script is not this.** `scripts/capture_paypal.py` builds the
 dataset by creating eighteen sandbox orders and writing fixtures, and must
 never run during a demo or a deploy: it would overwrite the committed data

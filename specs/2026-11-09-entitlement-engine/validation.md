@@ -83,11 +83,32 @@ do is compute a figure that *forces* a later flag.
 | `tests/test_money_purity.py` — no `float`, no I/O import in the money or engine path | |
 | `tests/test_model_registry.py` — no model module missing from `reckonai/models/__init__.py` (no new models here, so this is a no-change assertion) | |
 | No emoji anywhere in the diff ([[tech-stack]] §13) | |
-| `ruff` and the type checker clean | |
+| `uv run ruff check` clean | |
+| `uv run mypy` clean — strict over `src/reckonai/engine/`, the scope set in `[tool.mypy]` (D9). **This line previously read "`ruff` and the type checker", naming a checker the project did not have** — the same error Block A's §9 recorded and corrected | |
+| `uv.lock` re-locked and committed, since CI asserts it is unchanged | |
 | Full suite green, count recorded against Phase 3's 1117 | |
 | `/code-review medium` (R2 allows it on Blocks B and C) | |
 
-## 7. Not proven here, and who proves it
+## 7. Debts handed on
+
+**Five mypy errors outside `engine/`, left reported rather than suppressed.**
+D9 scopes the gate to `engine/`, so these do not fail CI. Counted here so the
+next block inherits a number rather than a surprise.
+
+| Where | Error | Reading |
+|---|---|---|
+| `sim/seed.py:506` | `RuleT` cannot be `CommissionRule` `[type-var]` | **Not a defect.** `Mapped[X]` against a Protocol member `X`; see D9 |
+| `sim/seed.py:574` | `list[SellerLedgerEntry]` is not `Iterable[LedgerEntry]` | Same limitation |
+| `models/base.py:192` | `composite()` expects `Callable[..., Money]`, got one returning `Money \| None` | Real, and the `_money_or_none` factory Phase 2 added for nullable pairs. Worth a look by whoever next touches `models/base.py` |
+| `connector/ingest.py:341,437` | `"type" has no attribute "tenant_id"` (x2), plus a missing annotation | Real, and probably a `type[Model]` variable that wants a narrower annotation. Block C or D |
+| `money/allocation.py:126` | unary `-` on `Literal['n','N','F'] \| int` | Real but benign: `Decimal.as_tuple().exponent` is typed as that union, and the value is an `int` for any finite Decimal, which the code has already guaranteed |
+
+**The protocol gap D8 found can recur.** The runtime `isinstance` tests check
+attribute **presence, not type**, and D9 records why the static check cannot
+cover the ORM boundary. A third consumer of these protocols would find the next
+missing field the way Phase 10 found `fixed` — by being wrong first.
+
+## 8. Not proven here, and who proves it
 
 - That the faults are **detected** and the clean baseline produces **zero
   exceptions** — Block C. This block supplies the expected figures the
@@ -97,8 +118,9 @@ do is compute a figure that *forces* a later flag.
 - That `awaiting_evidence` is reached for F5 — Block C.
 - That the figures score against the manifest — Block G.
 
-## 8. Merge condition
+## 9. Merge condition
 
 Every result cell in §1 through §6 filled and passing, the full suite green in
-CI, and §7 left to its owners. No deploy — R2's single deploy was spent on
-Block A's merge and this block needs none.
+CI, §7's debts carried forward with their owners named, and §8 left to its
+owners. No deploy — R2's single deploy was spent on Block A's merge and this
+block needs none.

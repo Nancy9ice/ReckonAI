@@ -31,6 +31,16 @@ allocation and commission adjustment.
 
 from __future__ import annotations
 
+from .entitlement import (
+    FixedCommissionCurrencyMismatch,
+    MixedCurrencyOrder,
+    OrderEntitlement,
+    OrderItemLike,
+    OrderLike,
+    SellerEntitlement,
+    commission_for,
+    expected_entitlement,
+)
 from .ledger import (
     CREDIT,
     DEBIT,
@@ -53,9 +63,17 @@ __all__ = [
     "CommissionRuleAmbiguity",
     "CommissionRuleLike",
     "EngineError",
+    "FixedCommissionCurrencyMismatch",
     "LedgerEntry",
+    "MixedCurrencyOrder",
     "NoApplicableCommissionRule",
+    "OrderEntitlement",
+    "OrderItemLike",
+    "OrderLike",
+    "SellerEntitlement",
     "UnknownTransactionType",
+    "commission_for",
+    "expected_entitlement",
     "position",
     "resolve_commission_rule",
     "signed",

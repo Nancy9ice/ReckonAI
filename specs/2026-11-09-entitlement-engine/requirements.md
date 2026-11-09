@@ -136,6 +136,92 @@ order-dependence fails loudly instead of resting on alphabetical collection.
 This does **not** enable randomisation or `-n auto` in this block. It makes the
 precondition explicit so a later block can.
 
+### D8. A rule's flat component is applied, and its protocol gap is closed
+
+**Found while implementing, not while planning.** `commission_rule.fixed` has
+existed since Phase 2 — an optional flat per-transaction component alongside
+the rate, nullable, with NULL genuinely absent rather than zero — and it was
+**missing from `CommissionRuleLike`** in `engine/rules.py`. A tenant whose rule
+carried one would have had its flat part silently dropped by every consumer of
+that protocol.
+
+This is the exact divergence `test_commission_rules.py`'s
+`test_the_test_fixture_satisfies_the_protocol` says it exists to catch: "if
+this stops working, the protocol and the ORM class have diverged and Phase 10
+would find out the hard way." Phase 10 found out. Fixed at the protocol rather
+than worked around with `getattr`, so the next consumer inherits the
+corrected shape.
+
+`commission = (share * rate).quantize() + fixed`. Read as **per seller per
+order**, matching the column's "per-transaction" wording. A flat component in
+another currency raises `FixedCommissionCurrencyMismatch` — dropping it would
+understate the commission and converting it is not this module's to do.
+
+**`fixed = NULL` contributes nothing, and that is not D3's situation.** A rule
+declaring no flat part is a stated structure; an absent capture fee is an
+unknown measurement. The first is safe to treat as nothing, the second is not.
+
+No rule in the dataset uses `fixed`, so this path is covered by fixtures only.
+
+### D9. A type checker is added, strict, over `engine/` only
+
+**Raised by the operator mid-block**, against this document's own
+`validation.md`, which listed "the type checker" as a merge gate for a checker
+the project did not have. That was the same mistake Block A's `validation.md`
+§9 had already recorded and corrected — it listed `mypy src`, found it
+unmeetable because "mypy is not a dependency", and dropped it rather than
+measuring it. Measuring it is what changed the answer.
+
+**Measured, first run over `src/`: 39 errors in 9 of 52 files.** Small enough
+to act on, which is not what either of us assumed.
+
+**32 were one inaccurate annotation.** `Money.amount` is declared `Decimal`
+while the class docstring says "construct from a `Decimal`, an `int`, or a
+`str`" and `_coerce_amount` accepts all three. A frozen dataclass reuses the
+field annotation for its `__init__` parameter, so every
+`Money("160.00", "USD")` — the canonical form, and the one PayPal's JSON
+strings arrive as — was reported while being entirely correct. Fixed with a
+`TYPE_CHECKING`-only `__init__` declaration, so the constructor's declared type
+matches its behaviour while `money.amount` still reads as `Decimal` downstream.
+Zero runtime change.
+
+**The package also had no `py.typed` marker.** Fully annotated and not
+advertising it, so anything importing `reckonai` from outside the tree received
+`Any` for every attribute. Added.
+
+**Two of the remaining seven are a checker limitation, not a defect — and the
+earlier reading of them in this session was wrong.** They were first reported
+here as protocol/ORM divergence of the same kind as D8. They are not. mypy's
+own explanation:
+
+```
+category: expected "str | None", got "Mapped[str | None]"
+amount:   expected "Money",      got "Mapped[Money]"
+```
+
+A SQLAlchemy `Mapped[X]` attribute does not satisfy a `Protocol` member
+declared as `X`, although instance access genuinely resolves to `X` — verified
+with `reveal_type`, which reports `Decimal`, `Money`, `uuid.UUID` and the rest
+exactly as the protocols declare them. Declaring the protocol members as
+read-only properties does not help: `ledger.py`'s `LedgerEntry` already does
+that and is reported the same way. So the ORM classes **do** satisfy these
+protocols; mypy cannot see it through the descriptor.
+
+*What that costs, recorded rather than fixed:* the protocols cannot be checked
+against the ORM statically. The runtime `isinstance` tests remain the only
+check, and they verify attribute **presence, not type** — so D8's class of gap
+can recur and would again be found by a consumer rather than by a gate.
+
+**Hence the scope.** Strict over `src/reckonai/engine/`, declared in
+`[tool.mypy]` so CI and a local `uv run mypy` check the same thing. The engine
+is where a type error is a wrong financial answer rather than a crash, it
+imports no ORM by design ([[tech-stack]] §6), and after the `Money` fix it is
+the one package that passes `--strict` clean. Gating the ORM boundary would
+mean suppressing a false report at every call site.
+
+The five remaining errors are a recorded debt in `validation.md` §7, not
+suppressions.
+
 ### D7. No applicable rule still raises; a stated zero still resolves
 
 Unchanged from `rules.py` and restated because the dataset changed. A stated

@@ -31,8 +31,17 @@ def alembic_config(database_url: str) -> Config:
 
 
 @pytest.fixture
-def at_base(alembic_config: Config) -> Iterator[Config]:
-    """Run each test from a known-empty state, and leave the database at head."""
+def at_base(
+    alembic_config: Config, no_committed_marketplace_rows: None
+) -> Iterator[Config]:
+    """Run each test from a known-empty state, and leave the database at head.
+
+    `no_committed_marketplace_rows` is requested for its side effect: it fails
+    this module loudly if committed rows would make the downgrade below fail
+    against `ondelete="RESTRICT"`. Without it the suite's order-dependence
+    surfaces as an opaque Alembic error. See that fixture in `conftest.py`.
+    """
+    del no_committed_marketplace_rows  # requested for its guard, not its value
     command.downgrade(alembic_config, "base")
     yield alembic_config
     command.upgrade(alembic_config, "head")

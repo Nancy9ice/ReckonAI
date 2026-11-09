@@ -14,10 +14,12 @@ would prove only that the code agrees with itself.
 
 from __future__ import annotations
 
+import json
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 
@@ -321,6 +323,58 @@ def test_a_flat_component_in_another_currency_raises() -> None:
 
     with pytest.raises(FixedCommissionCurrencyMismatch):
         expected_entitlement(order, items, mismatched)
+
+
+def test_the_commission_equals_paypals_recorded_platform_fee() -> None:
+    """specs/roadmap.md Phase 10's fifth exit criterion, against real payloads.
+
+    "The expected commission is computed as a figure **comparable to PayPal's
+    platform fee**, since that is what Phase 11 checks it against - not merely
+    as the residue of what the marketplace kept."
+
+    So this reads the captured sandbox responses and compares the engine's
+    per-seller commission against the `platform_fees` PayPal actually recorded
+    on that purchase unit. It is the only test here that touches provider data,
+    and deliberately: a figure that agrees with the marketplace's own literals
+    but not with PayPal's record would pass everything else in this file and
+    fail every comparison Block C makes.
+
+    **Clean orders only.** ORD-0013 to ORD-0018 carry the seeded faults, and F2
+    is a *wrong commission in the marketplace's books* - ORD-0014 states 30.00
+    where PayPal correctly took 20.00. Including it would assert the engine
+    reproduces a fault.
+    """
+    fixtures = Path(__file__).resolve().parent.parent / "fixtures" / "paypal"
+    clean = {f"ORD-{n:04d}" for n in range(1, 13)}
+
+    checked = 0
+    for path in sorted(fixtures.glob("ORD-*.json")):
+        captured = json.loads(path.read_text())
+        if captured["order_ref"] not in clean:
+            continue
+
+        for unit in captured["order"]["purchase_units"]:
+            currency = unit["amount"]["currency_code"]
+            gross = Money(unit["amount"]["value"], currency)
+
+            fees = unit["payment_instruction"]["platform_fees"]
+            recorded = Money("0", currency)
+            for fee in fees:
+                recorded = recorded + Money(
+                    fee["amount"]["value"], fee["amount"]["currency_code"]
+                )
+
+            assert commission_for(gross, Decimal("0.1")) == recorded, (
+                f"{captured['order_ref']} / {unit['reference_id']}: engine "
+                f"commission on {gross} disagrees with PayPal's recorded "
+                f"{recorded}"
+            )
+            checked += 1
+
+    assert checked == 15, (
+        f"expected 15 clean purchase units across 12 orders, checked {checked}"
+        " - the dataset changed and this test is no longer covering it"
+    )
 
 
 def test_commission_for_is_callable_on_its_own() -> None:

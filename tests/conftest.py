@@ -88,6 +88,82 @@ def engine(database_url: str) -> Iterator[Engine]:
     engine.dispose()
 
 
+def committed_tenant_count(engine: Engine) -> int:
+    """How many `tenant` rows are committed right now, or 0 if the table is gone.
+
+    Deliberately not a fixture, so `no_committed_marketplace_rows` can be
+    tested without committing a row to provoke it.
+    """
+    from sqlalchemy import inspect, text
+
+    if "tenant" not in inspect(engine).get_table_names():
+        # The schema is already at base. Nothing to protect.
+        return 0
+
+    with engine.connect() as connection:
+        return connection.execute(text("SELECT count(*) FROM tenant")).scalar_one()
+
+
+def assert_no_committed_marketplace_rows(engine: Engine) -> None:
+    """Fail loudly if committed rows would break a downgrade to `base`.
+
+    A plain function rather than only a fixture, so
+    `tests/test_order_dependence_guard.py` can provoke it **without committing
+    a tenant row** - committing one is precisely what would break the
+    downgrade for every module collected after it.
+    """
+    count = committed_tenant_count(engine)
+    if count:
+        pytest.fail(
+            f"{count} committed tenant row(s) exist, so downgrading the schema "
+            "to base would fail against ondelete=RESTRICT with an error that "
+            "names neither this cause nor its fix.\n\n"
+            "This suite is order-dependent: tests/test_sim_api.py and "
+            "tests/test_connector_ingest.py commit rows and remove them at "
+            "module teardown, and it only works because pytest collects "
+            "alphabetically. Something has reordered collection - "
+            "pytest-randomly, -n auto, a -k selection that runs a committing "
+            "module first, or an earlier module that failed before its "
+            "teardown ran.\n\n"
+            "See specs/2026-11-08-block-a-marketplace-connector/validation.md "
+            "section 8 debt 4."
+        )
+
+
+@pytest.fixture
+def no_committed_marketplace_rows(engine: Engine) -> None:
+    """Refuse to downgrade the schema while committed marketplace rows exist.
+
+    **This suite is order-dependent, and this fixture is what makes that fail
+    loudly instead of silently.** See
+    `specs/2026-11-08-block-a-marketplace-connector/validation.md` section 8
+    debt 4, and `specs/2026-11-09-entitlement-engine/requirements.md` D6.
+
+    `tests/test_sim_api.py` and `tests/test_connector_ingest.py` each **commit**
+    real rows and delete them at module teardown, because the sim's endpoints
+    open their own `Session` from `app.state.engine` and cannot see a
+    transaction a fixture is holding open. `tests/test_migrations.py`
+    downgrades to `base`.
+
+    It passes today only because pytest collects alphabetically -
+    `test_connector_ingest` < `test_migrations` < `test_sim_api` - so the
+    committed rows are gone before the downgrade runs. Add `pytest-randomly`,
+    `-n auto`, or any reordering, and the downgrade meets rows it cannot drop
+    through `ondelete="RESTRICT"`, failing with a `NotNullViolation` or a
+    foreign-key error from deep inside Alembic that names none of this.
+
+    **Function-scoped rather than session-scoped**, which is stronger than the
+    debt proposed: the check then runs immediately before each downgrade rather
+    than once at session start, so it also catches a module that commits rows
+    *during* the session. It is one `count(*)` against a table that holds
+    single digits.
+
+    This fixture does not make the suite safe to randomise. It makes the
+    failure legible, which is the precondition for randomising it later.
+    """
+    assert_no_committed_marketplace_rows(engine)
+
+
 @pytest.fixture(scope="session")
 def migrated_database(engine: Engine) -> Engine:
     """The database at `head`, migrated once per session.

@@ -13,12 +13,25 @@
 
 | # | Criterion | Proof | Result |
 |---|---|---|---|
-| 1 | The [[mission]] worked example passes exactly | `test_mission_worked_example` — 160.00 across two sellers at 10% gives A 90.00, B 54.00, commission 16.00; then a 40.00 refund on A's item gives A 54.00, B 54.00, commission 12.00 | |
-| 2 | Allocation across three or more sellers leaves no rounding residue | `test_refund_allocation_leaves_no_residue`, three and four sellers, parts summed against the whole | |
-| 3 | No database handle, HTTP client or clock read in the module | `tests/test_money_purity.py`, already watching `reckonai/engine/` | |
-| 4 | Hand-computed fixtures cover each refund and commission policy | The fixture table in §2 | |
-| 5 | Expected commission is a figure comparable to PayPal's platform fee | `test_commission_is_per_seller_not_a_residue` — the per-seller commission equals that purchase unit's `platform_fees` value for every captured order | |
-| 6 | A capture fee is never defaulted to zero | `test_a_capture_with_no_stated_fee_is_recorded_as_unknown` and `test_a_stated_fee_leaves_nothing_unknown`. **No fee-inclusive position is published** — D3 revised, with the measurement in §3 | |
+| 1 | The [[mission]] worked example passes exactly | `test_mission_worked_example_first_half` and `test_mission_worked_example_second_half` — 160.00 across two sellers at 10% gives A 90.00, B 54.00, commission 16.00; then a 40.00 refund on A's item gives A 54.00, B 54.00, commission 12.00, with B untouched | **Pass** |
+| 2 | Allocation across three or more sellers leaves no rounding residue | `test_allocation_across_three_or_more_sellers_leaves_no_residue`, parametrised over 3, 4 and 5 sellers and over `0.01`, `0.02`, `33.33`, `100.00`; plus `test_split_by_rate_parts_sum_exactly` | **Pass.** `0.01` across three equal shares is the real case |
+| 3 | No database handle, HTTP client or clock read in the module | `tests/test_money_purity.py`, already watching `reckonai/engine/` | **Pass**, unchanged and not weakened |
+| 4 | Hand-computed fixtures cover each refund and commission policy | The fixture table in §2 | **Pass**, 16 rows |
+| 5 | Expected commission is a figure comparable to PayPal's platform fee | `test_the_commission_equals_paypals_recorded_platform_fee` — reads the captured payloads and compares the engine's commission against the `platform_fees` PayPal recorded on each purchase unit | **Pass, 15 of 15 clean purchase units.** Faulty orders excluded: F2 is a wrong commission in the marketplace's books, and including ORD-0014 would assert the engine reproduces a fault |
+| 6 | A capture fee is never defaulted to zero | `test_a_capture_with_no_stated_fee_is_recorded_as_unknown` and `test_a_stated_fee_leaves_nothing_unknown`. **No fee-inclusive position is published** — D3 revised, with the measurement in §3 | **Pass** |
+
+**Criterion 5 was nearly missed.** This table first named a test that did not
+exist, and the test that did (`test_commission_is_summed_per_seller_...`)
+asserts the *structural* claim only — that the order commission is built by
+summing per-seller figures. It never compared anything to a provider record, so
+the criterion would have been ticked on a test that could not fail it. The
+check above reads `fixtures/paypal/` directly, and is the only test in this
+block that touches provider data.
+
+**Test counts:** `test_entitlement` 22, `test_refunds` 29, `test_positions` 14,
+`test_order_dependence_guard` 4, with `test_sim_seed` 14 and
+`test_commission_rules` 25 still passing unchanged. **Full suite 1357**,
+against Phase 3's 1117 and Block A's run.
 
 ## 2. Hand-computed fixture coverage
 
@@ -50,10 +63,10 @@ per-seller positions, hand-written and independently derived.
 
 | Check | Proof | Result |
 |---|---|---|
-| Every order's commission and per-seller entitlement matches §2 | `tests/test_sim_seed.py` unchanged, now running through the engine (D5) | |
-| Net positions match: aurora USD 349.50, EUR 73.37; bellweather USD 256.47, EUR 324.02 | `data.EXPECTED_POSITIONS` against `seed.verify()` | |
-| Commission totals match: USD 67.33, EUR 44.15 | same | |
-| The engine is the only implementation | no entitlement arithmetic remains in `seed.py` — grep for `rule.rate` outside `reckonai/engine/` | |
+| Every order's commission and per-seller entitlement matches §2 | `tests/test_sim_seed.py` unchanged, now running through the engine (D5) | **Pass, 14 of 14, no literal changed** |
+| Net positions match: aurora USD 349.50, EUR 73.37; bellweather USD 256.47, EUR 324.02 | `data.EXPECTED_POSITIONS` against `seed.verify()` | **Pass** |
+| Commission totals match: USD 67.33, EUR 44.15 | same | **Pass** |
+| The engine is the only implementation | no entitlement arithmetic remains in `seed.py` — grep for `rule.rate` outside `reckonai/engine/` | **Pass.** One hit, `data.rate_for`, a test convenience returning a rate and performing no entitlement arithmetic; its own docstring says it is "**not** the resolution the engine performs" |
 | **`net_amount == gross_amount - platform_fees` on every capture, zero residual** — the measurement D3 rests on | re-run the arithmetic over `fixtures/paypal/*.json` | **Pass, 21 of 21** |
 
 Three independent derivations survive the move: the literals in `data.py`, the
@@ -67,29 +80,29 @@ do is compute a figure that *forces* a later flag.
 
 | Check | Proof | Result |
 |---|---|---|
-| `ORD-0005` (`DELAYED`, funds held) gets an ordinary entitlement | held funds are a healthy state; the engine reads no disbursement state | |
-| `ORD-0008`'s two correct-but-conflicting figures both survive | the engine computes in EUR and performs no conversion | |
+| `ORD-0005` (`DELAYED`, funds held) gets an ordinary entitlement | held funds are a healthy state; the engine reads no disbursement state, and `verify()` covers ORD-0005 as a clean order | **Pass** |
+| `ORD-0008`'s two correct-but-conflicting figures both survive | the engine computes in EUR and performs no conversion; `test_a_non_usd_order_is_computed_in_its_own_currency` pins B 36.02 and A 73.37 | **Pass** |
 
 ## 5. Debt 4 (D6)
 
 | Check | Proof | Result |
 |---|---|---|
-| `tests/test_migrations.py` fails loudly, not silently, if tenant rows exist | the session-scoped guard, exercised by leaving a row in place deliberately | |
-| The suite still passes in its current collection order | full run | |
-| Randomisation is still not enabled | no `pytest-randomly`, no `-n auto` in `pyproject.toml` or CI | |
+| `tests/test_migrations.py` fails loudly, not silently, if tenant rows exist | `no_committed_marketplace_rows`, requested by `at_base`. **Function-scoped, not session-scoped** — stronger than the debt proposed, since it runs immediately before each downgrade and so also catches a module that commits mid-session | **Pass, observed for real.** A tenant row was planted by hand, `test_migrations` failed with the intended message naming the cause, the fix and debt 4, and the row was removed; `tests/test_order_dependence_guard.py` pins both directions without committing anything |
+| The suite still passes in its current collection order | full run | **Pass, 1357** |
+| Randomisation is still not enabled | no `pytest-randomly`, no `-n auto` in `pyproject.toml` or CI | **Confirmed, no hits.** The guard makes the failure legible; it does not make the suite safe to randomise |
 
 ## 6. Standing gates
 
 | Gate | Result |
 |---|---|
-| `tests/test_money_purity.py` — no `float`, no I/O import in the money or engine path | |
-| `tests/test_model_registry.py` — no model module missing from `reckonai/models/__init__.py` (no new models here, so this is a no-change assertion) | |
-| No emoji anywhere in the diff ([[tech-stack]] §13) | |
-| `uv run ruff check` clean | |
-| `uv run mypy` clean — strict over `src/reckonai/engine/`, the scope set in `[tool.mypy]` (D9). **This line previously read "`ruff` and the type checker", naming a checker the project did not have** — the same error Block A's §9 recorded and corrected | |
-| `uv.lock` re-locked and committed, since CI asserts it is unchanged | |
-| Full suite green, count recorded against Phase 3's 1117 | |
-| `/code-review medium` (R2 allows it on Blocks B and C) | |
+| `tests/test_money_purity.py` — no `float`, no I/O import in the money or engine path | **Pass** |
+| `tests/test_model_registry.py` — no model module missing from `reckonai/models/__init__.py` (no new models here, so this is a no-change assertion) | **Pass** |
+| No emoji anywhere in the diff ([[tech-stack]] §13) | **Pass**, scanned across every file the branch touches |
+| `uv run ruff check` clean | **Pass** |
+| `uv run mypy` clean — strict over `src/reckonai/engine/`, the scope set in `[tool.mypy]` (D9). **This line previously read "`ruff` and the type checker", naming a checker the project did not have** — the same error Block A's §9 recorded and corrected | **Pass**, 6 source files |
+| `uv.lock` re-locked and committed, since CI asserts it is unchanged | **Done** in `22b3910` |
+| Full suite green, count recorded against Phase 3's 1117 | **Pass, 1357** |
+| `/code-review medium` (R2 allows it on Blocks B and C) | Operator-run; not yet done |
 
 ## 7. Debts handed on
 

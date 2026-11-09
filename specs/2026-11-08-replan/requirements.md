@@ -460,10 +460,15 @@ the replan was written.
 Phases 0, 0b, 1, 2, 3 and **Block A (4 + 5 + 6) are complete and merged** — PR
 #14, merge commit `2d002b1`, CI green.
 
-**The PayPal capture is next, then Block B** — see R16, which moved the capture
-ahead of the remaining blocks and retired Block A's synthetic PayPal side. The
-capture needs live sandbox credentials and operator decisions about what to
-push, so it is the one piece of remaining work that cannot proceed unattended.
+**The PayPal capture (R16) is complete**, and **Block B is next** (Phase 10,
+the entitlement engine, ~3 h).
+
+The capture produced 18 real sandbox orders in `fixtures/paypal/`, replayed by
+`reckonai.paypal.replay`, with the marketplace seed re-pointed at the captured
+figures and Block A's synthetic provider side deleted. Read
+`specs/2026-11-09-paypal-capture/` before touching the dataset: its
+`validation.md` §2 is the current hand-check, Block A's §2 is superseded, and
+§7 lists five things found only by running it.
 
 Before starting it, read
 `specs/2026-11-08-block-a-marketplace-connector/requirements.md` §3 — Block A's

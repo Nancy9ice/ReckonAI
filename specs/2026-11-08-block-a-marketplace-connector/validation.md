@@ -34,6 +34,13 @@
 
 ## 2. The hand-check — the clean baseline, tabulated
 
+> **Superseded 2026-11-09 by `specs/2026-11-09-paypal-capture/validation.md`
+> §2.** The replan's R16 replaced the invented PayPal side with captured
+> sandbox responses, which re-pointed the dataset: four sellers became two,
+> the FX figures became PayPal's own, and `paypal_fee` disappeared. The table
+> below is kept as the record of what Block A built and checked, not as a
+> description of the current dataset. **Read the newer one.**
+
 This table is the "reconciles perfectly by hand" criterion. It is computed by
 hand, written here first, and *then* asserted by `seed.verify()`. If the code
 and this table disagree, the table is the authority until a decision says

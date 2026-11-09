@@ -1,0 +1,130 @@
+{
+  "order_ref": "ORD-0010",
+  "note": "",
+  "disbursement_mode": "INSTANT",
+  "captured_at": "2026-11-08T18:56:29Z",
+  "endpoint": "GET /v2/checkout/orders/8HK18912TR3954139",
+  "order": {
+    "id": "8HK18912TR3954139",
+    "intent": "CAPTURE",
+    "status": "COMPLETED",
+    "payment_source": {
+      "card": {
+        "name": "Test Buyer",
+        "last_digits": "1111",
+        "expiry": "2030-01",
+        "brand": "VISA",
+        "type": "UNKNOWN",
+        "bin_details": {}
+      }
+    },
+    "purchase_units": [
+      {
+        "reference_id": "ORD-0010-1",
+        "amount": {
+          "currency_code": "USD",
+          "value": "45.00",
+          "breakdown": {}
+        },
+        "payee": {
+          "merchant_id": "C24NAWELTTHXJ"
+        },
+        "payment_instruction": {
+          "platform_fees": [
+            {
+              "amount": {
+                "currency_code": "USD",
+                "value": "4.50"
+              },
+              "payee": {
+                "merchant_id": "G2K2FVVLETKYG"
+              }
+            }
+          ],
+          "disbursement_mode": "INSTANT"
+        },
+        "soft_descriptor": "TEST STORE",
+        "supplementary_data": {
+          "risk": {
+            "risk_level_indicator": "HIGH_RISK"
+          }
+        },
+        "payments": {
+          "captures": [
+            {
+              "id": "4SX50894JP1782104",
+              "status": "COMPLETED",
+              "amount": {
+                "currency_code": "USD",
+                "value": "45.00"
+              },
+              "final_capture": true,
+              "disbursement_mode": "INSTANT",
+              "seller_protection": {
+                "status": "NOT_ELIGIBLE"
+              },
+              "seller_receivable_breakdown": {
+                "gross_amount": {
+                  "currency_code": "USD",
+                  "value": "45.00"
+                },
+                "platform_fees": [
+                  {
+                    "amount": {
+                      "currency_code": "USD",
+                      "value": "4.50"
+                    },
+                    "payee": {
+                      "merchant_id": "G2K2FVVLETKYG"
+                    }
+                  }
+                ],
+                "net_amount": {
+                  "currency_code": "USD",
+                  "value": "40.50"
+                }
+              },
+              "links": [
+                {
+                  "href": "https://api.sandbox.paypal.com/v2/payments/captures/4SX50894JP1782104",
+                  "rel": "self",
+                  "method": "GET"
+                },
+                {
+                  "href": "https://api.sandbox.paypal.com/v2/payments/captures/4SX50894JP1782104/refund",
+                  "rel": "refund",
+                  "method": "POST"
+                },
+                {
+                  "href": "https://api.sandbox.paypal.com/v2/checkout/orders/8HK18912TR3954139",
+                  "rel": "up",
+                  "method": "GET"
+                }
+              ],
+              "create_time": "2026-11-08T18:56:24Z",
+              "update_time": "2026-11-08T18:56:24Z",
+              "network_transaction_reference": {
+                "id": "091041251978243",
+                "network": "VISA"
+              },
+              "processor_response": {
+                "cvv_code": "M",
+                "response_code": "0000"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "create_time": "2026-11-08T18:56:24Z",
+    "update_time": "2026-11-08T18:56:24Z",
+    "links": [
+      {
+        "href": "https://api.sandbox.paypal.com/v2/checkout/orders/8HK18912TR3954139",
+        "rel": "self",
+        "method": "GET"
+      }
+    ]
+  },
+  "releases": []
+}

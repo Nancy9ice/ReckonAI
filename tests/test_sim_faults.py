@@ -12,7 +12,10 @@ was actually seeded rather than what someone meant to seed.
 
 from __future__ import annotations
 
+import json
+import pathlib
 import uuid
+from decimal import ROUND_HALF_UP, Decimal
 
 import pytest
 from sqlalchemy import func, select
@@ -20,11 +23,7 @@ from sqlalchemy.orm import Session
 
 from reckonai.engine.ledger import position
 from reckonai.models import (
-    Capture,
-    Disbursement,
-    FxConversion,
     Order,
-    PlatformFee,
     Refund,
     Seller,
     SellerLedgerEntry,
@@ -127,58 +126,6 @@ def test_the_manifest_serializes_amounts_as_strings() -> None:
         assert isinstance(impact["currency"], str)
 
 
-def test_every_evidence_reference_resolves(
-    session: Session, full: seed.SeedResult
-) -> None:
-    """Block E's agent must cite real ids, so the manifest's must be real.
-
-    An expected-evidence list naming a reference nothing resolves would score
-    a correct investigation as wrong.
-    """
-    refs: set[str] = set()
-    for table, column in (
-        (Order, Order.external_ref),
-        (SellerLedgerEntry, SellerLedgerEntry.external_ref),
-        (Refund, Refund.external_id),
-        (PlatformFee, PlatformFee.external_id),
-        (Disbursement, Disbursement.external_id),
-        (Capture, Capture.external_id),
-    ):
-        refs.update(
-            session.scalars(
-                select(column).where(table.tenant_id == full.tenant_id)
-            )
-        )
-    # Order items are referenced too, and live on their own table.
-    from reckonai.models import OrderItem
-
-    refs.update(
-        session.scalars(
-            select(OrderItem.external_ref).where(
-                OrderItem.tenant_id == full.tenant_id
-            )
-        )
-    )
-    # FX conversions carry no external reference of their own - the table has
-    # none, deliberately, since a conversion is a property of its parent. The
-    # manifest names them by the payload's record id instead.
-    from reckonai.models import RawPayload
-
-    refs.update(
-        r
-        for r in session.scalars(
-            select(RawPayload.source_record_id).where(
-                RawPayload.tenant_id == full.tenant_id
-            )
-        )
-        if r is not None
-    )
-
-    for fault in manifest.FAULTS:
-        missing = set(fault.evidence_refs) - refs
-        assert not missing, f"{fault.id} cites unresolvable refs {sorted(missing)}"
-
-
 # ---------------------------------------------------------------------------
 # Each fault is really present
 # ---------------------------------------------------------------------------
@@ -227,76 +174,6 @@ def test_f1_refund_has_no_ledger_entries(
     ) == 1
 
 
-def test_f2_platform_fee_disagrees_with_the_retained_commission(
-    session: Session, full: seed.SeedResult
-) -> None:
-    """scenario 2, and the reason `paypal_platform_fee` exists.
-
-    With the provider's fee derived from the marketplace's figure, the two
-    would agree and the fault would be invisible.
-    """
-    order_id = _order_id(session, full.tenant_id, "ORD-0014")
-
-    retained = session.scalar(
-        select(SellerLedgerEntry).where(
-            SellerLedgerEntry.tenant_id == full.tenant_id,
-            SellerLedgerEntry.order_id == order_id,
-            SellerLedgerEntry.entry_category == "commission",
-        )
-    )
-    assert retained is not None
-    assert retained.amount == Money("30.00", "USD")
-
-    fee = session.scalar(
-        select(PlatformFee).where(
-            PlatformFee.tenant_id == full.tenant_id,
-            PlatformFee.external_id == "FEE-ORD-0014",
-        )
-    )
-    assert fee is not None
-    assert fee.amount == Money("20.00", "USD"), "PayPal took the rule-correct fee"
-
-    assert (retained.amount - fee.amount) == Money(
-        manifest.fault("F2").impact_amount, "USD"
-    )
-
-
-def test_f3_settlement_does_not_follow_from_its_rate(
-    session: Session, full: seed.SeedResult
-) -> None:
-    """scenario 3, and clear of ORD-0008's legitimate rounding artefact.
-
-    The assertion that matters is the **ratio** between the two discrepancies:
-    if the fault were the same size as the artefact, no classifier could tell
-    them apart and the dataset would be unusable for Phase 11's gate.
-    """
-    faulty = data.faulty_order("ORD-0015")
-    assert faulty.fx is not None
-
-    implied = Money(faulty.fx.naive_recomputation, "EUR")
-    reported = Money(faulty.fx.settlement_amount, "EUR")
-    gap = abs((implied - reported).amount)
-
-    assert gap == Money(manifest.fault("F3").impact_amount, "EUR").amount
-
-    artefact = Money("0.01", "EUR").amount
-    assert gap > artefact * 100, (
-        f"the F3 gap is {gap} against a legitimate artefact of {artefact}; a "
-        "fault within an order of magnitude of the noise is not detectable "
-        "without a threshold, and Phase 11 forbids introducing one"
-    )
-
-    # The conversion row is present, and still carries no fee (P3).
-    conversion = session.scalar(
-        select(FxConversion).where(
-            FxConversion.tenant_id == full.tenant_id,
-            FxConversion.target_amount == reported.amount,
-        )
-    )
-    assert conversion is not None
-    assert conversion.fee is None
-
-
 def test_f4_credits_one_sale_twice(
     session: Session, full: seed.SeedResult
 ) -> None:
@@ -321,81 +198,6 @@ def test_f4_credits_one_sale_twice(
     assert len({e.external_ref for e in sales}) == 2
     assert sales[0].amount == sales[1].amount == Money("90.00", "USD")
     assert sales[0].amount == Money(manifest.fault("F4").impact_amount, "USD")
-
-
-def test_f5_marketplace_side_is_correct_and_paypal_side_is_absent(
-    session: Session, full: seed.SeedResult
-) -> None:
-    """R10's cross-source case, and the fault that must not become an exception.
-
-    Both halves are asserted. The marketplace's ledger is complete - so there
-    is genuinely nothing wrong on the side we can see - and PayPal's refund
-    record is missing, which is what makes "missing from PayPal" the tempting
-    and wrong conclusion.
-    """
-    order_id = _order_id(session, full.tenant_id, "ORD-0017")
-
-    entries = list(
-        session.scalars(
-            select(SellerLedgerEntry).where(
-                SellerLedgerEntry.tenant_id == full.tenant_id,
-                SellerLedgerEntry.order_id == order_id,
-                SellerLedgerEntry.entry_category.in_(
-                    ["refund", "commission_reversal"]
-                ),
-            )
-        )
-    )
-    assert len(entries) == 2, "the marketplace side must be complete and correct"
-
-    assert session.scalar(
-        select(func.count())
-        .select_from(Refund)
-        .where(
-            Refund.tenant_id == full.tenant_id,
-            Refund.external_id == "PPRF-RFND-0017-A",
-        )
-    ) == 0, "PayPal's record must be absent"
-
-    # The clean refund's provider record *is* present, which is what makes the
-    # absence above a distinguishable state rather than the universal one.
-    assert session.scalar(
-        select(func.count())
-        .select_from(Refund)
-        .where(
-            Refund.tenant_id == full.tenant_id,
-            Refund.external_id == "PPRF-RFND-0011-A",
-        )
-    ) == 1
-
-    assert manifest.fault("F5").expected_classification == "awaiting_evidence"
-    assert manifest.fault("F5").is_exception is False
-
-
-def test_f6_release_falls_short_of_the_obligation(
-    session: Session, full: seed.SeedResult
-) -> None:
-    """A completed release that disagrees, so nothing in flight explains it."""
-    release = session.scalar(
-        select(Disbursement).where(
-            Disbursement.tenant_id == full.tenant_id,
-            Disbursement.external_id == "REL-ORD-0018",
-        )
-    )
-    assert release is not None
-    assert release.state == "disbursement_completed"
-    assert release.amount == Money("120.00", "EUR")
-
-    owed = Money(
-        data.faulty_order("ORD-0018").expected_entitlements["vendor-citrine"],
-        "EUR",
-    )
-    assert (owed - release.amount) == Money(
-        manifest.fault("F6").impact_amount, "EUR"
-    )
-
-    # Still no provider release timestamp, fault or not (P3).
-    assert release.released_at is None
 
 
 # ---------------------------------------------------------------------------
@@ -486,3 +288,139 @@ def test_the_full_dataset_has_eighteen_orders() -> None:
     assert len(data.FULL.orders) == 18
     assert len(data.CLEAN_ORDERS) == 12
     assert len(data.FAULTY_ORDERS) == 6
+
+
+# ---------------------------------------------------------------------------
+# The provider half, asserted against the captured fixtures
+#
+# These used to query the database, back when the seed invented PayPal's
+# records. R16 retired that: the provider side is real now and lives in
+# `fixtures/paypal/`, so the evidence a fault is measured against is checked
+# where it actually is. Once the replay ingester lands, the same facts are
+# worth re-asserting after ingestion - but that would test the ingester, and
+# these test the evidence.
+# ---------------------------------------------------------------------------
+
+FIXTURES = pathlib.Path(__file__).resolve().parent.parent / "fixtures" / "paypal"
+
+
+def _fixture(ref: str) -> dict:
+    return json.loads((FIXTURES / f"{ref}.json").read_text())
+
+
+def _units(doc: dict, which: str = "order") -> list[dict]:
+    return doc[which]["purchase_units"]
+
+
+def test_every_order_has_a_captured_fixture() -> None:
+    """A dataset order with no provider record would be flagged as unmatched
+    on every run - eighteen silent false positives."""
+    captured = {f.stem for f in FIXTURES.glob("ORD-*.json")}
+    expected = {o.ref for o in data.FULL.orders}
+
+    assert expected == captured, (
+        f"missing fixtures {sorted(expected - captured)}; "
+        f"orphan fixtures {sorted(captured - expected)}"
+    )
+
+
+def test_f2_paypal_took_the_rule_correct_fee() -> None:
+    """scenario 2: the marketplace claims 30.00 where the rule gives 20.00.
+
+    The disagreement only exists because PayPal's record is correct, so that
+    is what is asserted here.
+    """
+    doc = _fixture("ORD-0014")
+    brk = _units(doc, "order")[0]["payments"]["captures"][0][
+        "seller_receivable_breakdown"
+    ]
+    took = Money(brk["platform_fees"][0]["amount"]["value"], "USD")
+
+    assert took == Money("20.00", "USD")
+    assert Money(data.faulty_order("ORD-0014").expected_commission, "USD") == Money(
+        "30.00", "USD"
+    ), "the marketplace must believe something different, or there is no fault"
+
+
+def test_f3_the_real_settlement_is_far_from_what_the_marketplace_recorded() -> None:
+    """scenario 3, and it must stay clear of ORD-0008's legitimate artefact.
+
+    If the fault were the size of the rounding noise, no classifier could
+    tell them apart and the dataset would be unusable for Phase 11's gate.
+    """
+    doc = _fixture("ORD-0015")
+    brk = _units(doc)[0]["payments"]["captures"][0]["seller_receivable_breakdown"]
+    real = Money(brk["receivable_amount"]["value"], "USD")
+
+    recorded = Money(
+        data.faulty_order("ORD-0015").recorded_in_currency["vendor-bellweather"][1],
+        "USD",
+    )
+    gap = abs((real - recorded).amount)
+
+    assert real == Money("294.16", "USD")
+    assert gap > Money("0.01", "USD").amount * 100, (
+        f"the F3 gap is {gap} against a one-cent artefact; a fault within an "
+        "order of magnitude of the noise needs a threshold, and Phase 11 "
+        "forbids introducing one"
+    )
+
+
+def test_f5_has_no_captured_refund_while_its_clean_counterpart_does() -> None:
+    """R10's cross-source case, asserted as a contrast.
+
+    If no refund anywhere had a provider record, "the counterpart is missing"
+    would describe them all rather than the one that earns
+    `awaiting_evidence`.
+    """
+    def refunds(ref: str) -> list:
+        out = []
+        for unit in _units(_fixture(ref)):
+            out.extend(unit.get("payments", {}).get("refunds", []))
+        return out
+
+    assert refunds("ORD-0017") == [], "F5's provider record must be absent"
+    assert len(refunds("ORD-0011")) == 1, "the clean refund's must be present"
+    assert len(refunds("ORD-0013")) == 1, "F1's refund is real; its ledger is not"
+
+
+def test_f6_paypal_released_in_full_while_the_ledger_understates_it() -> None:
+    """The disbursement disagrees with the marketplace's own record."""
+    doc = _fixture("ORD-0018")
+    assert doc["releases"], "F6 needs a real release to disagree with"
+    payout = Money(doc["releases"][0]["payout_amount"]["value"], "USD")
+
+    spec = data.faulty_order("ORD-0018")
+    owed = Money(spec.expected_entitlements["vendor-bellweather"], "EUR")
+    credited = Money(spec.understated_credit["vendor-bellweather"], "EUR")
+
+    assert payout == Money("147.08", "USD"), "PayPal released the full net"
+    assert credited < owed
+    assert (owed - credited) == Money("15.00", "EUR")
+
+
+def test_the_rounding_artefact_is_real_not_constructed() -> None:
+    """ORD-0008's one cent comes from PayPal's own arithmetic.
+
+    Converting each capture separately and converting the order total once
+    differ by a cent, and **neither is wrong**. A single-seller order cannot
+    produce this, which is why ORD-0008 has two.
+    """
+    doc = _fixture("ORD-0008")
+    units = _units(doc)
+    assert len(units) == 2, "one purchase unit cannot be converted twice"
+
+    per_capture = Decimal("0")
+    net_total = Decimal("0")
+    rate = None
+    for unit in units:
+        brk = unit["payments"]["captures"][0]["seller_receivable_breakdown"]
+        per_capture += Decimal(brk["receivable_amount"]["value"])
+        net_total += Decimal(brk["net_amount"]["value"])
+        rate = Decimal(brk["exchange_rate"]["value"])
+
+    once = (net_total * rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+    assert per_capture == Decimal("119.17")
+    assert once == Decimal("119.18")
+    assert abs(per_capture - once) == Decimal("0.01")

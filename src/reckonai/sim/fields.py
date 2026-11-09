@@ -175,6 +175,13 @@ ENTITLEMENT_FIELDS = _frozen(
     }
 )
 
+#: **Not served.** The sim had a `/releases` endpoint reading `disbursement`,
+#: but those rows are PayPal's and now come from `fixtures/paypal/` through
+#: the replay ingester (R16). The marketplace's own release records - which
+#: captures it instructed PayPal to disburse, per specs/mission.md section 3
+#: - have no canonical table yet, so there is nothing marketplace-side to
+#: serve. Kept here because the field names are settled and the endpoint
+#: returns the moment that table exists.
 DISBURSEMENT_FIELDS = _frozen(
     {
         "external_id": "release_ref",
@@ -197,7 +204,6 @@ ALL_FIELD_MAPS: Final[dict[str, MappingProxyType[str, str]]] = {
     "refunds": REFUND_FIELDS,
     "ledger_entries": LEDGER_ENTRY_FIELDS,
     "disputes": DISPUTE_FIELDS,
-    "releases": DISBURSEMENT_FIELDS,
 }
 
 #: `entitlements` is excluded from the guard above and listed separately,

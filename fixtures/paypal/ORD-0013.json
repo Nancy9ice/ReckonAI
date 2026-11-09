@@ -1,0 +1,285 @@
+{
+  "order_ref": "ORD-0013",
+  "note": "F1: the refund is real; the ledger will not record it",
+  "disbursement_mode": "INSTANT",
+  "captured_at": "2026-11-08T19:00:26Z",
+  "endpoint": "GET /v2/checkout/orders/6SH73837BG501962G",
+  "order_at_capture": {
+    "id": "6SH73837BG501962G",
+    "status": "COMPLETED",
+    "payment_source": {
+      "card": {
+        "name": "Test Buyer",
+        "last_digits": "1111",
+        "expiry": "2030-01",
+        "brand": "VISA",
+        "type": "CREDIT",
+        "bin_details": {}
+      }
+    },
+    "purchase_units": [
+      {
+        "reference_id": "ORD-0013-1",
+        "payment_instruction": {
+          "platform_fees": [
+            {
+              "amount": {
+                "currency_code": "USD",
+                "value": "11.00"
+              },
+              "payee": {
+                "merchant_id": "G2K2FVVLETKYG"
+              }
+            }
+          ],
+          "disbursement_mode": "INSTANT"
+        },
+        "payments": {
+          "captures": [
+            {
+              "id": "6AP63246WF1540214",
+              "status": "COMPLETED",
+              "amount": {
+                "currency_code": "USD",
+                "value": "110.00"
+              },
+              "final_capture": true,
+              "disbursement_mode": "INSTANT",
+              "seller_protection": {
+                "status": "NOT_ELIGIBLE"
+              },
+              "seller_receivable_breakdown": {
+                "gross_amount": {
+                  "currency_code": "USD",
+                  "value": "110.00"
+                },
+                "platform_fees": [
+                  {
+                    "amount": {
+                      "currency_code": "USD",
+                      "value": "11.00"
+                    },
+                    "payee": {
+                      "merchant_id": "G2K2FVVLETKYG"
+                    }
+                  }
+                ],
+                "net_amount": {
+                  "currency_code": "USD",
+                  "value": "99.00"
+                }
+              },
+              "links": [
+                {
+                  "href": "https://api.sandbox.paypal.com/v2/payments/captures/6AP63246WF1540214",
+                  "rel": "self",
+                  "method": "GET"
+                },
+                {
+                  "href": "https://api.sandbox.paypal.com/v2/payments/captures/6AP63246WF1540214/refund",
+                  "rel": "refund",
+                  "method": "POST"
+                },
+                {
+                  "href": "https://api.sandbox.paypal.com/v2/checkout/orders/6SH73837BG501962G",
+                  "rel": "up",
+                  "method": "GET"
+                }
+              ],
+              "create_time": "2026-11-08T19:00:21Z",
+              "update_time": "2026-11-08T19:00:21Z",
+              "network_transaction_reference": {
+                "id": "764183329841287",
+                "network": "VISA"
+              },
+              "processor_response": {
+                "cvv_code": "M",
+                "response_code": "0000"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "links": [
+      {
+        "href": "https://api.sandbox.paypal.com/v2/checkout/orders/6SH73837BG501962G",
+        "rel": "self",
+        "method": "GET"
+      }
+    ]
+  },
+  "order": {
+    "id": "6SH73837BG501962G",
+    "intent": "CAPTURE",
+    "status": "COMPLETED",
+    "payment_source": {
+      "card": {
+        "name": "Test Buyer",
+        "last_digits": "1111",
+        "expiry": "2030-01",
+        "brand": "VISA",
+        "type": "UNKNOWN",
+        "bin_details": {}
+      }
+    },
+    "purchase_units": [
+      {
+        "reference_id": "ORD-0013-1",
+        "amount": {
+          "currency_code": "USD",
+          "value": "110.00",
+          "breakdown": {}
+        },
+        "payee": {
+          "merchant_id": "E4FUU2CX86ALC"
+        },
+        "payment_instruction": {
+          "platform_fees": [
+            {
+              "amount": {
+                "currency_code": "USD",
+                "value": "11.00"
+              },
+              "payee": {
+                "merchant_id": "G2K2FVVLETKYG"
+              }
+            }
+          ],
+          "disbursement_mode": "INSTANT"
+        },
+        "soft_descriptor": "TEST STORE",
+        "supplementary_data": {
+          "risk": {
+            "risk_level_indicator": "HIGH_RISK"
+          }
+        },
+        "payments": {
+          "captures": [
+            {
+              "id": "6AP63246WF1540214",
+              "status": "PARTIALLY_REFUNDED",
+              "amount": {
+                "currency_code": "USD",
+                "value": "110.00"
+              },
+              "final_capture": true,
+              "disbursement_mode": "INSTANT",
+              "seller_protection": {
+                "status": "NOT_ELIGIBLE"
+              },
+              "seller_receivable_breakdown": {
+                "gross_amount": {
+                  "currency_code": "USD",
+                  "value": "110.00"
+                },
+                "platform_fees": [
+                  {
+                    "amount": {
+                      "currency_code": "USD",
+                      "value": "3.00"
+                    },
+                    "payee": {
+                      "merchant_id": "G2K2FVVLETKYG"
+                    }
+                  }
+                ],
+                "net_amount": {
+                  "currency_code": "USD",
+                  "value": "107.00"
+                }
+              },
+              "links": [
+                {
+                  "href": "https://api.sandbox.paypal.com/v2/payments/captures/6AP63246WF1540214",
+                  "rel": "self",
+                  "method": "GET"
+                },
+                {
+                  "href": "https://api.sandbox.paypal.com/v2/payments/captures/6AP63246WF1540214/refund",
+                  "rel": "refund",
+                  "method": "POST"
+                },
+                {
+                  "href": "https://api.sandbox.paypal.com/v2/checkout/orders/6SH73837BG501962G",
+                  "rel": "up",
+                  "method": "GET"
+                }
+              ],
+              "create_time": "2026-11-08T19:00:20Z",
+              "update_time": "2026-11-08T19:00:23Z",
+              "network_transaction_reference": {
+                "id": "764183329841287",
+                "network": "VISA"
+              },
+              "processor_response": {
+                "cvv_code": "M",
+                "response_code": "0000"
+              }
+            }
+          ],
+          "refunds": [
+            {
+              "id": "0CE88977WM977540P",
+              "amount": {
+                "currency_code": "USD",
+                "value": "30.00"
+              },
+              "seller_payable_breakdown": {
+                "gross_amount": {
+                  "currency_code": "USD",
+                  "value": "30.00"
+                },
+                "paypal_fee": {
+                  "currency_code": "USD",
+                  "value": "0.00"
+                },
+                "platform_fees": [
+                  {
+                    "amount": {
+                      "currency_code": "USD",
+                      "value": "3.00"
+                    }
+                  }
+                ],
+                "net_amount": {
+                  "currency_code": "USD",
+                  "value": "27.00"
+                },
+                "total_refunded_amount": {
+                  "currency_code": "USD",
+                  "value": "30.00"
+                }
+              },
+              "status": "COMPLETED",
+              "links": [
+                {
+                  "href": "https://api.sandbox.paypal.com/v2/payments/refunds/0CE88977WM977540P",
+                  "rel": "self",
+                  "method": "GET"
+                },
+                {
+                  "href": "https://api.sandbox.paypal.com/v2/payments/captures/6AP63246WF1540214",
+                  "rel": "up",
+                  "method": "GET"
+                }
+              ],
+              "create_time": "2026-11-08T11:00:23-08:00",
+              "update_time": "2026-11-08T11:00:23-08:00"
+            }
+          ]
+        }
+      }
+    ],
+    "create_time": "2026-11-08T19:00:20Z",
+    "update_time": "2026-11-08T19:00:23Z",
+    "links": [
+      {
+        "href": "https://api.sandbox.paypal.com/v2/checkout/orders/6SH73837BG501962G",
+        "rel": "self",
+        "method": "GET"
+      }
+    ]
+  },
+  "releases": []
+}

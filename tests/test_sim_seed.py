@@ -14,39 +14,31 @@ from __future__ import annotations
 
 import dataclasses
 import uuid
+from decimal import Decimal
 
 import pytest
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from reckonai.models import (
-    Capture,
     CommissionRule,
-    Disbursement,
-    FxConversion,
     Order,
     OrderItem,
     Payment,
-    PlatformFee,
     RawPayload,
     Refund,
     Seller,
     SellerLedgerEntry,
 )
-from reckonai.money import Money
 from reckonai.sim import data, seed
 
 # Every financial table, which is to say every table carrying a NOT NULL
 # `raw_payload_id`. The orphan check below iterates this.
-FINANCIAL_MODELS = (
-    Payment,
-    Capture,
-    Refund,
-    PlatformFee,
-    Disbursement,
-    FxConversion,
-    SellerLedgerEntry,
-)
+# **Only what the marketplace owns.** The provider tables - capture,
+# platform_fee, fx_conversion, disbursement - are written by
+# `reckonai.paypal.replay` from captured fixtures, not by the seed builder,
+# since the replan's R16 retired Block A's synthetic provider side.
+FINANCIAL_MODELS = (Payment, Refund, SellerLedgerEntry)
 
 
 @pytest.fixture
@@ -63,18 +55,22 @@ def seeded(session: Session) -> seed.SeedResult:
 
 
 def test_the_dataset_has_the_shape_d5_specifies() -> None:
-    assert len(data.SELLERS) == 4
+    # Two sellers, because each must map one-to-one onto a real onboarded
+    # PayPal account: the connector resolves seller_id from
+    # payee.merchant_id, so a shared account misattributes every order.
+    assert len(data.SELLERS) == 2
     assert len(data.CLEAN_ORDERS) == 12
     assert sum(len(order.items) for order in data.CLEAN_ORDERS) == 15
 
-    currencies = {order.currency for order in data.CLEAN_ORDERS}
-    assert currencies == {"USD", "EUR"}
+    assert {o.currency for o in data.CLEAN_ORDERS} == {"USD", "EUR"}
 
     delayed = [o for o in data.CLEAN_ORDERS if o.disbursement_mode == "DELAYED"]
     assert len(delayed) == 1, "exactly one DELAYED order, so funds_held is reachable"
 
-    with_fx = [o for o in data.CLEAN_ORDERS if o.fx is not None]
-    assert len(with_fx) == 1, "exactly one FX order"
+    # Every seller maps to a distinct real sandbox account.
+    merchants = {s.merchant_id for s in data.SELLERS}
+    assert len(merchants) == len(data.SELLERS)
+    assert all(m and not m.startswith("MERCH-") for m in merchants), merchants
 
 
 def test_the_mission_worked_example_is_seeded_exactly() -> None:
@@ -91,37 +87,6 @@ def test_the_mission_worked_example_is_seeded_exactly() -> None:
         "vendor-aurora": "90.00",
         "vendor-bellweather": "54.00",
     }
-
-
-def test_one_seller_is_onboarded_without_partner_fee() -> None:
-    """The branch Phase 11 must not classify as a discrepancy.
-
-    `Seller`'s docstring names the failure: a missing platform fee for a seller
-    never granted `PARTNER_FEE` is not an exception. With no such seller in the
-    baseline, that branch would never be measured.
-    """
-    without = [s for s in data.SELLERS if not s.partner_fee_enabled]
-
-    assert len(without) == 1
-    assert without[0].ref == "vendor-dunlin"
-
-
-def test_the_fx_order_carries_the_cent_rounding_trap() -> None:
-    """Non-fault 2, and the reason it is a trap rather than a difference.
-
-    Converting the total once and converting each line separately differ by one
-    cent, and **neither figure is wrong**. PayPal reported the former, so a
-    reconciler that recomputes per line reports a discrepancy that does not
-    exist. requirements.md D4 keeps this in the clean baseline on purpose.
-    """
-    order = data.clean_order("ORD-0008")
-    assert order.fx is not None
-
-    settlement = Money(order.fx.settlement_amount, order.fx.target_currency)
-    naive = Money(order.fx.naive_recomputation, order.fx.target_currency)
-
-    assert settlement != naive, "the trap is that the two figures differ"
-    assert abs((settlement - naive).amount) == Money("0.01", "EUR").amount
 
 
 def test_the_delayed_order_belongs_to_a_seller_who_can_hold_funds() -> None:
@@ -230,30 +195,23 @@ def test_verify_recomputes_through_the_real_resolver(
     """D5a: the two derivations are independent.
 
     The literals come from `data.py`; the recomputation runs
-    `reckonai.engine.rules.resolve_commission_rule` against the rules actually
-    written to the database. Deleting Citrine's 8% rule makes the resolver fall
-    back to the 10% default, and the stated figures then disagree - which is
-    only possible if `verify()` really is consulting the database.
-    """
-    citrine = session.scalar(
-        select(Seller).where(
-            Seller.tenant_id == seeded.tenant_id,
-            Seller.external_ref == "vendor-citrine",
-        )
-    )
-    assert citrine is not None
+    `reckonai.engine.rules.resolve_commission_rule` against the rules
+    actually in the database. Changing the stored rate must therefore break
+    `verify()` - which is only possible if it really is consulting the
+    database rather than re-reading the same literals twice.
 
+    The perturbation is the rate rather than deleting a seller-scoped rule,
+    because there is now exactly one rule: Phase 10's exit criterion needs
+    both sellers on ORD-0001 at 10%, so no seller-scoped rate can exist.
+    """
     rule = session.scalar(
-        select(CommissionRule).where(
-            CommissionRule.tenant_id == seeded.tenant_id,
-            CommissionRule.seller_id == citrine.id,
-        )
+        select(CommissionRule).where(CommissionRule.tenant_id == seeded.tenant_id)
     )
     assert rule is not None
-    session.delete(rule)
+    rule.rate = Decimal("0.150000")
     session.flush()
 
-    with pytest.raises(seed.SeedInconsistency, match="vendor-citrine"):
+    with pytest.raises(seed.SeedInconsistency, match="entitlement"):
         seed.verify(session, seeded.tenant_id)
 
 
@@ -290,10 +248,10 @@ def test_the_stated_positions_match_the_ledger(
     """
     seed.verify(session, seeded.tenant_id)
 
-    assert data.EXPECTED_POSITIONS[("vendor-aurora", "USD")] == "237.00"
+    assert data.EXPECTED_POSITIONS[("vendor-aurora", "USD")] == "349.50"
+    assert data.EXPECTED_POSITIONS[("vendor-aurora", "EUR")] == "73.37"
     assert data.EXPECTED_POSITIONS[("vendor-bellweather", "USD")] == "256.47"
-    assert data.EXPECTED_POSITIONS[("vendor-citrine", "EUR")] == "294.40"
-    assert data.EXPECTED_POSITIONS[("vendor-dunlin", "USD")] == "125.00"
+    assert data.EXPECTED_POSITIONS[("vendor-bellweather", "EUR")] == "324.02"
 
 
 # ---------------------------------------------------------------------------
@@ -332,129 +290,6 @@ def test_every_financial_row_links_to_its_raw_payload(
             )
 
 
-def test_the_held_order_keeps_released_at_null(
-    session: Session, seeded: seed.SeedResult
-) -> None:
-    """P3: PayPal's release record carries no usable timestamp.
-
-    Writing an ingestion time here would present our clock as a provider one.
-    """
-    held = list(
-        session.scalars(
-            select(Disbursement).where(Disbursement.tenant_id == seeded.tenant_id)
-        )
-    )
-
-    assert len(held) == 1
-    assert held[0].state == "funds_held"
-    assert held[0].released_at is None
-
-
-def test_no_conversion_fee_is_recorded(
-    session: Session, seeded: seed.SeedResult
-) -> None:
-    """P3, and the `CHECK` that refuses a zero one.
-
-    An absent fee and a measured fee of nothing are different claims. PayPal
-    publishes no conversion fee, so there is none to record.
-    """
-    conversions = list(
-        session.scalars(
-            select(FxConversion).where(FxConversion.tenant_id == seeded.tenant_id)
-        )
-    )
-
-    assert len(conversions) == 1
-    assert conversions[0].fee is None
-    assert conversions[0].is_derived is False
-
-
-def test_no_platform_fee_exists_for_the_seller_without_the_capability(
-    session: Session, seeded: seed.SeedResult
-) -> None:
-    """No row, rather than a zero-amount row.
-
-    A zero-amount fee would assert a measured fee of nothing. PayPal cannot
-    take a platform fee for a seller without `PARTNER_FEE`, so the accurate
-    record is an absence.
-    """
-    dunlin = session.scalar(
-        select(Seller).where(
-            Seller.tenant_id == seeded.tenant_id,
-            Seller.external_ref == "vendor-dunlin",
-        )
-    )
-    assert dunlin is not None
-
-    count = session.scalar(
-        select(func.count())
-        .select_from(PlatformFee)
-        .where(
-            PlatformFee.tenant_id == seeded.tenant_id,
-            PlatformFee.seller_id == dunlin.id,
-        )
-    )
-
-    assert count == 0
-
-
-def test_no_seeded_capture_fee_is_zero(
-    session: Session, seeded: seed.SeedResult
-) -> None:
-    """Every capture in the clean set states a real, non-zero fee."""
-    captures = list(
-        session.scalars(
-            select(Capture).where(Capture.tenant_id == seeded.tenant_id)
-        )
-    )
-
-    assert len(captures) == len(data.CLEAN_ORDERS)
-    for capture in captures:
-        assert capture.paypal_fee is not None
-        assert not capture.paypal_fee.is_zero()
-
-
-def test_an_unstated_capture_fee_stays_null_and_is_not_defaulted(
-    session: Session,
-) -> None:
-    """specs/roadmap.md Phase 10: `NULL` makes "unknown" representable.
-
-    **This test exists because the one above could not fail.** Mutation testing
-    found it: every order in the clean set states a `paypal_fee`, so the
-    builder's `else None` branch was never reached, and replacing it with
-    `Money(spec.paypal_fee or "0", ...)` left the whole suite green. The
-    assertion "no fee is zero" was true of the data and said nothing about the
-    code.
-
-    So this seeds an order whose fee PayPal did not state - which is a real
-    condition, not a contrivance: a capture loses its entire
-    `seller_receivable_breakdown` while `PENDING`, and an open dispute puts it
-    there (Phase 3's handoff). The fee must come back `NULL`, because an
-    unknown fee and a fee of nothing are different claims.
-    """
-    order = dataclasses.replace(
-        data.clean_order("ORD-0002"), ref="ORD-UNKNOWNFEE", paypal_fee=None
-    )
-    dataset = data.Dataset(orders=(order,))
-
-    result = seed.build(
-        session, dataset, tenant_slug=f"sim-{uuid.uuid4().hex[:8]}"
-    )
-    session.flush()
-
-    capture = session.scalar(
-        select(Capture).where(Capture.tenant_id == result.tenant_id)
-    )
-    assert capture is not None
-    assert capture.paypal_fee is None, (
-        "an unstated fee was defaulted; NULL is what makes 'unknown' "
-        "representable and a zero would assert a measured fee of nothing"
-    )
-    # The net is NULL too, and must be: it is derived from the fee, so a net
-    # computed from a defaulted zero would be the gross wearing a fee's name.
-    assert capture.net_amount is None
-
-
 def test_every_ledger_amount_is_positive(
     session: Session, seeded: seed.SeedResult
 ) -> None:
@@ -471,30 +306,6 @@ def test_every_ledger_amount_is_positive(
     for entry in entries:
         assert entry.amount.is_positive(), entry.external_ref
         assert entry.transaction_type in {"debit", "credit"}
-
-
-def test_the_paypal_side_is_marked_synthetic(
-    session: Session, seeded: seed.SeedResult
-) -> None:
-    """requirements.md D12, and the debt Block D inherits.
-
-    These rows exist so Blocks B and C can be built on Day 1. Every one
-    announces itself, so a row that survives into the demo is identifiable
-    rather than indistinguishable from a captured sandbox response.
-    """
-    paypal = list(
-        session.scalars(
-            select(RawPayload).where(
-                RawPayload.tenant_id == seeded.tenant_id,
-                RawPayload.source == "paypal",
-            )
-        )
-    )
-
-    assert paypal, "no PayPal-side payloads were written"
-    for row in paypal:
-        assert row.body.get("_synthetic") is True, row.source_record_id
-        assert row.body.get("replaced_by") == "block-d"
 
 
 def test_a_seeded_payload_records_no_endpoint(
@@ -516,26 +327,6 @@ def test_a_seeded_payload_records_no_endpoint(
         assert row.endpoint is None
 
 
-def test_the_builder_writes_both_sources(
-    session: Session, seeded: seed.SeedResult
-) -> None:
-    """One table per record type holds both sides, told apart by the payload.
-
-    `PAYLOAD_SOURCES` is a CHECK-constrained `("paypal", "marketplace")`, which
-    is why requirements.md D2's first draft - `marketplace_seed` and
-    `marketplace_api` - was not writable.
-    """
-    sources = set(
-        session.scalars(
-            select(RawPayload.source).where(
-                RawPayload.tenant_id == seeded.tenant_id
-            )
-        )
-    )
-
-    assert sources == {"marketplace", "paypal"}
-
-
 def test_counts_are_what_the_dataset_implies(
     session: Session, seeded: seed.SeedResult
 ) -> None:
@@ -552,15 +343,9 @@ def test_counts_are_what_the_dataset_implies(
     assert count(OrderItem) == sum(len(o.items) for o in data.CLEAN_ORDERS)
     assert count(CommissionRule) == len(data.COMMISSION_RULES)
     assert count(Payment) == len(data.CLEAN_ORDERS)
-    assert count(Capture) == len(data.CLEAN_ORDERS)
 
-    # **Two refund rows per refund**, one from each source. One table per
-    # record type holds both sides, told apart only by their payload's
-    # `source` - and nothing links them, because establishing that link is a
-    # matching decision and belongs to Block C, not to a column here.
-    expected_refunds = sum(
-        1 + int(refund.paypal_record_present)
-        for order in data.CLEAN_ORDERS
-        for refund in order.refunds
-    )
-    assert count(Refund) == expected_refunds
+    # **One refund row per marketplace refund, and no provider rows at all.**
+    # The seed writes only what the marketplace owns; PayPal's captures,
+    # refunds, fees, conversions and disbursements come from
+    # `fixtures/paypal/` through the replay ingester (R16).
+    assert count(Refund) == sum(len(o.refunds) for o in data.CLEAN_ORDERS)

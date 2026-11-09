@@ -28,23 +28,29 @@ Also read, and in this order:
 - `specs/paypal-fields.md` — what PayPal actually returns, per field, with the
   evidence. The root specs state rules and point here; they do not repeat it.
 
-**Phases 0, 0b, 1, 2, 3 and Block A (4 + 5 + 6) are complete. The PayPal
-capture is next, then Block B** — see the replan's **R16**, which moved the
-capture script, the fixtures and the replay ingester ahead of the remaining
-blocks and **retired Block A's synthetic PayPal side**.
+**Phases 0, 0b, 1, 2, 3, Block A (4 + 5 + 6) and the PayPal capture (R16) are
+complete. Block B is next** — Phase 10, the entitlement engine, ~3 h.
 
-The capture is the one piece of remaining work that cannot proceed unattended:
-it needs live sandbox credentials and operator decisions about which orders,
-sellers and currencies to push. Block B is unaffected and does not move — it is
-pure functions over hand-computed fixtures.
+The capture is done: 18 real sandbox orders in `fixtures/paypal/`, replayed by
+`reckonai.paypal.replay`, with the marketplace seed re-pointed at the captured
+figures. **Read `specs/2026-11-09-paypal-capture/` before anything that
+touches the dataset** — its `validation.md` §2 is the current hand-check, and
+Block A's §2 is superseded. §7 there lists five things found by running it
+that are not obvious from any payload.
 
-Before Block B, read Block A's handoff in
-`specs/2026-11-08-block-a-marketplace-connector/requirements.md` §3: it names
-the worked example's seeded figures, the per-seller totals Block B's output is
-checked against, the two things Phase 10 must not do (default a capture fee to
-zero, or confuse `vendor-dunlin`'s stated 0% rule with a defaulted one), and
-the entitlement calculation that should **move** out of `seed._verify_order`
-rather than be rewritten.
+Before Block B, read `specs/2026-11-09-paypal-capture/validation.md` §2 for
+the figures its output is checked against, and Block A's handoff in
+`specs/2026-11-08-block-a-marketplace-connector/requirements.md` §3 for the
+rest — **noting that §3's seller list is out of date**: `vendor-citrine` and
+`vendor-dunlin` no longer exist, and there is one commission rule, the
+tenant's 10%.
+
+Two things Phase 10 still must not do. **A capture fee is never defaulted to
+zero** — PayPal reports none on a capture and an explicit `0.00` on a refund,
+and those are different claims. And **the entitlement calculation should
+move** out of `seed._verify_order` into `reckonai/engine/` rather than be
+rewritten: two copies could disagree, and the one in the test fixture is the
+one nobody reviews.
 
 Block A delivered the simulated marketplace (`reckonai.sim`), the six seeded
 faults with their manifest, and the connector (`reckonai.connector`). That

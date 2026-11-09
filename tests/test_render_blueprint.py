@@ -175,12 +175,58 @@ def test_the_database_credential_is_referenced_never_written(
         assert database_url["fromDatabase"]["property"] == "connectionString"
 
 
-def test_no_paypal_variable_is_declared_yet(services: list[dict[str, Any]]) -> None:
-    """Phase 7 adds these.
+def test_every_paypal_variable_is_declared_without_a_value(
+    services: list[dict[str, Any]],
+) -> None:
+    """Phase 7 added these, brought forward by the replan's R16.
 
-    An empty secret declared now invites being filled in the dashboard and then
-    forgotten, which is how a credential ends up somewhere nobody is tracking.
+    This test previously asserted that **no** PayPal variable existed yet,
+    on the reasoning that "an empty secret declared now invites being filled
+    in the dashboard and then forgotten". That reasoning was about declaring
+    them *early*; now the demo's live order needs them, and what matters is
+    the half that still holds: a credential must never be in this file.
+
+    So each is `sync: false` - Render prompts for the value - and none
+    carries a `value` or a `generateValue`. The same rule the database URL
+    follows.
     """
+    declared = set()
     for service in services:
-        keys = [var["key"] for var in service["envVars"]]
-        assert not any(key.startswith("PAYPAL_") for key in keys)
+        for var in service["envVars"]:
+            key = var["key"]
+            if not key.startswith("PAYPAL_"):
+                continue
+            declared.add(key)
+            assert var.get("sync") is False, f"{key} must be sync: false"
+            assert "value" not in var, f"{key} carries a value in the blueprint"
+            assert "generateValue" not in var, key
+
+    assert declared == {
+        "PAYPAL_CLIENT_ID",
+        "PAYPAL_CLIENT_SECRET",
+        "PAYPAL_BN_CODE",
+    }, declared
+
+
+def test_the_predeploy_command_seeds_but_never_calls_paypal(
+    services: list[dict[str, Any]],
+) -> None:
+    """`--ensure` is deterministic; capturing from PayPal is not.
+
+    A sandbox `5xx` in a pre-deploy command fails the deploy and takes the
+    service down - the failure mode R6 removed by replaying from fixtures.
+    So the blueprint may seed, and may not capture.
+    """
+    web = next(s for s in services if s["name"] == "reckonai-api")
+    command = " ".join(web["preDeployCommand"].split())
+
+    assert "alembic upgrade head" in command
+    assert "reckonai.demo_data --ensure" in command
+    assert "--live" not in command, "the live call must not gate a deploy"
+    assert "capture_paypal" not in command, (
+        "capturing writes fixtures and creates sandbox orders; it must never "
+        "run on a deploy"
+    )
+    # Without --no-sync, uv run syncs before executing and undoes the build's
+    # --no-dev, installing packages at container start.
+    assert command.count("--no-sync") == 2

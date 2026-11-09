@@ -41,8 +41,8 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from reckonai.engine.entitlement import expected_entitlement
 from reckonai.engine.ledger import position, signed
-from reckonai.engine.rules import resolve_commission_rule
 from reckonai.models import (
     CommissionRule,
     Order,
@@ -205,8 +205,7 @@ def _build_order(session: Session, result: SeedResult, spec: OrderSpec) -> None:
         tenant_id=result.tenant_id,
         record_type="payment",
         record_id=f"PAY-{spec.ref}",
-        body={"order_ref": spec.ref, "paid_amount": spec.total,
-              "ccy": spec.currency},
+        body={"order_ref": spec.ref, "paid_amount": spec.total, "ccy": spec.currency},
         retrieved_at=spec.placed_at,
     )
     session.add(
@@ -273,23 +272,56 @@ def _build_ledger(
             credit = Money(spec.understated_credit[seller_ref], spec.currency)
             commission = Money("0", spec.currency)
 
-        _entry(session, result, spec, order_id, seller_id, seller_ref,
-               "sale", "credit", credit, currency, "sale")
+        _entry(
+            session,
+            result,
+            spec,
+            order_id,
+            seller_id,
+            seller_ref,
+            "sale",
+            "credit",
+            credit,
+            currency,
+            "sale",
+        )
 
         if spec.duplicate_ledger_entry:
             # **A distinct reference, which is what makes this a realistic
             # duplicate.** `UNIQUE (tenant_id, external_ref)` refuses a
             # literal repeat, and a real double-post carries its own id. The
             # fault is two entries describing one sale.
-            _entry(session, result, spec, order_id, seller_id, seller_ref,
-                   "sale", "credit", credit, currency, "sale-dup")
+            _entry(
+                session,
+                result,
+                spec,
+                order_id,
+                seller_id,
+                seller_ref,
+                "sale",
+                "credit",
+                credit,
+                currency,
+                "sale-dup",
+            )
 
         # A commission of zero gets no entry: `CHECK (amount_amount > 0)`
         # refuses one, and that is right - an entry moving nothing is not a
         # movement.
         if not commission.is_zero():
-            _entry(session, result, spec, order_id, seller_id, seller_ref,
-                   "commission", "debit", commission, currency, "comm")
+            _entry(
+                session,
+                result,
+                spec,
+                order_id,
+                seller_id,
+                seller_ref,
+                "commission",
+                "debit",
+                commission,
+                currency,
+                "comm",
+            )
 
 
 def _entry(
@@ -311,8 +343,12 @@ def _entry(
         tenant_id=result.tenant_id,
         record_type="ledger_entry",
         record_id=ref,
-        body={"txn_kind": category, "direction": direction,
-              "entry_amount": str(amount.quantize().amount), "ccy": currency},
+        body={
+            "txn_kind": category,
+            "direction": direction,
+            "entry_amount": str(amount.quantize().amount),
+            "ccy": currency,
+        },
         retrieved_at=spec.placed_at,
     )
     session.add(
@@ -348,8 +384,11 @@ def _build_refund(
         tenant_id=result.tenant_id,
         record_type="refund",
         record_id=refund_spec.ref,
-        body={"order_ref": spec.ref, "refund_amount": refund_spec.amount,
-              "ccy": spec.currency},
+        body={
+            "order_ref": spec.ref,
+            "refund_amount": refund_spec.amount,
+            "ccy": spec.currency,
+        },
         retrieved_at=spec.placed_at,
     )
     refund = Refund(
@@ -381,13 +420,25 @@ def _build_refund(
         ("commission_reversal", "credit", reversal, "revrs"),
     ):
         if not value.is_zero():
-            _entry(session, result, spec, order_id, seller_id,
-                   refund_spec.seller_ref, category, direction, value,
-                   spec.currency, suffix)
+            _entry(
+                session,
+                result,
+                spec,
+                order_id,
+                seller_id,
+                refund_spec.seller_ref,
+                category,
+                direction,
+                value,
+                spec.currency,
+                suffix,
+            )
 
 
 def _build_dispute(
-    session: Session, result: SeedResult, spec: OrderSpec,
+    session: Session,
+    result: SeedResult,
+    spec: OrderSpec,
     dispute_spec: data.DisputeSpec,
 ) -> None:
     """One dispute, with only the fields a marketplace would hold.
@@ -403,8 +454,11 @@ def _build_dispute(
         tenant_id=result.tenant_id,
         record_type="dispute",
         record_id=dispute_spec.ref,
-        body={"disputed_amount": dispute_spec.amount, "ccy": spec.currency,
-              "case_reason": dispute_spec.reason},
+        body={
+            "disputed_amount": dispute_spec.amount,
+            "ccy": spec.currency,
+            "case_reason": dispute_spec.reason,
+        },
         retrieved_at=spec.placed_at,
     )
     session.add(
@@ -460,15 +514,39 @@ def verify(
     )
     sellers = {
         row.external_ref: row
-        for row in session.scalars(
-            select(Seller).where(Seller.tenant_id == tenant_id)
-        )
+        for row in session.scalars(select(Seller).where(Seller.tenant_id == tenant_id))
     }
 
     for order in clean:
         _verify_order(order, rules, sellers)
 
     _verify_positions(session, tenant_id, clean, spec)
+
+
+@dataclass(frozen=True)
+class _EngineOrder:
+    """An `OrderSpec` in the shape `reckonai.engine` reads.
+
+    The engine takes `typing.Protocol` types so it imports no ORM and no
+    `reckonai.sim` (specs/tech-stack.md section 6). An `OrderSpec` carries
+    amounts as strings and sellers by reference, so these two adapters are
+    where that becomes `Money` and a real seller id - once, rather than at
+    three call sites.
+    """
+
+    id: uuid.UUID
+    total: Money
+    placed_at: datetime
+
+
+@dataclass(frozen=True)
+class _EngineItem:
+    """An `ItemSpec` in the shape `reckonai.engine` reads."""
+
+    id: uuid.UUID
+    seller_id: uuid.UUID
+    category: str | None
+    line_total: Money
 
 
 def _verify_order(
@@ -494,35 +572,54 @@ def _verify_order(
             "is exactly why this check exists."
         )
 
-    commission_sum = Money("0", order.currency)
-    for seller_ref, owed in order.expected_entitlements.items():
-        share = Money("0", order.currency)
-        category: str | None = None
-        for item in order.items:
-            if item.seller_ref == seller_ref:
-                share = share + Money(item.line_total, order.currency)
-                category = item.category
+    # Invariants 3 and 4 run through the **real engine**, not a second copy of
+    # the calculation (Block A's handoff, and
+    # specs/2026-11-09-entitlement-engine/requirements.md D5). Two copies could
+    # disagree, and the one living in a test fixture is the one nobody reviews.
+    #
+    # D5a's independence is preserved, which is the property that matters: this
+    # check is still hand-written literals against a recomputation. The
+    # recomputation is simply the engine now, rather than a stand-in for it.
+    expected = expected_entitlement(
+        _EngineOrder(
+            id=uuid.uuid5(uuid.NAMESPACE_OID, order.ref),
+            total=stated_total,
+            placed_at=order.placed_at,
+        ),
+        [
+            _EngineItem(
+                id=uuid.uuid5(uuid.NAMESPACE_OID, item.ref),
+                seller_id=sellers[item.seller_ref].id,
+                category=item.category,
+                line_total=Money(item.line_total, order.currency),
+            )
+            for item in order.items
+        ],
+        rules,
+    )
 
-        rule = resolve_commission_rule(
-            rules,
-            seller_id=sellers[seller_ref].id,
-            category=category,
-            at=order.placed_at,
+    stated_sellers = set(order.expected_entitlements)
+    computed_sellers = {item.seller_ref for item in order.items}
+    if stated_sellers != computed_sellers:
+        raise SeedInconsistency(
+            f"{order.ref}: states entitlements for {sorted(stated_sellers)} but "
+            f"its items belong to {sorted(computed_sellers)}. A seller on the "
+            "order with no stated entitlement is an unchecked figure."
         )
-        commission = (share * rule.rate).quantize()
-        entitlement = share - commission
-        commission_sum = commission_sum + commission
 
-        if entitlement != Money(owed, order.currency):
+    for seller_ref, owed in order.expected_entitlements.items():
+        line = expected.for_seller(sellers[seller_ref].id)
+        if line.entitlement != Money(owed, order.currency):
             raise SeedInconsistency(
                 f"{order.ref} / {seller_ref}: stated entitlement {owed} but "
-                f"{share} at rate {rule.rate} leaves {entitlement}"
+                f"{line.gross_share} at rate {line.commission_rate} leaves "
+                f"{line.entitlement}"
             )
 
-    if commission_sum != Money(order.expected_commission, order.currency):
+    if expected.commission != Money(order.expected_commission, order.currency):
         raise SeedInconsistency(
             f"{order.ref}: stated commission {order.expected_commission} but "
-            f"the per-seller figures sum to {commission_sum}"
+            f"the per-seller figures sum to {expected.commission}"
         )
 
 
@@ -544,16 +641,12 @@ def _verify_positions(
     clean_refs = {o.ref for o in clean}
     entries = list(
         session.scalars(
-            select(SellerLedgerEntry).where(
-                SellerLedgerEntry.tenant_id == tenant_id
-            )
+            select(SellerLedgerEntry).where(SellerLedgerEntry.tenant_id == tenant_id)
         )
     )
     seller_refs = {
         row.id: row.external_ref
-        for row in session.scalars(
-            select(Seller).where(Seller.tenant_id == tenant_id)
-        )
+        for row in session.scalars(select(Seller).where(Seller.tenant_id == tenant_id))
     }
     clean_order_ids = {
         row.id

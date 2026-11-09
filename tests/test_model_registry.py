@@ -58,6 +58,8 @@ TABLES_WITHOUT_EVIDENCE = (
     frozenset(CATALOGUE_TABLES)
     | {"raw_payload"}
     | {"connector_mapping", "quarantined_record"}
+    # Records which dataset is loaded; holds no financial value.
+    | {"demo_seed"}
 )
 
 

@@ -34,6 +34,9 @@ demo-safe" in R15 actually means.
 from __future__ import annotations
 
 import argparse
+import dataclasses
+import hashlib
+import json
 import logging
 import sys
 from pathlib import Path
@@ -44,7 +47,7 @@ from sqlalchemy.orm import Session
 from reckonai.config import get_settings
 from reckonai.db import create_short_lived_engine
 from reckonai.logging import configure_logging, event
-from reckonai.models import Tenant
+from reckonai.models import DemoSeed, Tenant
 from reckonai.paypal import capture, replay
 from reckonai.sim import data, seed
 
@@ -54,20 +57,97 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 FIXTURES = ROOT / "fixtures" / "paypal"
 
 
-def ensure(session: Session, *, fixtures: Path = FIXTURES) -> dict[str, int]:
-    """Seed the marketplace and replay PayPal's side, if absent.
+def fingerprint(*, fixtures: Path = FIXTURES) -> str:
+    """Hex SHA-256 over the marketplace dataset **and** the captured fixtures.
 
-    Idempotent by construction: it returns early when the tenant exists, and
-    the replay ingester keys every write on `UNIQUE (tenant_id,
-    external_id)` anyway. A redeploy, or a rollback re-running the
-    pre-deploy command, is therefore harmless.
+    Both, because either changing alone makes what is loaded wrong: a
+    re-captured fixture with an unchanged `data.py` is as stale as the
+    reverse.
+
+    The dataset is hashed through `dataclasses.asdict`, so a changed amount,
+    a renamed seller or an added order all move the hash. Comments and
+    formatting do not, which is deliberate - re-seeding production because
+    somebody rewrapped a docstring would be noise.
     """
+    payload = {
+        "dataset": dataclasses.asdict(data.FULL),
+        "sellers": [dataclasses.asdict(s) for s in data.SELLERS],
+        # Tuple keys do not survive JSON, so they are flattened rather
+        # than stringified - a stable shape the hash can depend on.
+        "positions": sorted(
+            [seller, currency, value]
+            for (seller, currency), value in data.EXPECTED_POSITIONS.items()
+        ),
+        "commission": data.EXPECTED_COMMISSION_TOTALS,
+        "fixtures": {
+            path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in sorted(fixtures.glob("*.json"))
+        },
+    }
+    canonical = json.dumps(
+        _stable(payload), sort_keys=True, separators=(",", ":"), default=str
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _stable(value: object) -> object:
+    """Make a structure hashable to the *same* digest on every run.
+
+    **Sets must become sorted lists.** `Dataset.faulty_order_refs` is a
+    `frozenset`, and falling back to `str()` renders it in an order that
+    varies with Python's hash randomisation - so two identical runs produced
+    different fingerprints and `--ensure` re-seeded on every deploy,
+    defeating the whole mechanism. Caught by running it twice, which is the
+    only way this kind of instability shows up.
+    """
+    if isinstance(value, (set, frozenset)):
+        return sorted(str(item) for item in value)
+    if isinstance(value, dict):
+        return {str(k): _stable(v) for k, v in sorted(value.items(), key=str)}
+    if isinstance(value, (list, tuple)):
+        return [_stable(item) for item in value]
+    return value
+
+
+def ensure(session: Session, *, fixtures: Path = FIXTURES) -> dict[str, int]:
+    """Seed the marketplace and replay PayPal's side, if absent or stale.
+
+    Idempotent: a redeploy with an unchanged dataset does nothing, and the
+    replay ingester keys every write on `UNIQUE (tenant_id, external_id)`
+    anyway.
+
+    **And self-correcting, which the early return alone was not.** Returning
+    early whenever the tenant existed meant production never picked up a
+    dataset change: alter an amount, deploy, and the check stops with no
+    error while the demo runs on figures the repository no longer states.
+    So the fingerprint of what was loaded is compared, and a mismatch resets
+    and re-seeds rather than leaving stale data in place.
+    """
+    current = fingerprint(fixtures=fixtures)
     existing = session.scalar(
         select(Tenant).where(Tenant.slug == data.TENANT_SLUG)
     )
+
     if existing is not None:
-        logger.info(event("reckonai.demo.ensure", status="already_seeded"))
-        return {"seeded": 0}
+        loaded = session.scalar(
+            select(DemoSeed).where(DemoSeed.tenant_id == existing.id)
+        )
+        if loaded is not None and loaded.fingerprint == current:
+            logger.info(
+                event("reckonai.demo.ensure", status="already_seeded",
+                      fingerprint=current[:12])
+            )
+            return {"seeded": 0}
+
+        logger.info(
+            event(
+                "reckonai.demo.ensure",
+                status="stale",
+                was=(loaded.fingerprint[:12] if loaded else "unrecorded"),
+                now=current[:12],
+            )
+        )
+        reset(session)
 
     built = seed.build(session, data.FULL)
     session.flush()
@@ -76,9 +156,21 @@ def ensure(session: Session, *, fixtures: Path = FIXTURES) -> dict[str, int]:
     result = replay.ingest_directory(
         session, fixtures, tenant_id=built.tenant_id
     )
+    session.add(
+        DemoSeed(
+            tenant_id=built.tenant_id,
+            fingerprint=current,
+            order_count=len(data.FULL.orders),
+        )
+    )
+    session.flush()
+
     counts = dict(result.inserted)
     counts["orders"] = len(data.FULL.orders)
-    logger.info(event("reckonai.demo.ensure", status="seeded", **counts))
+    logger.info(
+        event("reckonai.demo.ensure", status="seeded",
+              fingerprint=current[:12], **counts)
+    )
     return counts
 
 
@@ -115,7 +207,7 @@ def reset(session: Session) -> None:
     for model in (
         FxConversion, PlatformFee, Disbursement, QuarantinedRecord,
         SellerLedgerEntry, Refund, Dispute, Capture, Payment,
-        OrderItem, CommissionRule, Order, Seller, RawPayload,
+        OrderItem, CommissionRule, Order, Seller, RawPayload, DemoSeed,
     ):
         session.execute(delete(model).where(model.tenant_id == tenant_id))
     session.execute(delete(Tenant).where(Tenant.id == tenant_id))

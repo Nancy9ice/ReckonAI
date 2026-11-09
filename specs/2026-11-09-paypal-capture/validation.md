@@ -118,7 +118,7 @@ no threshold can confuse them, and Phase 11 forbids introducing one.
 
 | Gate | Result |
 |---|---|
-| `uv run pytest` | **1258 passed** |
+| `uv run pytest` | **1283 passed** |
 | `uv run ruff check` | **Pass** |
 | Migration reverses, autogenerate empty | Unchanged — this block adds no table |
 | CI on the branch | Pending push |
@@ -147,6 +147,21 @@ token.
 
 **`--ensure` commits**, so running it against a developer's database breaks
 the next test run — observed immediately. Debt 4 of Block A in a new form.
+
+## 7a. The loader, verified on all four paths
+
+| Path | Result |
+|---|---|
+| Fresh database | seeds 18 orders, records the fingerprint |
+| Redeploy, nothing changed | **no-op** - `already_seeded`, same hash |
+| An amount changed in `data.py` | `stale`, resets, re-seeds |
+| A fixture re-captured | `stale`, resets, re-seeds |
+
+Verified by hand against the local database and pinned by
+`tests/test_demo_data.py` (14 tests). `seed.verify()` runs **inside**
+`ensure`, so a deploy cannot load an inconsistent baseline - which caught a
+leftover perturbation during development, refusing to seed ORD-0002 at 51.00
+against items summing to 50.00.
 
 ## 8. Not proven here
 

@@ -28,21 +28,48 @@ Also read, and in this order:
 - `specs/paypal-fields.md` — what PayPal actually returns, per field, with the
   evidence. The root specs state rules and point here; they do not repeat it.
 
-**Phases 0, 0b, 1, 2, 3, Block A (4 + 5 + 6), the PayPal capture (R16) and
-Block B (Phase 10, the entitlement engine) are complete. Block C is next** —
-Phase 11, matching and exception classification, ~4 h.
+**Phases 0, 0b, 1, 2, 3, Block A (4 + 5 + 6), the PayPal capture (R16), Block
+B (Phase 10, the entitlement engine) and Block C (Phase 11, matching and
+classification) are complete. Block D is next** — `jobs`, `SKIP LOCKED`,
+`processed_events`, the Cron Job, the date-windowed run, **and the exception
+table** Block C assigned to it.
 
-**Read `specs/2026-11-09-entitlement-engine/requirements.md` §4 first.** It is
-Block B's handoff: the engine's whole surface in one table, six things Block C
-must not get wrong, Block C's own first tasks carried over from earlier blocks,
-and four things not to spend time on. That directory's `validation.md` §7
-records six review findings — one of them a fabricated figure the engine
-produced on repeated partial refunds — and §8 the five mypy debts.
+**Read `specs/2026-11-09-matching-classification/requirements.md` §4 first.**
+It is Block C's handoff. In that directory's `validation.md`, **§9 tabulates
+the nine code-review findings and their fixes** — read it before extending the
+classifier — §10 lists the corrections this block made to earlier documents,
+and §11 what it did not prove.
 
 The engine lives in `reckonai/engine/`: `rules.py`, `ledger.py`,
 `entitlement.py`, `refunds.py`, `positions.py`. **It compares nothing** — it
-answers only what should be true. Matching, classification and every tolerance
-decision are Block C's.
+answers only what should be true. Comparison lives next door in
+`reckonai/recon/`: `vocabulary.py` (the `ExceptionCode` enum, pinned to the
+sim manifest), `matcher.py`, `tolerance.py` (**every tolerance decision in the
+product, and nowhere else**), `classifier.py`. Both packages are pure, under
+the purity gate and strict mypy.
+
+`reckonai/reconcile.py` is the seam: the only module holding both a `Session`
+and an `OrderCase`, and the entry point Block D's windowed run wraps —
+`run(session, tenant_id)` and `exceptions(session, tenant_id)`. **Count
+exceptions through `exceptions_only()`, never `len(findings)`** —
+`awaiting_evidence` is a finding and not an exception, so counting raw
+findings fails the false-positive gate while being correct.
+
+**Nothing persists a finding yet.** The `Finding` JSON contract is frozen and
+pinned by test; the table is Block D's, and Block F's dashboard depends on it.
+
+Three Block C results not to re-derive. **Do not widen the zero same-currency
+tolerance** — it rests on two measurements across all 21 captures, and F2's
+whole fault is 10.00 of commission. **One fault must stay one finding**:
+specific rules account for an amount and a residual check reports only the
+remainder, so a new rule that does not credit `explained` will double-report
+an existing fault. And **the sim manifest was stale in two ways** — F3's and F6's
+impact figures, and four evidence references naming records that exist
+nowhere, all of them Block A synthetic rows retired by R16. Corrected against
+the fixtures and now pinned by `tests/test_manifest_agrees_with_seed.py` and
+`test_every_reference_the_manifest_names_is_a_real_record`, the two guards
+that were missing. **Cite the capture, never `platform_fee.external_id`** —
+the latter is built from a payload UUID and changes on every seed.
 
 Two things from Block B that change how other code is written. A **type checker
 is now wired in**: `uv run mypy`, strict, scoped to `src/reckonai/engine/` by
@@ -64,7 +91,7 @@ useful detail, but **its seller list is out of date**: `vendor-citrine` and
 10%. Its claim that "every seeded capture states a fee" is also now false — see
 below.
 
-**Two measurements from Block B that Block C should not re-derive.** Across all
+**Two measurements from Block B, now relied on by Block C's comparisons.** Across all
 21 captured captures, `net_amount` equals `gross_amount - platform_fees`
 **exactly, zero residual** — so the expected entitlement is directly comparable
 to PayPal's `net_amount`, with nothing between them. And **no capture states a

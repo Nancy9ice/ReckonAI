@@ -453,15 +453,46 @@ record of completed phases and record what was true when written.
 
 ## State
 
-**Updated 2026-11-09 after Block B.** This section is the first thing a new
+**Updated 2026-11-09 after Block C.** This section is the first thing a new
 session reads, so it is kept current rather than left as a record of when the
 replan was written.
 
 Phases 0, 0b, 1, 2, 3 and **Block A (4 + 5 + 6) are complete and merged** — PR
 #14, merge commit `2d002b1`, CI green.
 
-**The PayPal capture (R16) and Block B (Phase 10) are complete**, and **Block C
-is next** (Phase 11, matching and exception classification, ~4 h).
+**The PayPal capture (R16), Block B (Phase 10) and Block C (Phase 11) are
+complete.** **Block D is next** — fixture replay is already done by R16, so
+what remains of it is `jobs`, `SKIP LOCKED`, `processed_events`, the Cron Job
+and the date-windowed run, **plus the exception table Block C assigned to it**
+(that directory's `requirements.md` D8; Block F's dashboard depends on it).
+
+Block C delivered `reckonai/recon/{vocabulary,matcher,tolerance,classifier}.py`
+— pure, under the same purity and mypy gates as the engine — and
+`reckonai/reconcile.py`, the one module holding both a `Session` and an
+`OrderCase`, which is the entry point Block D's run wraps. All four Phase 11
+exit criteria pass against the seeded tenant: six faults detected with the
+manifest's own impact figures, and **zero exceptions on the fifteen clean
+purchase units**.
+
+**A `/code-review medium` on Block C returned nine findings, all nine real**,
+two of them reproducible false positives on correct data - the worst reported a
+clean equal-share two-seller order as duplicated, which no seeded order could
+show because none splits equally. Block C's `validation.md` §9 tabulates all
+nine with their fixes, and each has a regression test. The lesson worth
+carrying past this block: **the gate proves the dataset, not the logic** - a
+rule can be wrong in a shape the eighteen seeded orders do not contain.
+
+Three further things worth carrying at this level. **Two of the manifest's six
+impact figures were stale** — F3 and F6 described no record in the dataset, left
+behind when R16's capture re-pointed the seed at real provider figures — so the
+gate would have failed against a correct implementation; they are corrected
+against the fixtures and now pinned by `tests/test_manifest_agrees_with_seed.py`.
+**The FX guard turned out not to be a tolerance**: comparing only reported
+figures removes the shape that produces the one-cent artefact, so ORD-0008 is
+clean because the forbidden arithmetic is absent. And **the held-funds guard is
+not exercised by the database gate** — ORD-0005's ledger is complete, so the
+residual never reaches it; it is proven in unit tests, and that gap is recorded
+rather than papered over.
 
 Block B delivered `reckonai/engine/{entitlement,refunds,positions}.py` — pure
 functions over `typing.Protocol` inputs, with all six [[roadmap]] Phase 10 exit

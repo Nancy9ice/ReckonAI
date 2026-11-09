@@ -36,7 +36,7 @@ SOURCE_ROOT = PROJECT_ROOT / "src" / "reckonai"
 #: each is parsed. specs/tech-stack.md section 2 applies "at any layer", so the
 #: ORM models and the JSON schemas are in scope as much as the value object -
 #: a `float` column or a `float` field would defeat the whole thing.
-MONEY_PATH_PACKAGES = ("money", "engine", "models", "schemas")
+MONEY_PATH_PACKAGES = ("money", "engine", "recon", "models", "schemas")
 
 #: Imports forbidden inside the pure packages, per specs/tech-stack.md
 #: section 6: "No database handle, no HTTP client, no clock reads inside the
@@ -46,7 +46,12 @@ FORBIDDEN_IMPORTS = ("sqlalchemy", "psycopg", "httpx", "requests", "reckonai.db"
 #: The packages that rule applies to. `models` and `schemas` are deliberately
 #: absent - a declarative model *is* the database mapping, and excluding it
 #: would make the gate meaningless rather than strict.
-PURE_PACKAGES = ("money", "engine")
+#: Phase 11 adds `recon`: it compares amounts and decides what a difference
+#: means, so a `float` or a database handle in it is the same class of defect
+#: as one in the engine. specs/2026-11-09-matching-classification/requirements.md
+#: D1 records the decision to keep it a separate package rather than widening
+#: the engine's surface.
+PURE_PACKAGES = ("money", "engine", "recon")
 
 
 def money_path_modules() -> list[Path]:

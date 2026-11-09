@@ -1,11 +1,13 @@
 # ReckonAI — Roadmap
 
 > **Status:** Constitution. Implementation order and phase boundaries.
-> **Next: Phase 11, matching and exception classification** (the replan's Block
-> C). Phases 0, 0b, 1, 2, 3, 4, 5, 6 and 10 are complete; Phase 7 is partially
+> **Next: Block D** — the `jobs` table, `FOR UPDATE SKIP LOCKED`,
+> `processed_events`, the Cron Job, the date-windowed run, **and the exception
+> table Phase 11 assigned to it** (that block's `requirements.md` D8). Phases
+> 0, 0b, 1, 2, 3, 4, 5, 6, 10 and 11 are complete; Phase 7 is partially
 > complete and its remainder is listed in its own section. Read
-> `specs/2026-11-09-entitlement-engine/requirements.md` §4 first — Phase 10's
-> handoff — and `specs/2026-11-09-paypal-capture/validation.md` §2 for the
+> `specs/2026-11-09-matching-classification/requirements.md` §4 first — Phase
+> 11's handoff — and `specs/2026-11-09-paypal-capture/validation.md` §2 for the
 > figures every expected amount is checked against, which supersedes Block A's.
 > **Strategy:** Foundation-first — each layer is completed before the next begins.
 > **Budget:** ~1 week.
@@ -880,7 +882,28 @@ multi-currency position.
 
 ---
 
-## Phase 11 — Matching and exception classification · 0.5 day
+## Phase 11 — Matching and exception classification · 0.5 day · **COMPLETE 2026-11-09**
+
+> **Delivered as Block C.** `reckonai/recon/{vocabulary,matcher,tolerance,classifier}.py`
+> — pure, under the same purity and strict-mypy gates as the engine — plus
+> `reckonai/reconcile.py`, the one module holding both a `Session` and an
+> `OrderCase` and the entry point Block D's windowed run wraps. Spec,
+> decisions, handoff and merge gate are in
+> `specs/2026-11-09-matching-classification/`; **§4 of its `requirements.md`
+> is the handoff Block D and Block E should read first.**
+>
+> All four exit criteria below pass against the seeded tenant: six faults
+> detected with the manifest's own impact figures and evidence ids, and **zero
+> exceptions on the fifteen clean purchase units**.
+>
+> Three results worth not rediscovering. **The FX guard is not a tolerance** —
+> comparing only reported figures removes the shape that produces the
+> one-cent artefact, so ORD-0008 is clean because the arithmetic is absent
+> (D4a). **The held-funds guard is not exercised by the database gate** —
+> ORD-0005's ledger is complete, so the residual never reaches it; it is
+> proven in unit tests (D4b). And a `/code-review medium` returned **nine
+> findings, all nine real**, two of them false positives on correct data that
+> the seeded dataset could not show — `validation.md` §9 has the table.
 
 **Goal:** Turn expected-vs-actual differences into classified exceptions.
 

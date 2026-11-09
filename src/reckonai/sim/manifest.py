@@ -110,16 +110,25 @@ FAULTS: Final[tuple[Fault, ...]] = (
         order_ref="ORD-0015",
         evidence_refs=("ORD-0015", "FX-ORD-0015", "CAP-ORD-0015"),
         description=(
-            "The conversion reports a rate of 0.9183 on a 276.00 USD seller "
-            "share, which implies 253.45 EUR, and a settlement of 248.40 EUR "
-            "- consistent with a stale rate near 0.90. The discrepancy is "
-            "5.05 EUR, two orders of magnitude clear of the one-cent rounding "
-            "artefact that ORD-0008 carries legitimately, so no threshold can "
-            "confuse the two."
+            "PayPal converted the 270.00 EUR net to a reported settlement of "
+            "294.16 USD at a rate of 1.089477173902071. The marketplace "
+            "records what it owes in its home currency at a stale rate, "
+            "262.00 USD, so the discrepancy is 32.16 USD - three orders of "
+            "magnitude clear of the one-cent rounding artefact ORD-0008 "
+            "carries legitimately, so no threshold can confuse the two."
         ),
         expected_classification=FX_DISCREPANCY,
-        impact_amount="5.05",
-        impact_currency="EUR",
+        # **Corrected 2026-11-09, Block C.** This read 5.05 EUR against a
+        # 276.00 USD share at a rate of 0.9183, which describes no record in
+        # the dataset: those were Block A's synthetic provider figures, and
+        # R16's capture re-pointed the seed at real ones without this row
+        # following. `fixtures/paypal/ORD-0015.json`, `sim/data.py` and
+        # `specs/2026-11-09-paypal-capture/validation.md` section 2 all agree
+        # on 270.00 EUR net and a 294.16 USD receivable; only this line did
+        # not. The currency changes with it - the gap is in USD, which is the
+        # currency the marketplace mis-recorded in.
+        impact_amount="32.16",
+        impact_currency="USD",
         scenario=3,
     ),
     Fault(
@@ -166,12 +175,21 @@ FAULTS: Final[tuple[Fault, ...]] = (
         order_ref="ORD-0018",
         evidence_refs=("REL-ORD-0018", "ORD-0018", "ITEM-0018-A"),
         description=(
-            "PayPal released 120.00 EUR against an obligation of 138.00, an "
-            "18.00 shortfall on a release recorded as completed - so there is "
-            "nothing still in flight to explain it."
+            "PayPal released the full 135.00 EUR net and the seller ledger "
+            "credits 120.00, a 15.00 EUR shortfall against an obligation "
+            "PayPal has already discharged - so there is nothing still in "
+            "flight to explain it."
         ),
         expected_classification=DISBURSEMENT_MISMATCH,
-        impact_amount="18.00",
+        # **Corrected 2026-11-09, Block C.** This read an 18.00 shortfall
+        # against an obligation of 138.00, which implies a commission of
+        # 12.00 on the 150.00 order. The applicable rule is the tenant's 10%,
+        # so the commission is 15.00 and the entitlement 135.00 - as
+        # `sim/data.py`, `fixtures/paypal/ORD-0018.json` and
+        # `specs/2026-11-09-paypal-capture/validation.md` section 2 all state.
+        # The 138.00 figure predates a commission change and was not carried
+        # forward here.
+        impact_amount="15.00",
         impact_currency="EUR",
     ),
 )

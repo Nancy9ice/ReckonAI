@@ -34,6 +34,15 @@ and the `Finding` JSON contract frozen here is what Block F renders.
 
 from __future__ import annotations
 
+from .classifier import (
+    CaptureRecordLike,
+    DisbursementLike,
+    Finding,
+    OrderCase,
+    PlatformFeeLike,
+    classify_order,
+    exceptions_only,
+)
 from .matcher import (
     LedgerEntryLike,
     MatchSet,
@@ -48,6 +57,14 @@ from .matcher import (
     order_ref_for_reference,
     order_references,
 )
+from .tolerance import (
+    AmountNotStated,
+    Comparison,
+    compare_converted_total,
+    compare_exact,
+    is_healthy_disbursement,
+    require_stated,
+)
 from .vocabulary import (
     EvidenceBasis,
     ExceptionCode,
@@ -56,17 +73,30 @@ from .vocabulary import (
 )
 
 __all__ = [
+    "AmountNotStated",
+    "CaptureRecordLike",
+    "Comparison",
+    "DisbursementLike",
     "EvidenceBasis",
     "ExceptionCode",
+    "Finding",
     "LedgerEntryLike",
     "MatchSet",
+    "OrderCase",
     "OrderMatch",
     "OrderRecordLike",
     "PaymentRecordLike",
+    "PlatformFeeLike",
     "RefundMatch",
     "RefundRecordLike",
+    "classify_order",
     "code_for_engine_error",
+    "compare_converted_total",
+    "compare_exact",
+    "exceptions_only",
     "is_exception",
+    "is_healthy_disbursement",
+    "require_stated",
     "ledger_by_category",
     "match_orders",
     "match_refunds",

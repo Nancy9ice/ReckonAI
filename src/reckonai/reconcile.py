@@ -42,7 +42,9 @@ from reckonai.models import (
     Refund,
     SellerLedgerEntry,
 )
+from reckonai.money import Money
 from reckonai.recon import (
+    ExceptionCode,
     Finding,
     OrderCase,
     OrderMatch,
@@ -50,6 +52,7 @@ from reckonai.recon import (
     classify_order,
     exceptions_only,
     match_orders,
+    order_ref_for_reference,
     order_references,
 )
 
@@ -130,11 +133,23 @@ def load_order_cases(
         session.scalars(select(Disbursement).where(Disbursement.tenant_id == tenant_id))
     )
 
+    # Which order each capture belongs to, per purchase unit. A payment may
+    # legitimately carry units from two marketplace orders, and handing each
+    # order *all* of the payment's captures would attribute the other order's
+    # money - and its platform fees - to both.
+    capture_orders = _capture_orders(payloads, payments, matches.matched, captures)
+    release_captures = _release_captures(payloads)
+
     cases: list[OrderCase] = []
     for match in matches.matched:
         order = orders_by_id[match.order_id]
-        order_captures = tuple(captures.get(match.payment_id, ()))
+        order_captures = tuple(
+            capture
+            for capture in captures.get(match.payment_id, ())
+            if capture_orders.get(capture.id, match.order_ref) == match.order_ref
+        )
         capture_ids = {capture.id for capture in order_captures}
+        capture_refs = {capture.external_id for capture in order_captures}
 
         # `refund.capture_id` is NULL on every row - the ingester records the
         # HATEOAS href and leaves the link unmade, because resolving it is a
@@ -158,8 +173,16 @@ def load_order_cases(
                     for fee in fees
                     if fee.capture_id in capture_ids or fee.refund_id in refund_ids
                 ),
+                # `Disbursement.capture_id` is NULL on every row, although
+                # the release payload states the capture outright in
+                # `reference_id` with `reference_type: TRANSACTION_ID` - see
+                # `reckonai.models.disbursements`. Resolving it here is what
+                # makes a release citable as evidence and lets T3 see a
+                # release still in flight.
                 disbursements=tuple(
-                    release for release in releases if release.capture_id in capture_ids
+                    release
+                    for release in releases
+                    if release_captures.get(release.raw_payload_id) in capture_refs
                 ),
                 marketplace_refunds=tuple(
                     refund
@@ -185,11 +208,51 @@ def run(session: Session, tenant_id: uuid.UUID) -> tuple[Finding, ...]:
     sequence, which is what makes a historical run re-derivable
     (specs/mission.md P7).
     """
-    cases, _, _ = load_order_cases(session, tenant_id)
+    cases, marketplace_only, provider_only = load_order_cases(session, tenant_id)
 
     findings: list[Finding] = []
     for case in cases:
         findings.extend(classify_order(case))
+
+    # **Neither unmatched side is dropped.** `load_order_cases` separates them
+    # so they can be reported, and returning only the classified cases made
+    # them vanish from the product entirely - an order PayPal has no record
+    # of would simply not appear. Both are `awaiting_evidence` rather than
+    # discrepancies: unmatched is not the same as wrong (specs/mission.md P4),
+    # the reporting APIs run about a day behind, and R9's next scheduled run
+    # is the retry.
+    for order_ref in marketplace_only:
+        findings.append(
+            Finding(
+                code=ExceptionCode.AWAITING_EVIDENCE,
+                order_ref=order_ref,
+                detail=(
+                    "The marketplace recorded this order and no PayPal record "
+                    "has been matched to it yet, so no expected position can "
+                    "be compared. The next scheduled run re-evaluates it."
+                ),
+                impact=Money.zero(_currency_of(session, tenant_id, order_ref)),
+                evidence_refs=(order_ref,),
+                confirmed=False,
+            )
+        )
+
+    for payment_ref in provider_only:
+        findings.append(
+            Finding(
+                code=ExceptionCode.AWAITING_EVIDENCE,
+                order_ref=payment_ref,
+                detail=(
+                    f"PayPal payment {payment_ref} could not be matched to any "
+                    "marketplace order, so there is nothing to reconcile it "
+                    "against. The next scheduled run re-evaluates it."
+                ),
+                impact=Money.zero("USD"),
+                evidence_refs=(payment_ref,),
+                confirmed=False,
+            )
+        )
+
     return tuple(findings)
 
 
@@ -210,6 +273,93 @@ def _group(rows, key):  # type: ignore[no-untyped-def]
         if bucket is not None:
             grouped[bucket].append(row)
     return grouped
+
+
+def _currency_of(session: Session, tenant_id: uuid.UUID, order_ref: str) -> str:
+    """The currency of an order we could not reconcile.
+
+    Read from the order rather than defaulted, so a zero impact on an
+    unmatched order still carries the right currency - an amount without its
+    own currency is the mistake specs/tech-stack.md section 9.3 names as the
+    likeliest place for a money figure to be quietly wrong.
+    """
+    order = session.scalar(
+        select(Order).where(
+            Order.tenant_id == tenant_id, Order.external_ref == order_ref
+        )
+    )
+    return order.total.currency if order is not None else "USD"
+
+
+def _capture_orders(
+    payloads: dict[uuid.UUID, RawPayload],
+    payments: tuple[Payment, ...],
+    matched: tuple[OrderMatch, ...],
+    captures_by_payment: dict[uuid.UUID, list[Capture]],
+) -> dict[uuid.UUID, str]:
+    """Which order each capture belongs to, from its own purchase unit.
+
+    The payment-level match says which orders a payment covers; this says
+    which of them each individual capture is for, by reading the capture id
+    out of the purchase unit that carries it alongside that unit's
+    `reference_id`.
+    """
+    known = {match.order_ref for match in matched}
+    resolved: dict[uuid.UUID, str] = {}
+
+    for payment in payments:
+        payload = payloads.get(payment.raw_payload_id)
+        if payload is None:
+            continue
+
+        ref_for_external: dict[str, str] = {}
+        for unit in (payload.body or {}).get("purchase_units", []):
+            if not isinstance(unit, dict):
+                continue
+            order_ref = order_ref_for_reference(
+                str(unit.get("reference_id") or ""), frozenset(known)
+            )
+            if order_ref is None:
+                continue
+            for capture in unit.get("payments", {}).get("captures", []):
+                if isinstance(capture, dict) and capture.get("id"):
+                    ref_for_external[str(capture["id"])] = order_ref
+
+        for capture in captures_by_payment.get(payment.id, ()):
+            order_ref = ref_for_external.get(capture.external_id)
+            if order_ref is not None:
+                resolved[capture.id] = order_ref
+
+    return resolved
+
+
+def _release_captures(
+    payloads: dict[uuid.UUID, RawPayload],
+) -> dict[uuid.UUID, str]:
+    """The capture each release discharged, keyed by the release's payload id.
+
+    Keyed by payload rather than by release row, because the resolution is
+    read out of the payload and a `Disbursement` is reached from it through
+    `raw_payload_id`. Keying it by the release's own id looked right and
+    silently matched nothing.
+
+    `reckonai.models.disbursements` documents `reference_id` with
+    `reference_type: TRANSACTION_ID` as "provider-supplied, and the capture id
+    itself" - no parsing and no derivation flag. The ingester nonetheless
+    leaves `capture_id` NULL, so the resolution happens here with the other
+    cross-source claims.
+    """
+    resolved: dict[uuid.UUID, str] = {}
+    for payload in payloads.values():
+        if payload.source_record_type != "disbursement":
+            continue
+        body = payload.body or {}
+        if body.get("reference_type") != "TRANSACTION_ID":
+            continue
+        reference = body.get("reference_id")
+        if isinstance(reference, str) and reference:
+            resolved[payload.id] = reference
+    return resolved
 
 
 def _source_of(

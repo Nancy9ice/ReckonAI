@@ -251,6 +251,13 @@ def within_rounding_of_rate(
     # quantization itself: on the Phase 0 fixture the implied figure is
     # 104.04507010764778050 against a reported 104.05.
     implied = source.amount * rate
-    slack = Decimal(legs) / Decimal(100)
+
+    # Derived through `Money.from_minor_units`, like `compare_converted_total`,
+    # rather than divided by 100. A hardcoded two-decimal minor unit is 100x
+    # too tight for a zero-decimal currency such as JPY and 10x too loose for
+    # a three-decimal one - and this function's whole job is to judge a
+    # rounding residue, so the size of a minor unit is the one thing it cannot
+    # get wrong.
+    slack = Money.from_minor_units(legs, target.currency).amount
 
     return abs(implied - target.amount) <= slack

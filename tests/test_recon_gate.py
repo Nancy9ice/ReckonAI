@@ -153,20 +153,69 @@ def test_every_faults_impact_matches_the_manifest(
 def test_every_fault_cites_the_evidence_the_manifest_names(
     findings: tuple[Finding, ...], fault: manifest.Fault
 ) -> None:
-    """Criterion 4's evidence ids.
+    """Criterion 4's evidence ids - **every one the manifest names**.
+
+    This asserted only that the order itself was cited until a review pointed
+    out it was proving almost nothing. Tightened to full coverage, which then
+    showed that F6 cited no release at all and that four of the manifest's
+    own references named records that exist nowhere - Block A's synthetic
+    provider rows, retired by R16 and never followed up.
 
     The manifest records "the source references a correct investigation should
-    cite", so Block E's "did it cite the right evidence?" is scoreable rather
-    than a judgement call. At least the order itself must be cited, and every
-    reference carried must be a real one.
+    cite", so this is what makes Block E's "did it cite the right evidence?"
+    scoreable rather than a judgement call.
     """
     reported = by_order(findings, fault.order_ref)
     assert reported
 
     cited = set(reported[0].evidence_refs)
+    missing = set(fault.evidence_refs) - cited
 
     assert cited, f"{fault.id} cites nothing"
-    assert fault.order_ref in cited, f"{fault.id} does not cite its own order"
+    assert missing == set(), (
+        f"{fault.id} does not cite {sorted(missing)}; it cites {sorted(cited)}"
+    )
+
+
+def test_every_reference_the_manifest_names_is_a_real_record(
+    session: Session, seeded: uuid.UUID
+) -> None:
+    """**The guard that was missing**, and the reason four phantoms survived.
+
+    `test_no_finding_cites_a_reference_that_does_not_exist` checks the
+    classifier's output; nothing checked the manifest's own input. So
+    `FEE-ORD-0014`, `CAP-ORD-0015`, `FX-ORD-0015` and `REL-ORD-0018` sat in
+    the ground truth naming records R16's capture had retired, and the
+    coverage assertion above could never have passed.
+    """
+    from reckonai.models import (
+        Capture,
+        Disbursement,
+        Order,
+        OrderItem,
+        PlatformFee,
+        Refund,
+        SellerLedgerEntry,
+    )
+
+    real: set[str] = set()
+    for model, column in (
+        (Order, Order.external_ref),
+        (OrderItem, OrderItem.external_ref),
+        (Capture, Capture.external_id),
+        (Refund, Refund.external_id),
+        (PlatformFee, PlatformFee.external_id),
+        (Disbursement, Disbursement.external_id),
+        (SellerLedgerEntry, SellerLedgerEntry.external_ref),
+    ):
+        real.update(session.scalars(select(column).where(model.tenant_id == seeded)))
+
+    named = {ref for fault in manifest.FAULTS for ref in fault.evidence_refs}
+    phantom = named - real
+
+    assert phantom == set(), (
+        f"the manifest names records that do not exist: {sorted(phantom)}"
+    )
 
 
 def test_no_finding_cites_a_reference_that_does_not_exist(
@@ -180,6 +229,7 @@ def test_no_finding_cites_a_reference_that_does_not_exist(
         Capture,
         Disbursement,
         Order,
+        OrderItem,
         PlatformFee,
         Refund,
         SellerLedgerEntry,
@@ -188,6 +238,7 @@ def test_no_finding_cites_a_reference_that_does_not_exist(
     real: set[str] = set()
     for model, column in (
         (Order, Order.external_ref),
+        (OrderItem, OrderItem.external_ref),
         (Capture, Capture.external_id),
         (SellerLedgerEntry, SellerLedgerEntry.external_ref),
         (Refund, Refund.external_id),

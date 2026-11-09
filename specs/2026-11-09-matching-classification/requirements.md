@@ -229,6 +229,13 @@ the capture block's hand-check table all agreed against the manifest in both
 cases, so this is a stale document corrected against provider evidence, not
 ground truth bent to fit code.
 
+**A third instance surfaced after the code review**: four of the manifest's
+*evidence references* also named retired synthetic rows - `FEE-ORD-0014`,
+`CAP-ORD-0015`, `FX-ORD-0015`, `REL-ORD-0018`. Corrected to fixture-stable
+ids. One consequence is permanent: **`platform_fee.external_id` cannot be
+cited stably**, because `replay` builds it from a payload UUID that changes on
+every seed, so a finding cites the capture that carries the fee instead.
+
 `tests/test_manifest_agrees_with_seed.py` is the guard that was missing: it
 derives each fault's impact from the seed and pins F3's reported settlement to
 the fixture itself. Without it the gate would have failed against a correct

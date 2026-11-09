@@ -85,6 +85,20 @@ POSITION_CATEGORIES: tuple[str, ...] = (
 
 
 @runtime_checkable
+class OrderItemRecordLike(OrderItemLike, Protocol):
+    """An order item, plus the reference an investigation would cite.
+
+    The engine's `OrderItemLike` carries no `external_ref` - it computes
+    rather than reports and has no need of one. Citation does need it:
+    `reckonai.sim.manifest` names the item among the records a correct
+    investigation should cite for F1, F2, F3 and F6, and Block E is scored on
+    citing the right evidence.
+    """
+
+    external_ref: str
+
+
+@runtime_checkable
 class CaptureRecordLike(Protocol):
     """PayPal's capture, including the breakdown that can be entirely absent.
 
@@ -195,6 +209,19 @@ class Finding:
         }
 
 
+def _item_refs(case: OrderCase, seller_id: uuid.UUID | None) -> tuple[str, ...]:
+    """The references of the items a finding rests on.
+
+    Scoped to the seller: citing another seller's line as evidence for this
+    seller's shortfall sends an investigation to the wrong record.
+    """
+    return tuple(
+        item.external_ref
+        for item in case.items
+        if seller_id is None or item.seller_id == seller_id
+    )
+
+
 def _amount(money: Money) -> dict[str, str]:
     return {"amount": str(money.quantize().amount), "currency": money.currency}
 
@@ -211,7 +238,7 @@ class OrderCase:
 
     order_ref: str
     order: OrderLike
-    items: tuple[OrderItemLike, ...]
+    items: tuple[OrderItemRecordLike, ...]
     rules: tuple[CommissionRuleLike, ...]
 
     captures: tuple[CaptureRecordLike, ...] = ()
@@ -327,11 +354,35 @@ def classify_order(case: OrderCase) -> tuple[Finding, ...]:
             )
         )
 
-    explained: dict[uuid.UUID, Money] = {}
+    # The marketplace's own reference for each matched provider refund, so a
+    # finding cites both sides. The manifest names the marketplace refund for
+    # F1, and Block E is scored on citing the right record.
+    marketplace_counterparts = {
+        match.provider_refund_id: (match.marketplace_external_id,) for match in matches
+    }
+
+    explained: dict[tuple[uuid.UUID, str], Money] = {}
+
+    # **Duplicates first, and the surplus row is held out of every later
+    # comparison.** A duplicated commission debit is a duplicate, a
+    # commission mismatch and a position shortfall at once; offsetting it
+    # afterwards double-counted the amount and gave three findings for one
+    # fault. Excluding the surplus is the same move as holding an unreflected
+    # refund out of the expected position: the defect is named once, and every
+    # later comparison sees books that are internally consistent.
+    duplicate_findings, surplus = _duplicate_findings(case, grouped)
+    grouped = {
+        key: tuple(entry for entry in entries if entry.id not in surplus)
+        for key, entries in grouped.items()
+    }
 
     findings.extend(_commission_findings(case, expected, grouped, explained))
-    findings.extend(_missing_adjustment_findings(case, unreflected, grouped))
-    findings.extend(_duplicate_findings(case, grouped, explained))
+    findings.extend(
+        _missing_adjustment_findings(
+            case, unreflected, grouped, marketplace_counterparts
+        )
+    )
+    findings.extend(duplicate_findings)
     findings.extend(_residual_findings(case, expected, grouped, explained))
 
     return tuple(findings)
@@ -414,18 +465,27 @@ def _entries_for(
 
 
 def _credit(
-    explained: dict[uuid.UUID, Money], seller_id: uuid.UUID, amount: Money
+    explained: dict[tuple[uuid.UUID, str], Money],
+    seller_id: uuid.UUID,
+    amount: Money,
 ) -> None:
-    """Record that `amount` of a seller's residual is accounted for."""
-    running = explained.get(seller_id)
-    explained[seller_id] = amount if running is None else running + amount
+    """Record that `amount` of a seller's residual is accounted for.
+
+    **Keyed by currency as well as by seller.** A ledger can carry a currency
+    the order does not - F3's whole shape - so one running total per seller
+    could be asked to add EUR to USD, and `Money` would raise
+    mid-reconciliation rather than produce a finding (specs/mission.md P2).
+    """
+    key = (seller_id, amount.currency)
+    running = explained.get(key)
+    explained[key] = amount if running is None else running + amount
 
 
 def _commission_findings(
     case: OrderCase,
     expected: OrderEntitlement,
     grouped: Mapping[tuple[uuid.UUID, str], tuple[LedgerEntryLike, ...]],
-    explained: dict[uuid.UUID, Money],
+    explained: dict[tuple[uuid.UUID, str], Money],
 ) -> list[Finding]:
     """The commission the marketplace kept against the commission due.
 
@@ -466,6 +526,15 @@ def _commission_findings(
             for fee in case.platform_fees
             if fee.seller_id == line.seller_id
         )
+        # The capture is cited beside the fee because it is the stable
+        # reference: `platform_fee.external_id` is built as
+        # `f"pf-{payload_uuid}-{index}"` and changes on every seed, so it can
+        # name the evidence but cannot be relied on to find it again.
+        capture_refs = tuple(
+            capture.external_id
+            for capture in case.captures
+            if capture.seller_id == line.seller_id
+        )
         findings.append(
             Finding(
                 code=ExceptionCode.COMMISSION_MISMATCH,
@@ -476,7 +545,12 @@ def _commission_findings(
                     "the independent evidence."
                 ),
                 impact=result.impact,
-                evidence_refs=(case.order_ref, *fee_refs),
+                evidence_refs=(
+                    case.order_ref,
+                    *_item_refs(case, line.seller_id),
+                    *capture_refs,
+                    *fee_refs,
+                ),
                 seller_id=line.seller_id,
                 expected=line.commission,
                 reported=recorded,
@@ -493,6 +567,7 @@ def _missing_adjustment_findings(
     case: OrderCase,
     unreflected: tuple[RefundRecordLike, ...],
     grouped: Mapping[tuple[uuid.UUID, str], tuple[LedgerEntryLike, ...]],
+    counterparts: Mapping[uuid.UUID, tuple[str, ...]] | None = None,
 ) -> list[Finding]:
     """A refund both sources agree happened, that the ledger never recorded.
 
@@ -505,6 +580,7 @@ def _missing_adjustment_findings(
     keep commission on a reversed sale.
     """
     findings: list[Finding] = []
+    counterparts = counterparts or {}
 
     for refund in unreflected:
         seller_id = refund.seller_id
@@ -538,7 +614,13 @@ def _missing_adjustment_findings(
                     "seller's position is overstated."
                 ),
                 impact=impact,
-                evidence_refs=(refund.external_id, case.order_ref, *reversal_refs),
+                evidence_refs=(
+                    refund.external_id,
+                    case.order_ref,
+                    *counterparts.get(refund.id, ()),
+                    *_item_refs(case, seller_id),
+                    *reversal_refs,
+                ),
                 evidence_basis=(
                     EvidenceBasis.DERIVED_LINKAGE
                     if refund.capture_linkage_is_derived
@@ -554,8 +636,7 @@ def _missing_adjustment_findings(
 def _duplicate_findings(
     case: OrderCase,
     grouped: Mapping[tuple[uuid.UUID, str], tuple[LedgerEntryLike, ...]],
-    explained: dict[uuid.UUID, Money],
-) -> list[Finding]:
+) -> tuple[list[Finding], set[uuid.UUID]]:
     """One movement recorded twice under distinct references. F4.
 
     Distinct references are the only form this can take: `UNIQUE (tenant_id,
@@ -564,6 +645,7 @@ def _duplicate_findings(
     one order, not by a repeated reference.
     """
     findings: list[Finding] = []
+    surplus: set[uuid.UUID] = set()
 
     for (order_id, category), entries in sorted(
         grouped.items(), key=lambda item: (str(item[0][0]), item[0][1])
@@ -571,9 +653,15 @@ def _duplicate_findings(
         if order_id != case.order.id or len(entries) < 2:
             continue
 
-        seen: dict[tuple[str, str, str], LedgerEntryLike] = {}
+        # **Keyed by seller as well as by amount.** Two sellers with equal
+        # shares produce two identical `sale` credits and two identical
+        # `commission` debits, and a key without the seller reported that
+        # healthy order as duplicated twice, plus a self-contradicting
+        # residual. No seeded order splits equally, so the gate passed on luck.
+        seen: dict[tuple[uuid.UUID, str, str, str], LedgerEntryLike] = {}
         for entry in entries:
             key = (
+                entry.seller_id,
                 str(entry.amount.quantize().amount),
                 entry.amount.currency,
                 entry.transaction_type,
@@ -602,16 +690,18 @@ def _duplicate_findings(
                     seller_id=entry.seller_id,
                 )
             )
-            _credit(explained, entry.seller_id, entry.amount)
+            # The surplus row, held out of every later comparison rather
+            # than offset against them afterwards.
+            surplus.add(entry.id)
 
-    return findings
+    return findings, surplus
 
 
 def _residual_findings(
     case: OrderCase,
     expected: OrderEntitlement,
     grouped: Mapping[tuple[uuid.UUID, str], tuple[LedgerEntryLike, ...]],
-    explained: dict[uuid.UUID, Money],
+    explained: dict[tuple[uuid.UUID, str], Money],
 ) -> list[Finding]:
     """What no specific rule explained.
 
@@ -655,13 +745,30 @@ def _residual_findings(
 
         recorded = position(entries, line.entitlement.currency)
         result = compare_exact(line.entitlement, recorded)
-        accounted = explained.get(line.seller_id, Money.zero(line.entitlement.currency))
+        accounted = explained.get(
+            (line.seller_id, line.entitlement.currency),
+            Money.zero(line.entitlement.currency),
+        )
         residual = result.difference - accounted
         if residual.is_zero():
             continue
 
+        # **Both sides of the held-funds question.** A capture's
+        # `disbursement_state` only ever reads `disbursed_at_capture`,
+        # `disbursement_completed` or `funds_held`; `release_requested` and
+        # `disbursement_pending` exist solely on the `disbursement` row. So
+        # consulting the capture alone left a release in flight - the exact
+        # thing T3 tolerates - reported as a mismatch.
         capture = _capture_for(case, line.seller_id)
-        if capture is not None and is_healthy_disbursement(capture.disbursement_state):
+        states = [
+            release.state
+            for release in case.disbursements
+            if release.seller_id == line.seller_id
+        ]
+        if capture is not None:
+            states.append(capture.disbursement_state)
+
+        if any(is_healthy_disbursement(state) for state in states):
             # Not a discrepancy. Classifying it as one makes every DELAYED
             # transaction an exception, which is the trap by design.
             continue
@@ -681,7 +788,11 @@ def _residual_findings(
                     f"{abs(residual)} with nothing in flight to explain it."
                 ),
                 impact=abs(residual),
-                evidence_refs=(case.order_ref, *release_refs),
+                evidence_refs=(
+                    case.order_ref,
+                    *_item_refs(case, line.seller_id),
+                    *release_refs,
+                ),
                 seller_id=line.seller_id,
                 expected=line.entitlement,
                 reported=recorded,
@@ -722,6 +833,39 @@ def _currency_findings(
             None,
         )
         if settlement is None:
+            # **Reported, not dropped.** The ledger is in a currency the order
+            # is not and PayPal reported no settlement in it, so there is no
+            # measured figure to compare and none may be derived - a quoted
+            # rate is never substituted for a conversion record (P3). The
+            # impact is zero because none can be *stated*, which is different
+            # from there being none, and the detail says so.
+            if currency == case.order.total.currency or recorded.is_zero():
+                continue
+            findings.append(
+                Finding(
+                    code=ExceptionCode.MIXED_CURRENCY_ORDER,
+                    order_ref=case.order_ref,
+                    detail=(
+                        f"The seller ledger records {recorded} on an order "
+                        f"denominated in {case.order.total.currency}, and "
+                        "PayPal reported no settlement in that currency. No "
+                        "comparable figure exists, so the difference cannot "
+                        "be quantified without inventing a rate."
+                    ),
+                    impact=Money.zero(currency),
+                    evidence_refs=(
+                        case.order_ref,
+                        *(
+                            entry.external_ref
+                            for entry in entries
+                            if entry.amount.currency == currency
+                        ),
+                    ),
+                    seller_id=seller_id,
+                    reported=recorded,
+                    confirmed=False,
+                )
+            )
             continue
 
         result = compare_exact(settlement, recorded)
@@ -744,7 +888,11 @@ def _currency_findings(
                     "settlement, not against net times rate."
                 ),
                 impact=result.impact,
-                evidence_refs=(case.order_ref, *capture_refs),
+                evidence_refs=(
+                    case.order_ref,
+                    *_item_refs(case, seller_id),
+                    *capture_refs,
+                ),
                 seller_id=seller_id,
                 expected=settlement,
                 reported=recorded,

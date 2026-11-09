@@ -52,6 +52,7 @@ class Item:
     seller_id: uuid.UUID
     line_total: Money
     category: str | None = "books"
+    external_ref: str = "ITEM-1"
     id: uuid.UUID = field(default_factory=uuid.uuid4)
 
 
@@ -486,13 +487,20 @@ def test_f3_the_ledger_recorded_in_another_currency_at_a_stale_rate() -> None:
     assert "CAP-ORD-0015" in findings[0].evidence_refs
 
 
-def test_f3_without_a_reported_settlement_invents_nothing() -> None:
-    """specs/mission.md P3: a quoted rate is never substituted for a
-    conversion record.
+def test_f3_without_a_reported_settlement_reports_without_inventing() -> None:
+    """specs/mission.md P3 and P5 together, which pull in different directions.
 
     With no reported settlement there is no figure in that currency anyone
-    measured, so there is nothing to compare and no finding to make. Silence
-    here is correct; a rate-derived figure would not be.
+    measured, so no impact may be stated - P3 forbids closing the gap with a
+    quoted rate. But silence is also wrong: the ledger is in a currency the
+    order is not, which is a real condition an operator must see. P5's answer
+    is to escalate rather than guess.
+
+    So the finding is made, the impact is zero because none can be *stated*,
+    the detail says why, and `confirmed` is False. **This test asserted
+    silence until a review pointed out that the module docstring promised the
+    opposite** - "an unexplained difference is still never silently dropped" -
+    and the docstring was right.
     """
     order = Order(Money("300.00", "EUR"))
     capture = Capture(
@@ -513,7 +521,14 @@ def test_f3_without_a_reported_settlement_invents_nothing() -> None:
         ),
     )
 
-    assert classify_order(case) == ()
+    findings = classify_order(case)
+
+    assert codes(findings) == [ExceptionCode.MIXED_CURRENCY_ORDER]
+    assert findings[0].impact == Money("0.00", "USD")
+    assert findings[0].expected is None, "no expected figure may be invented"
+    assert findings[0].reported == Money("262.00", "USD")
+    assert findings[0].confirmed is False
+    assert "L1" in findings[0].evidence_refs
 
 
 def test_f4_one_sale_credited_twice() -> None:
@@ -816,3 +831,203 @@ def test_amounts_in_the_contract_are_always_quantized() -> None:
     )
 
     assert finding.as_dict()["impact"] == {"amount": "0.50", "currency": "USD"}
+
+
+# ---------------------------------------------------------------------------
+# Regressions from the Block C code review
+# ---------------------------------------------------------------------------
+
+
+def test_two_sellers_with_equal_shares_are_not_reported_as_duplicates() -> None:
+    """**The review's worst finding, and a false positive on correct data.**
+
+    Two sellers who each sold 50.00 produce two identical `sale` credits and
+    two identical `commission` debits. A duplicate key without the seller
+    reported this healthy order twice as `duplicate_ledger_entry` and then
+    added a self-contradicting residual - "PayPal discharged 45.00 USD and
+    the seller ledger records 45.00 USD, a shortfall of 55.00 USD".
+
+    The seeded dataset never splits an order equally - ORD-0001, ORD-0006 and
+    ORD-0008 all have unequal shares - so the database gate passed on luck.
+    This is the case the gate could not see.
+    """
+    order = Order(Money("100.00", "USD"))
+    cap_a = Capture(
+        SELLER_A,
+        Money("50.00", "USD"),
+        net_amount=Money("45.00", "USD"),
+        external_id="CAP-EQ-A",
+    )
+    cap_b = Capture(
+        SELLER_B,
+        Money("50.00", "USD"),
+        net_amount=Money("45.00", "USD"),
+        external_id="CAP-EQ-B",
+    )
+    case = OrderCase(
+        order_ref="ORD-EQUAL",
+        order=order,
+        items=(
+            Item(SELLER_A, Money("50.00", "USD")),
+            Item(SELLER_B, Money("50.00", "USD")),
+        ),
+        rules=(Rule(),),
+        captures=(cap_a, cap_b),
+        ledger_entries=(
+            Entry("sale", "credit", Money("50.00", "USD"), order.id, SELLER_A, "L1"),
+            Entry(
+                "commission", "debit", Money("5.00", "USD"), order.id, SELLER_A, "L2"
+            ),
+            Entry("sale", "credit", Money("50.00", "USD"), order.id, SELLER_B, "L3"),
+            Entry(
+                "commission", "debit", Money("5.00", "USD"), order.id, SELLER_B, "L4"
+            ),
+        ),
+    )
+
+    assert classify_order(case) == ()
+
+
+def test_one_sellers_genuine_duplicate_is_still_caught() -> None:
+    """The fix must not buy its silence by going blind.
+
+    Same amounts as the test above, but both duplicate rows belong to one
+    seller, which is a real double-post.
+    """
+    order = Order(Money("100.00", "USD"))
+    cap_a = Capture(
+        SELLER_A,
+        Money("100.00", "USD"),
+        net_amount=Money("90.00", "USD"),
+        external_id="CAP-DUP",
+    )
+    case = OrderCase(
+        order_ref="ORD-DUP",
+        order=order,
+        items=(Item(SELLER_A, Money("100.00", "USD")),),
+        rules=(Rule(),),
+        captures=(cap_a,),
+        ledger_entries=(
+            Entry("sale", "credit", Money("100.00", "USD"), order.id, SELLER_A, "L1"),
+            Entry("sale", "credit", Money("100.00", "USD"), order.id, SELLER_A, "L1b"),
+            Entry(
+                "commission", "debit", Money("10.00", "USD"), order.id, SELLER_A, "L2"
+            ),
+        ),
+    )
+
+    findings = classify_order(case)
+
+    assert codes(findings) == [ExceptionCode.DUPLICATE_LEDGER_ENTRY]
+    assert findings[0].impact == Money("100.00", "USD")
+
+
+def test_a_duplicated_debit_produces_one_finding_not_three() -> None:
+    """The residual credit must carry the ledger direction.
+
+    `position()` makes a credit positive and a debit negative. Crediting the
+    unsigned magnitude made a duplicated *debit* offset the residual the wrong
+    way, so one fault surfaced as `commission_mismatch`, then
+    `duplicate_ledger_entry`, then a spurious `disbursement_mismatch`.
+    """
+    order = Order(Money("100.00", "USD"))
+    capture = Capture(
+        SELLER_A,
+        Money("100.00", "USD"),
+        net_amount=Money("90.00", "USD"),
+        external_id="CAP-DD",
+    )
+    case = OrderCase(
+        order_ref="ORD-DEBIT-DUP",
+        order=order,
+        items=(Item(SELLER_A, Money("100.00", "USD")),),
+        rules=(Rule(),),
+        captures=(capture,),
+        ledger_entries=(
+            Entry("sale", "credit", Money("100.00", "USD"), order.id, SELLER_A, "L1"),
+            Entry(
+                "commission", "debit", Money("10.00", "USD"), order.id, SELLER_A, "L2"
+            ),
+            Entry(
+                "commission", "debit", Money("10.00", "USD"), order.id, SELLER_A, "L2b"
+            ),
+        ),
+    )
+
+    findings = classify_order(case)
+
+    assert codes(findings) == [ExceptionCode.DUPLICATE_LEDGER_ENTRY], (
+        f"one fault must give one finding, got {codes(findings)}"
+    )
+    assert findings[0].impact == Money("10.00", "USD")
+
+
+def test_a_release_still_in_flight_is_not_a_discrepancy() -> None:
+    """T3, through the `disbursement` row rather than the capture.
+
+    `release_requested` and `disbursement_pending` only ever appear on a
+    `Disbursement`; the capture's own `disbursement_state` never carries
+    either. Consulting the capture alone reported a release in flight as a
+    mismatch - the exact trap T3 exists to avoid.
+    """
+    order = Order(Money("150.00", "EUR"))
+    capture = Capture(
+        SELLER_B,
+        Money("150.00", "EUR"),
+        net_amount=Money("135.00", "EUR"),
+        disbursement_state="disbursement_completed",
+        external_id="CAP-FLIGHT",
+    )
+    case = OrderCase(
+        order_ref="ORD-INFLIGHT",
+        order=order,
+        items=(Item(SELLER_B, Money("150.00", "EUR")),),
+        rules=(Rule(),),
+        captures=(capture,),
+        disbursements=(
+            Release(
+                Money("135.00", "EUR"),
+                seller_id=SELLER_B,
+                state="disbursement_pending",
+                external_id="REL-INFLIGHT",
+            ),
+        ),
+        ledger_entries=(
+            Entry("sale", "credit", Money("120.00", "EUR"), order.id, SELLER_B, "L1"),
+        ),
+    )
+
+    assert classify_order(case) == ()
+
+
+def test_a_mixed_currency_ledger_does_not_abort_the_run() -> None:
+    """`explained` is keyed by currency as well as by seller.
+
+    A duplicate in one currency and a residual in another asked `Money` to
+    subtract EUR from USD, which raised `ValueError` and killed the whole
+    reconciliation run instead of producing a finding.
+    """
+    order = Order(Money("100.00", "EUR"))
+    capture = Capture(
+        SELLER_A,
+        Money("100.00", "EUR"),
+        net_amount=Money("90.00", "EUR"),
+        settlement_amount=Money("109.00", "USD"),
+        external_id="CAP-MIX",
+    )
+    case = OrderCase(
+        order_ref="ORD-MIX",
+        order=order,
+        items=(Item(SELLER_A, Money("100.00", "EUR")),),
+        rules=(Rule(),),
+        captures=(capture,),
+        ledger_entries=(
+            Entry("sale", "credit", Money("50.00", "USD"), order.id, SELLER_A, "L1"),
+            Entry("sale", "credit", Money("50.00", "USD"), order.id, SELLER_A, "L1b"),
+        ),
+    )
+
+    findings = classify_order(case)
+
+    assert findings, "a mixed-currency ledger must produce something"
+    assert all(isinstance(f.impact, Money) for f in findings)

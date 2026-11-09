@@ -93,7 +93,14 @@ FAULTS: Final[tuple[Fault, ...]] = (
     Fault(
         id="F2",
         order_ref="ORD-0014",
-        evidence_refs=("ORD-0014", "FEE-ORD-0014", "ITEM-0014-A"),
+        # **Corrected 2026-11-09, Block C.** This named `FEE-ORD-0014`, a
+        # record that exists nowhere: it was one of Block A's synthetic
+        # provider rows, which R16's capture retired. PayPal's real platform
+        # fee cannot be named here either - `replay` builds its
+        # `external_id` as `f"pf-{payload_uuid}-{index}"`, which changes on
+        # every seed. So the capture that carries the fee is cited instead,
+        # and it is stable because it comes from the committed fixture.
+        evidence_refs=("ORD-0014", "61Y43309SU1359440", "ITEM-0014-A"),
         description=(
             "The marketplace retained 30.00 USD commission on a 200.00 order "
             "whose applicable rule is the tenant's 10% default, so 20.00. "
@@ -108,7 +115,12 @@ FAULTS: Final[tuple[Fault, ...]] = (
     Fault(
         id="F3",
         order_ref="ORD-0015",
-        evidence_refs=("ORD-0015", "FX-ORD-0015", "CAP-ORD-0015"),
+        # **Corrected 2026-11-09, Block C.** `CAP-ORD-0015` and
+        # `FX-ORD-0015` were synthetic rows retired by R16 and exist nowhere.
+        # The real capture is cited from the fixture; the conversion is
+        # reached through it, and `fx_conversion` has only a UUID primary key,
+        # so there is no stable external reference to name.
+        evidence_refs=("ORD-0015", "57663900RJ835061A", "ITEM-0015-A"),
         description=(
             "PayPal converted the 270.00 EUR net to a reported settlement of "
             "294.16 USD at a rate of 1.089477173902071. The marketplace "
@@ -173,7 +185,14 @@ FAULTS: Final[tuple[Fault, ...]] = (
     Fault(
         id="F6",
         order_ref="ORD-0018",
-        evidence_refs=("REL-ORD-0018", "ORD-0018", "ITEM-0018-A"),
+        # **Corrected 2026-11-09, Block C.** `REL-ORD-0018` was synthetic
+        # and exists nowhere. PayPal's release names itself by `item_id`,
+        # which the fixture carries verbatim.
+        evidence_refs=(
+            "J8D5wYEtqZwFyqy3qu-l1zMou7z9EC1IHQig0jIm0ZDNuT-nFA3sKmwOENAIaRQ=",
+            "ORD-0018",
+            "ITEM-0018-A",
+        ),
         description=(
             "PayPal released the full 135.00 EUR net and the seller ledger "
             "credits 120.00, a 15.00 EUR shortfall against an obligation "

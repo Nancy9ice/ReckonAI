@@ -2,8 +2,9 @@
 
 > How each exit criterion was proven. Figures are measured, not estimated.
 >
-> Suite at the end of this block: **1527 passed**, `uv run mypy` clean over
-> `src/reckonai/engine` and `src/reckonai/recon`.
+> Suite at the end of this block: **1542 passed**, `uv run mypy` clean over
+> `src/reckonai/engine` and `src/reckonai/recon`. Includes the nine code-review
+> fixes of §9 and their regression tests.
 
 ## 1. Phase 11's exit criteria
 
@@ -109,7 +110,48 @@ something different from `0.50`, and no client-side arithmetic is possible
 from the shape. A field rename fails the test rather than reshaping Block F
 silently.
 
-## 9. Corrections this block made to earlier documents
+## 9. The code review, and what it changed
+
+`/code-review medium` returned **nine findings, all nine real**. Two were
+reproducible false positives on correct data, which is precisely what the
+false-positive gate exists to prevent and precisely what the seeded dataset
+could not show.
+
+| # | Finding | Fix |
+|---|---|---|
+| 1 | **The duplicate key omitted `seller_id`.** Two sellers with equal shares produce identical `sale` and `commission` rows, so a clean order was reported as duplicated twice, plus a self-contradicting residual ("records 45.00 USD, a shortfall of 55.00 USD") | Seller in the group and the key |
+| 2 | A duplicate credited its residual unsigned, so a duplicated **debit** gave three findings for one fault | Duplicates run first and the surplus row is held out of every later comparison - the same move already used for an unreflected refund |
+| 3 | **`case.disbursements` was always empty.** `Disbursement.capture_id` is NULL on every row, so no finding could cite a release and F6 cited none | Resolved from the payload's `reference_id` / `TRANSACTION_ID`, which `models/disbursements.py` already documents as provider-supplied |
+| 4 | T3 never read `Disbursement.state`, so `release_requested` and `disbursement_pending` - two of its three states - were unreachable and a release in flight would be reported | Both the release and the capture are consulted |
+| 5 | A foreign-currency ledger with no reported settlement was **silently dropped**, against the module's own docstring | Reported as `mixed_currency_order`, impact zero because none can be *stated*, `confirmed=False` |
+| 6 | `run()` discarded both unmatched sides, so an order PayPal has no record of vanished from the product | Both reported as `awaiting_evidence` (P4, R10) |
+| 7 | `explained` could hold a currency the entitlement did not, raising `ValueError` mid-run | Keyed by `(seller, currency)` |
+| 8 | A payment matching two orders gave each order **all** of the payment's captures and fees | Captures attributed per purchase unit |
+| 9 | `within_rounding_of_rate` hardcoded a two-decimal minor unit | Derived through `Money.from_minor_units` |
+
+Each has a regression test, and findings 1 and 2 were reproduced before being
+fixed and re-run after.
+
+### What verifying the review then surfaced
+
+Tightening the evidence assertion - the review's point that it proved almost
+nothing beyond the order ref - exposed a **third stale-manifest problem**, the
+same root cause as the two impact figures. Four of the manifest's evidence
+references named records that **exist nowhere**: `FEE-ORD-0014`,
+`CAP-ORD-0015`, `FX-ORD-0015` and `REL-ORD-0018`, all Block A synthetic
+provider rows retired by R16. The coverage assertion could never have passed.
+
+Corrected to the fixture-stable ids, with one thing recorded rather than
+worked around: **`platform_fee.external_id` cannot be cited stably at all**.
+`replay` builds it as `f"pf-{payload_uuid}-{index}"`, which changes on every
+seed, so the capture that carries the fee is cited instead. Block E should
+cite the capture, not the fee row.
+
+`test_every_reference_the_manifest_names_is_a_real_record` is the guard that
+was missing on the manifest's own input - the existing test only checked the
+classifier's output.
+
+## 10. Corrections this block made to earlier documents
 
 1. **`reckonai.sim.manifest`** - F3's impact 5.05 EUR → **32.16 USD**, F6's
    18.00 → **15.00 EUR**, both with their descriptions, each carrying a dated
@@ -124,7 +166,7 @@ silently.
 4. **Block A debt 3 decided** rather than inherited - declined as a seeded
    order, taken as a rule. `requirements.md` D7.
 
-## 10. Not proven here, and who proves it
+## 11. Not proven here, and who proves it
 
 - That findings **persist** - Block D owns the table (D8); Block F's dashboard
   depends on it.

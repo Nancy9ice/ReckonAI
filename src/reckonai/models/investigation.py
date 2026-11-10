@@ -173,7 +173,9 @@ class Investigation(TenantMixin, TimestampMixin, Base):
     #: verdict is only interpretable alongside what the agent could not see -
     #: without this column, the deliberate evidence gap that proves Phase 12's
     #: third exit criterion would be indistinguishable from a real one.
-    withheld: Mapped[list] = mapped_column(JSONB, nullable=False, server_default="[]")
+    withheld: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, server_default="[]"
+    )
 
     started_at: Mapped[datetime] = mapped_column(
         server_default=func.now(), nullable=False
@@ -265,7 +267,7 @@ class InvestigationCause(TenantMixin, TimestampMixin, Base):
     #: reason `reconciliation_exception.evidence_refs` is one: a reference
     #: containing a separator would split into ids that resolve to nothing,
     #: and the failure would look like bad evidence rather than bad storage.
-    cited_refs: Mapped[list] = mapped_column(JSONB, nullable=False)
+    cited_refs: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
 
     #: The references that did **not** resolve to a real record.
     #:
@@ -274,7 +276,7 @@ class InvestigationCause(TenantMixin, TimestampMixin, Base):
     #: is persisted *as* unresolvable rather than silently repaired or
     #: dropped. An empty array is the passing case; a non-empty one is a
     #: fabricated reference, recorded where a reader will find it.
-    unresolved_refs: Mapped[list] = mapped_column(
+    unresolved_refs: Mapped[list[str]] = mapped_column(
         JSONB, nullable=False, server_default="[]"
     )
 

@@ -55,7 +55,20 @@ from reckonai.models import (
 from reckonai.money import InvalidAmount, Money
 
 #: Target table -> (model, the column its upsert keys on).
-TARGETS: dict[str, tuple[type, str]] = {
+#: **`type[Any]`, and that is a statement rather than a shrug.** This is a
+#: runtime dispatch table: `_ingest_one` looks a model up from a string, so the
+#: class is genuinely not known statically and no TypeVar can recover it -
+#: unlike `_index` below, which is called with two known classes.
+#:
+#: mypy therefore cannot check that each model here is tenant-scoped and
+#: carries its named reference column, which is exactly what
+#: `_ingest_one` relies on. `tests/test_connector_ingest.py::
+#: test_every_target_is_tenant_scoped_with_its_reference_column` asserts both
+#: at runtime instead - a **stronger** check than the annotation, because it
+#: verifies the columns exist rather than that a type says they might.
+#: `specs/2026-11-09-entitlement-engine/validation.md` D9 records why the
+#: static check cannot cross the ORM boundary.
+TARGETS: dict[str, tuple[type[Any], str]] = {
     "seller": (Seller, "external_ref"),
     "order": (Order, "external_ref"),
     "order_item": (OrderItem, "external_ref"),
@@ -335,9 +348,24 @@ def ingest(
     return result
 
 
-def _index(
-    session: Session, tenant_id: uuid.UUID, model: type, column: str
+def _index[IndexedT: (Seller, Order)](
+    session: Session, tenant_id: uuid.UUID, model: type[IndexedT], column: str
 ) -> dict[str, uuid.UUID]:
+    """Map one external reference column to the row ids that carry it.
+
+    **The type parameter is value-constrained to the two models this is
+    called with**, and both alternatives were tried. `type[Base]` loses
+    `tenant_id`, which `TenantMixin` supplies through `declared_attr` and mypy
+    therefore cannot see on the class. A Protocol hits the
+    `Mapped[X]`-versus-settable-member conflict recorded in
+    `specs/2026-11-09-entitlement-engine/validation.md` D9. Constraining to
+    the concrete classes resolves `tenant_id` and `id` on each, with no
+    suppression.
+
+    This was the error Block B flagged as real and assigned to "Block C or D";
+    neither took it. See
+    `specs/2026-11-10-investigation-agent/validation.md` section 9.
+    """
     rows = session.scalars(select(model).where(model.tenant_id == tenant_id))
     return {getattr(row, column): row.id for row in rows}
 

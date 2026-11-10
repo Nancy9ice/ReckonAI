@@ -815,3 +815,33 @@ def _orders_only():
     return MappingDocument(
         connector="t", resources=(SIM_MAPPING.resource("order"),)
     )
+
+
+def test_every_target_is_tenant_scoped_with_its_reference_column() -> None:
+    """`TARGETS` is runtime dispatch, so mypy cannot check its entries.
+
+    `_ingest_one` looks a model up from a string and then filters on
+    `model.tenant_id` and the named reference column. Neither is statically
+    verifiable at that point - the annotation is `type[Any]` because the class
+    genuinely is not known - so this asserts at runtime what the type cannot.
+
+    It is the stronger check of the two: it proves the columns exist, where a
+    narrower annotation would only have said they might. The error it replaces
+    was one Block B flagged as real and assigned to "Block C or D"; neither
+    took it. See `specs/2026-11-10-investigation-agent/validation.md` section 9.
+    """
+    from reckonai.connector.ingest import TARGETS
+
+    assert TARGETS, "the dispatch table is empty, so this guard proves nothing"
+
+    for table, (model, key_column) in TARGETS.items():
+        columns = {column.name for column in model.__table__.columns}
+
+        assert "tenant_id" in columns, (
+            f"{table} -> {model.__name__} is not tenant-scoped, so "
+            "_ingest_one would filter on a column that does not exist"
+        )
+        assert key_column in columns, (
+            f"{table} -> {model.__name__} has no {key_column!r} column, so "
+            "idempotent ingestion would match on nothing"
+        )

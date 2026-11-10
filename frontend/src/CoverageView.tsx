@@ -1,6 +1,7 @@
 import type { ColDef } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
 import type { Coverage } from "./api";
+import { HINTS } from "./copy";
 import { formatDate } from "./labels";
 import { formatMoney } from "./money";
 import { gridTheme } from "./theme";
@@ -35,7 +36,7 @@ const cleanColumns: ColDef<Clean>[] = [
 
 const parkedColumns: ColDef<Parked>[] = [
   { headerName: "Order", field: "order_ref", width: 130, cellClass: "mono" },
-  { headerName: "Why it is parked", field: "detail", flex: 1, minWidth: 300, wrapText: true, autoHeight: true },
+  { headerName: "Why it is on hold", field: "detail", flex: 1, minWidth: 300, wrapText: true, autoHeight: true },
 ];
 
 function Stat(props: { label: string; value: number; tone?: string; hint: string }) {
@@ -53,26 +54,24 @@ export default function CoverageView({ coverage }: { coverage: Coverage | null }
   return (
     <>
       <section className="kpis five" aria-label="Coverage summary">
-        <Stat label="Orders in the data" value={coverage.orders_total} hint="Every order held for this marketplace." />
-        <Stat label="With an exception" value={coverage.with_exceptions} tone="bad" hint="In the exception queue." />
-        <Stat label="Parked, awaiting evidence" value={coverage.parked} tone="warn" hint="Not exceptions: the other side of the record has not arrived." />
-        <Stat label="Reconciled clean" value={coverage.clean} tone="good" hint="A run looked at it after it arrived and found nothing." />
-        <Stat label="Not yet examined" value={coverage.not_examined} tone="muted" hint="No completed run has looked at these since they arrived. Unknown, not clean." />
+        <Stat label="Orders in total" value={coverage.orders_total} hint="Every order held for this marketplace." />
+        <Stat label="Need attention" value={coverage.with_exceptions} tone="bad" hint="These are in the exception queue." />
+        <Stat label="On hold" value={coverage.parked} tone="warn" hint={HINTS.parked} />
+        <Stat label="Checked, no issues" value={coverage.clean} tone="good" hint={HINTS.clean} />
+        <Stat label="Not checked yet" value={coverage.not_examined} tone="muted" hint={HINTS.notExamined} />
       </section>
 
       <p className="muted basis">{coverage.basis}</p>
 
       <section className="card spaced">
         <div className="card-head">
-          <h2>Parked, awaiting evidence</h2>
+          <h2>On hold: waiting for the other record</h2>
           <p className="muted">
-            These are not discrepancies. The record that would settle them has not
-            arrived yet, so they are held back from the queue and re-evaluated on
-            the next run.
+            These are not mistakes. {HINTS.parked}
           </p>
         </div>
         {coverage.parked_items.length === 0 ? (
-          <p className="muted">Nothing is parked.</p>
+          <p className="muted">Nothing is on hold.</p>
         ) : (
           <div className="grid-wrap">
             <AgGridReact<Parked>
@@ -89,10 +88,9 @@ export default function CoverageView({ coverage }: { coverage: Coverage | null }
       {coverage.not_examined > 0 && (
         <section className="card spaced">
           <div className="card-head">
-            <h2>Not yet examined</h2>
+            <h2>Not checked yet</h2>
             <p className="muted">
-              No completed run has looked at these since they arrived, so they
-              are not claimed clean. Run a reconciliation to examine them.
+              {HINTS.notExamined} Run a reconciliation to check them.
             </p>
           </div>
           <div className="refs">
@@ -105,9 +103,9 @@ export default function CoverageView({ coverage }: { coverage: Coverage | null }
 
       <section className="card spaced">
         <div className="card-head">
-          <h2>Reconciled clean</h2>
+          <h2>Checked, no issues</h2>
           <p className="muted">
-            Orders where the marketplace, the ledger and PayPal agree.
+            Orders where the marketplace, the seller ledger and PayPal agree.
           </p>
         </div>
         <div className="grid-wrap">

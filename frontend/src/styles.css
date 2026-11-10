@@ -405,3 +405,10 @@ pre.raw {
   border-radius: 10px; padding: 10px 14px; margin-bottom: 12px;
 }
 .confirm-buttons { display: inline-flex; gap: 8px; }
+
+.explain { background: var(--tint); border-radius: 10px; padding: 12px 14px; margin-bottom: 4px; }
+.explain p { margin: 0; }
+.explain-title { font-size: 12px; font-weight: 650; letter-spacing: 0.4px; text-transform: uppercase; color: var(--navy); margin-top: 8px !important; }
+.explain-title:first-child { margin-top: 0 !important; }
+.hint { font-size: 12.5px; margin-top: 6px; }
+details.tech { margin: 6px 0 10px; font-size: 12.5px; }

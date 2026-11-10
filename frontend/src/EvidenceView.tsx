@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Evidence } from "./api";
 import { api } from "./api";
+import { fieldLabel, fieldValue, sourceName } from "./copy";
 import { formatDateTime } from "./labels";
 import { formatMoney } from "./money";
 
@@ -67,23 +68,28 @@ export default function EvidenceView({ refId, onBack }: Props) {
         <>
           {!record.stable && (
             <p className="callout">
-              This id names a real record but is rebuilt every time the data is
-              reseeded, so it will not find the record again. A stable reference
-              is the capture or refund it belongs to.
+              This reference is real, but it changes every time the data is
+              reloaded, so it will not find this record again later. The payment
+              or refund it belongs to has a lasting reference.
             </p>
           )}
 
           <dl className="facts evidence">
             {record.fields.map((f) => (
               <div className="fact-row" key={f.label}>
-                <dt>{f.label}</dt>
+                <dt>{fieldLabel(f.label)}</dt>
                 <dd className={f.money ? "money" : ""}>
                   {f.money ? (
                     formatMoney(f.money)
                   ) : f.value !== null ? (
-                    f.value
+                    fieldValue(f.value)
                   ) : (
-                    <span className="muted">not stated</span>
+                    <span
+                      className="muted"
+                      title="The record does not state this. That is different from zero."
+                    >
+                      not stated
+                    </span>
                   )}
                 </dd>
               </div>
@@ -92,15 +98,25 @@ export default function EvidenceView({ refId, onBack }: Props) {
 
           {record.raw && (
             <>
-              <h3>Provider record</h3>
+              <h3>The original record</h3>
               <p className="muted">
-                Retained exactly as received: {record.raw.source},{" "}
-                {record.raw.record_type}, {formatDateTime(record.raw.retrieved_at)}
-                {record.raw.endpoint ? `, ${record.raw.endpoint}` : ""}.
+                Kept exactly as {sourceName(record.raw.source)} sent it on{" "}
+                {formatDateTime(record.raw.retrieved_at)}, so you can check this
+                page against the source.
               </p>
-              <p className="muted mono sha">sha256 {record.raw.sha256}</p>
+              <details className="tech">
+                <summary>Technical details</summary>
+                <p className="muted mono sha">
+                  {record.raw.record_type}
+                  {record.raw.endpoint ? ` from ${record.raw.endpoint}` : ""}
+                  <br />
+                  fingerprint {record.raw.sha256}
+                </p>
+              </details>
               {raw === null ? (
-                <button onClick={() => void showRaw()}>Show the raw response</button>
+                <button onClick={() => void showRaw()}>
+                  Show the original data
+                </button>
               ) : (
                 <pre className="raw">{JSON.stringify(raw, null, 2)}</pre>
               )}

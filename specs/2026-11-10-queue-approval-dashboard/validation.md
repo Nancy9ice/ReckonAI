@@ -190,6 +190,24 @@ examined".
   ORD-0016, run on the operator's own server) but its drawer was not opened in
   this session.
 
+## 4e. Wording for a finance reader
+
+- [x] **A real defect fixed:** the drawer showed "Expected $294.16 / Reported
+  $262.00" under a sentence saying the marketplace recorded 262.00 and PayPal
+  settled 294.16. The figures were right and the labels read backwards. Now
+  "PayPal settled" and "Marketplace recorded", per type (FX, commission,
+  payout).
+- [x] Seen in Chrome: queue titles, the drawer's "What this means" and "What to
+  do", the plain priority line, the coverage and run wording. The 11 types'
+  meaning and action text is in `copy.ts`.
+- [ ] **Not tested with a finance user.** The copy is my reading of what the
+  engine does, written for the audience named; a reader may still find a phrase
+  unclear. The commission and payout labels were derived from the classifier but
+  not seen on screen, and the other eight types' text was not seen in a browser.
+- [ ] The evidence viewer's field names are mapped for the common ones; an
+  uncommon field falls back to its raw name.
+- [ ] "Order date" is hidden by default to make room; it is in the Columns panel.
+
 ## 5. Corrections and debts handed on
 
 - **Age reads 0% on every seeded row.** The seed's orders are dated 2026-11-13 to

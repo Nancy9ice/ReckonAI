@@ -140,7 +140,7 @@ export default function QueueView({
   return (
     <section className="card queue">
       <div className="queue-head">
-        <h2>Exception queue</h2>
+        <h2>Exceptions to review</h2>
         <div className="queue-actions">
           {checked.length > 0 && (
             <button
@@ -172,9 +172,9 @@ export default function QueueView({
       {confirm && (
         <div className="confirm" role="alertdialog" aria-label="Confirm investigation">
           <span>
-            Investigate <strong>{confirm.ids.length}</strong>{" "}
-            {confirm.ids.length === 1 ? "exception" : "exceptions"}? Each one is a
-            paid model call, run one at a time by the worker.
+            Ask the AI to look into <strong>{confirm.ids.length}</strong>{" "}
+            {confirm.ids.length === 1 ? "exception" : "exceptions"}? It works
+            through them one at a time, and each one uses paid AI credit.
           </span>
           <span className="confirm-buttons">
             <button
@@ -296,7 +296,6 @@ export default function QueueView({
               e.data && onSelect(e.data.id)
             }
             getRowClass={(p) => (p.data?.id === selectedId ? "row-open" : "")}
-            autoSizeStrategy={{ type: "fitGridWidth", defaultMinWidth: 90 }}
             groupDefaultExpanded={1}
             autoGroupColumnDef={{
               headerName: "Group",

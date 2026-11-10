@@ -1,19 +1,21 @@
 import type { ColDef } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
 import type { Run } from "./api";
+import { HINTS } from "./copy";
 import { formatDateTime } from "./labels";
 import { gridTheme } from "./theme";
 
 const columns: ColDef<Run>[] = [
   {
-    headerName: "Started",
+    headerName: "Run at",
     valueGetter: (p) => p.data?.started_at,
     valueFormatter: (p) => (p.value ? formatDateTime(p.value) : ""),
     sort: "desc",
     width: 190,
   },
   {
-    headerName: "Window",
+    headerName: "Orders placed between",
+    headerTooltip: HINTS.runWindow,
     valueGetter: (p) =>
       p.data
         ? `${formatDateTime(p.data.window_start)}  to  ${formatDateTime(p.data.window_end)}`
@@ -32,9 +34,16 @@ const columns: ColDef<Run>[] = [
     ),
   },
   { headerName: "Orders", field: "order_count", width: 110, type: "rightAligned" },
-  { headerName: "Findings", field: "finding_count", width: 120, type: "rightAligned" },
   {
-    headerName: "Exceptions",
+    headerName: "Findings",
+    headerTooltip: HINTS.runFindings,
+    field: "finding_count",
+    width: 120,
+    type: "rightAligned",
+  },
+  {
+    headerName: "Need attention",
+    headerTooltip: HINTS.runExceptions,
     field: "exception_count",
     width: 130,
     type: "rightAligned",
@@ -50,10 +59,10 @@ export default function RunsView({ runs, onOpen }: Props) {
   return (
     <section className="card">
       <div className="card-head">
-        <h2>Reconciliation runs</h2>
+        <h2>Past checks</h2>
         <p className="muted">
-          Each row is one run over a date window. Select a run to see the
-          exceptions it concluded.
+          Each row is one check of your orders against PayPal. Select one to see
+          what it found.
         </p>
       </div>
       <div className="grid-wrap">

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Coverage, ExceptionRow, Run } from "./api";
 import { api } from "./api";
 import { decisionText } from "./columns";
+import { HINTS } from "./copy";
 import CoverageView from "./CoverageView";
 import DetailDrawer from "./DetailDrawer";
 import QueueView from "./QueueView";
@@ -76,7 +77,7 @@ export default function App() {
   // than queued; that answer is shown as given.
   const runNow = async () => {
     setRunning(true);
-    setRunNote({ tone: "busy", text: "Requesting a reconciliation run..." });
+    setRunNote({ tone: "busy", text: "Starting a check of your orders..." });
     try {
       const result = await api.requestRun();
       if (!result.job) {
@@ -90,12 +91,12 @@ export default function App() {
       }
       let job = result.job;
       let misses = 0;
-      setRunNote({ tone: "busy", text: "Run queued. Waiting for the worker..." });
+      setRunNote({ tone: "busy", text: "Check queued. Waiting for the background worker..." });
       for (let waited = 0; job.status === "queued" || job.status === "claimed"; ) {
         if (waited >= 120) {
           setRunNote({
             tone: "bad",
-            text: "The run is still waiting. Is the worker running?",
+            text: "The check is still waiting to start. Make sure the background worker is running.",
           });
           return;
         }
@@ -112,15 +113,15 @@ export default function App() {
           continue;
         }
         if (job.status === "claimed")
-          setRunNote({ tone: "busy", text: "Reconciling..." });
+          setRunNote({ tone: "busy", text: "Checking your orders..." });
       }
       if (job.status === "done") {
         await refreshAll();
-        setRunNote({ tone: "ok", text: "Run complete. The queue is up to date." });
+        setRunNote({ tone: "ok", text: "Check complete. The queue is up to date." });
       } else {
         setRunNote({
           tone: "bad",
-          text: `The run failed: ${job.last_error ?? "no reason recorded"}`,
+          text: `The check failed: ${job.last_error ?? "no reason recorded"}`,
         });
       }
     } catch (e) {
@@ -135,7 +136,7 @@ export default function App() {
   // finishes so rows change from "Not investigated" while it works.
   const investigate = async (ids: string[], skipSettled: boolean) => {
     setInvestigating(true);
-    setRunNote({ tone: "busy", text: "Queueing investigations..." });
+    setRunNote({ tone: "busy", text: "Asking the AI to investigate..." });
     try {
       const result = await api.investigateMany(ids, skipSettled);
       const parts = [`${result.queued} queued`];
@@ -153,7 +154,7 @@ export default function App() {
         if (waited >= 900) {
           setRunNote({
             tone: "bad",
-            text: `Still waiting on ${pending.length} investigations. Is the worker running?`,
+            text: `Still waiting on ${pending.length} investigations. Make sure the background worker is running.`,
           });
           return;
         }
@@ -188,7 +189,7 @@ export default function App() {
           (total === 0
             ? "Nothing new to investigate."
             : failed > 0
-              ? `Finished, ${failed} could not run - open one to see why.`
+              ? `Finished, but ${failed} could not run. Open one to see why.`
               : "All finished."),
       });
     } catch (e) {
@@ -224,9 +225,9 @@ export default function App() {
         <nav>
           {(
             [
-              ["queue", "Exception queue"],
+              ["queue", "Exceptions"],
               ["coverage", "Coverage"],
-              ["runs", "Runs"],
+              ["runs", "Past checks"],
             ] as [View, string][]
           ).map(([id, text]) => (
             <button
@@ -239,10 +240,11 @@ export default function App() {
           ))}
           <button
             className="run-now"
+            title={HINTS.runNow}
             disabled={running}
             onClick={() => void runNow()}
           >
-            {running ? "Running..." : "Run reconciliation"}
+            {running ? "Checking..." : "Run reconciliation"}
           </button>
         </nav>
       </header>
@@ -266,8 +268,8 @@ export default function App() {
             <Kpi label="Confirmed" value={stats.confirmed} tone="bad" />
             <Kpi label="Suspected" value={stats.suspected} tone="warn" />
             <Kpi label="Awaiting a decision" value={stats.undecided} tone="accent" />
-            <Kpi label="Investigated" value={stats.investigated} />
-            <Kpi label="Reconciled clean" value={coverage ? coverage.clean : null} tone="good" />
+            <Kpi label="Looked into by AI" value={stats.investigated} />
+            <Kpi label="Checked, no issues" value={coverage ? coverage.clean : null} tone="good" />
           </section>
         )}
 

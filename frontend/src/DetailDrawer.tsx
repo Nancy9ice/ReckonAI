@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ExceptionDetail } from "./api";
 import { api } from "./api";
+import {
+  CERTAINTY_HINT,
+  DECISION_EXPLAINED,
+  FACTOR_NAMES,
+  NO_CAUSE_EXPLAINED,
+  PRIORITY_HINT,
+  basisText,
+  typeCopy,
+} from "./copy";
 import EvidenceView from "./EvidenceView";
 import { formatDateTime, label } from "./labels";
 import { formatFraction, formatMoney } from "./money";
@@ -120,12 +129,16 @@ export default function DetailDrawer({ id, onChanged, onClose }: Props) {
     }
     const inv = detail.investigation_detail;
     const top = inv?.causes.find((c) => c.rank === 1);
+    const copy = typeCopy(detail.code);
 
     return (
       <>
         <header className="drawer-head">
           <div>
-            <span className={`pill ${detail.certainty}`}>
+            <span
+              className={`pill ${detail.certainty}`}
+              title={CERTAINTY_HINT[detail.certainty]}
+            >
               {detail.certainty === "confirmed"
                 ? "Confirmed discrepancy"
                 : "Suspected issue"}
@@ -139,37 +152,53 @@ export default function DetailDrawer({ id, onChanged, onClose }: Props) {
         </header>
 
         <div className="hero">
-          <span className="hero-label">Impact</span>
+          <span className="hero-label">Difference</span>
           <span className="hero-value money">{formatMoney(detail.impact)}</span>
-          <span className="hero-sub">
-            Priority {formatFraction(detail.priority.score)}
+          <span className="hero-sub" title={PRIORITY_HINT}>
+            Priority {formatFraction(detail.priority.score)} (how urgent)
           </span>
         </div>
 
+        <div className="explain">
+          <p className="explain-title">What this means</p>
+          <p>{copy.meaning}</p>
+          <p className="explain-title">What to do</p>
+          <p>{copy.action}</p>
+        </div>
+
+        <h3>What the system found</h3>
         <p className="lead">{detail.detail}</p>
 
         <dl className="facts">
-          <dt>Expected</dt>
-          <dd className="money">
-            {detail.expected ? formatMoney(detail.expected) : "not a comparison"}
-          </dd>
-          <dt>Reported</dt>
-          <dd className="money">
-            {detail.reported ? formatMoney(detail.reported) : "not a comparison"}
-          </dd>
+          {detail.expected && (
+            <>
+              <dt>{copy.expectedLabel ?? "Expected"}</dt>
+              <dd className="money">{formatMoney(detail.expected)}</dd>
+            </>
+          )}
+          {detail.reported && (
+            <>
+              <dt>{copy.reportedLabel ?? "Recorded"}</dt>
+              <dd className="money">{formatMoney(detail.reported)}</dd>
+            </>
+          )}
           <dt>Seller</dt>
           <dd>{detail.seller_name ?? `${detail.seller_count} sellers on the order`}</dd>
-          <dt>Evidence basis</dt>
-          <dd>{detail.evidence_basis.replace(/_/g, " ")}</dd>
-          <dt>Priority factors</dt>
+          <dt>How well it is backed</dt>
+          <dd>{basisText(detail.evidence_basis)}</dd>
+          <dt title={PRIORITY_HINT}>What drives the priority</dt>
           <dd>
             {Object.entries(detail.priority.factors)
-              .map(([k, v]) => `${k} ${formatFraction(v)}`)
+              .map(([k, v]) =>
+                v === null
+                  ? `${FACTOR_NAMES[k] ?? k}: not investigated yet`
+                  : `${FACTOR_NAMES[k] ?? k} ${formatFraction(v)}`,
+              )
               .join(", ")}
           </dd>
         </dl>
 
-        <h3>Evidence records</h3>
+        <h3>Records behind this finding</h3>
         {detail.evidence_refs.length === 0 ? (
           <p className="muted">The finding names no records.</p>
         ) : (
@@ -187,58 +216,64 @@ export default function DetailDrawer({ id, onChanged, onClose }: Props) {
           </div>
         )}
 
+        <p className="muted hint">Select a record to open it.</p>
+
         <h3>AI investigation</h3>
         {!inv && !inFlight && (
           <p className="muted">
-            Not investigated yet.
+            The AI has not looked at this yet.
             {detail.investigation_job?.status === "failed" && (
               <span className="note bad">
                 {" "}
-                Last attempt failed: {detail.investigation_job.last_error}
+                The last attempt failed: {detail.investigation_job.last_error}
               </span>
             )}
           </p>
         )}
         {inFlight && (
-          <p className="muted">Investigation {jobStatus}. This panel refreshes itself.</p>
+          <p className="muted">
+            {jobStatus === "queued"
+              ? "Waiting for the worker to start."
+              : "The AI is working on it."}{" "}
+            This panel updates by itself.
+          </p>
         )}
         <button
           className="primary"
           disabled={busy || inFlight}
           onClick={() => void investigate()}
         >
-          {inv ? "Investigate again" : "Investigate"}
+          {inv ? "Ask the AI again" : "Ask the AI to investigate"}
         </button>
 
         {inv && (
           <div className="investigation">
             <p className="muted">
-              {inv.provider} / {inv.model_requested},{" "}
-              {formatDateTime(inv.started_at)}
-              {inv.downgraded && " (downgraded)"}
+              Looked into on {formatDateTime(inv.started_at)} (model:{" "}
+              {inv.model_requested})
+              {inv.downgraded && ", on a fallback model"}
             </p>
             {inv.verdict === "failed" && (
               <p className="note bad">
-                The investigation failed and produced no report.
+                The investigation could not finish, so there is no answer.
                 {inv.summarized_reasoning ? ` ${inv.summarized_reasoning}` : ""}
               </p>
             )}
             {inv.verdict === "insufficient_evidence" && (
               <p className="callout">
-                <strong>Insufficient evidence.</strong> The records available do
-                not support a cause, and the agent declined to guess.
+                <strong>No clear cause.</strong> {NO_CAUSE_EXPLAINED}
               </p>
             )}
             {inv.withheld.length > 0 && (
               <p className="note warn">
-                Unavailable to the agent: {inv.withheld.join(", ")}. This is not
-                the same as those records being empty.
+                The AI was not allowed to see: {inv.withheld.join(", ")}. Its
+                answer does not cover them, and that is not the same as there
+                being nothing there.
               </p>
             )}
             {top && (
               <div className="callout accent">
-                <strong>Recommended resolution</strong>
-                <span className="muted"> (top-ranked cause)</span>
+                <strong>Most likely cause</strong>
                 <p>{top.description}</p>
               </div>
             )}
@@ -248,14 +283,16 @@ export default function DetailDrawer({ id, onChanged, onClose }: Props) {
                   <div>
                     {c.description}{" "}
                     <span className="muted">
-                      confidence {formatFraction(c.confidence)}
+                      ({formatFraction(c.confidence)} sure)
                     </span>
                   </div>
                   <div className="refs">
                     {c.cited_refs.map((r) =>
                       c.unresolved_refs.includes(r) ? (
                         <code key={r} className="unresolved">
-                          {r} (does not resolve)
+                          <span title="The AI cited an id that is not in the records, so do not rely on it.">
+                            {r} (not found in the records)
+                          </span>
                         </code>
                       ) : (
                         <button
@@ -274,18 +311,15 @@ export default function DetailDrawer({ id, onChanged, onClose }: Props) {
             </ol>
             {inv.summarized_reasoning && inv.verdict !== "failed" && (
               <details>
-                <summary>Summarised reasoning</summary>
+                <summary>How the AI reasoned</summary>
                 <p>{inv.summarized_reasoning}</p>
               </details>
             )}
           </div>
         )}
 
-        <h3>Decision</h3>
-        <p className="muted">
-          Recording a decision moves no money. It is a note of intent; nothing is
-          refunded, adjusted or paid out by this product.
-        </p>
+        <h3>Your decision</h3>
+        <p className="muted">{DECISION_EXPLAINED}</p>
         <div className="decide">
           <input
             aria-label="Your name"
@@ -323,10 +357,12 @@ export default function DetailDrawer({ id, onChanged, onClose }: Props) {
           <ul className="history">
             {detail.decisions.map((d, i) => (
               <li key={d.id}>
-                <span className={`pill ${d.outcome}`}>{d.outcome}</span> by{" "}
-                {d.approver}, {formatDateTime(d.decided_at)}
+                <span className={`pill ${d.outcome}`}>
+                  {d.outcome === "approved" ? "Approved" : "Rejected"}
+                </span>{" "}
+                by {d.approver}, {formatDateTime(d.decided_at)}
                 {d.note ? ` - ${d.note}` : ""}
-                {i === 0 ? " (current)" : ""}
+                {i === 0 ? " (latest)" : ""}
               </li>
             ))}
           </ul>

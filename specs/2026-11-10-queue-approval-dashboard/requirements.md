@@ -119,6 +119,16 @@ reconciliation" never investigates by itself. Which exceptions are left when the
 cap bites is by order reference, not by priority (the score lives in the API
 layer).
 
+**D18. The wording is for a marketplace finance reader**, and lives in one file,
+`frontend/src/copy.ts`. Each of the 11 exception types has a plain title, what it
+means and what to do. **The engine's "expected" and "reported" are not what
+those words suggest** (for every type that carries them, "expected" is the
+figure that is right - PayPal's settlement, the rule's commission, what the
+seller is owed - and "reported" is what the marketplace recorded), so the UI
+labels them by who said what, per type, rather than showing the engine's words.
+Technical detail (fingerprints, endpoints) is behind a fold. The queue says
+"AI result" and "Checked, no issues", not "verdict" and "reconciled clean".
+
 ## 3. Deployed environment (settle before merge — a merge deploys)
 
 - `render.yaml` gains the agent credential (`sync: false`) and `AGENT_PROVIDER`

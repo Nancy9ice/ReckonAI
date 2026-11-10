@@ -1,6 +1,7 @@
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import type { ExceptionRow } from "./api";
 import { formatDate, label } from "./labels";
+import { CERTAINTY_HINT, FACTOR_NAMES, PRIORITY_HINT, VERDICT_TEXT } from "./copy";
 import { formatFraction, formatMoney } from "./money";
 
 export function decisionText(row: ExceptionRow): string {
@@ -10,14 +11,7 @@ export function decisionText(row: ExceptionRow): string {
 
 export function verdictText(row: ExceptionRow): string {
   if (!row.investigation) return "Not investigated";
-  switch (row.investigation.verdict) {
-    case "reported":
-      return "Cause reported";
-    case "insufficient_evidence":
-      return "Insufficient evidence";
-    default:
-      return "Investigation failed";
-  }
+  return VERDICT_TEXT[row.investigation.verdict] ?? "Investigation failed";
 }
 
 const Pill = ({ text, tone }: { text: string; tone: string }) => (
@@ -31,19 +25,20 @@ const byDecimalString = (a: string | null, b: string | null): number =>
 
 function factorsText(row: ExceptionRow): string {
   return Object.entries(row.priority.factors)
-    .map(([k, v]) => `${k} ${formatFraction(v)}`)
-    .join("  |  ");
+    .map(([k, v]) => `${FACTOR_NAMES[k] ?? k}: ${formatFraction(v)}`)
+    .join("\n");
 }
 
 export const columns: ColDef<ExceptionRow>[] = [
   {
     colId: "priority",
     headerName: "Priority",
+    headerTooltip: PRIORITY_HINT,
     valueGetter: (p) => p.data?.priority.score ?? null,
     comparator: byDecimalString,
     filter: "agNumberColumnFilter",
     sort: "desc",
-    width: 140,
+    width: 150,
     cellRenderer: (p: ICellRendererParams<ExceptionRow>) => {
       if (!p.data) return null;
       const share = formatFraction(p.data.priority.score);
@@ -59,14 +54,20 @@ export const columns: ColDef<ExceptionRow>[] = [
   },
   {
     colId: "status",
-    headerName: "Status",
+    headerName: "Certainty",
+    headerTooltip:
+      "Confirmed: the records agree on what happened. Suspected: the link between records was inferred, so check it.",
     valueGetter: (p) =>
       p.data ? (p.data.certainty === "confirmed" ? "Confirmed" : "Suspected") : "",
     enableRowGroup: true,
     filter: "agSetColumnFilter",
-    width: 118,
+    width: 135,
     cellRenderer: (p: ICellRendererParams<ExceptionRow>) =>
-      p.data ? <Pill text={p.value} tone={p.data.certainty} /> : null,
+      p.data ? (
+        <span title={CERTAINTY_HINT[p.data.certainty]}>
+          <Pill text={p.value} tone={p.data.certainty} />
+        </span>
+      ) : null,
   },
   {
     colId: "type",
@@ -74,15 +75,15 @@ export const columns: ColDef<ExceptionRow>[] = [
     valueGetter: (p) => (p.data ? label(p.data.code) : ""),
     enableRowGroup: true,
     filter: "agSetColumnFilter",
-    flex: 1.4,
-    minWidth: 170,
+    flex: 2,
+    minWidth: 250,
   },
   {
     colId: "order",
     headerName: "Order",
     valueGetter: (p) => p.data?.order_ref ?? "",
     enableRowGroup: true,
-    width: 110,
+    width: 115,
     cellClass: "mono",
   },
   {
@@ -93,18 +94,19 @@ export const columns: ColDef<ExceptionRow>[] = [
     enableRowGroup: true,
     filter: "agSetColumnFilter",
     flex: 1,
-    minWidth: 120,
+    minWidth: 140,
   },
   {
     colId: "impact",
-    headerName: "Impact",
+    headerName: "Difference",
+    headerTooltip: "The size of the gap, in the currency of the record.",
     // The amount string, ordered and filtered by the grid. Display uses the
     // record's own currency; no arithmetic happens in this file.
     valueGetter: (p) => p.data?.impact.amount ?? null,
     comparator: byDecimalString,
     filter: "agNumberColumnFilter",
     type: "rightAligned",
-    width: 120,
+    width: 135,
     // An explicit cellClass replaces the type's own, so the alignment class
     // is restated here.
     cellClass: ["ag-right-aligned-cell", "money"],
@@ -123,6 +125,7 @@ export const columns: ColDef<ExceptionRow>[] = [
   {
     colId: "placed",
     headerName: "Order date",
+    hide: true,
     valueGetter: (p) => p.data?.order_placed_at ?? null,
     valueFormatter: (p) =>
       p.node?.group ? "" : p.value ? formatDate(p.value) : "unknown",
@@ -130,11 +133,12 @@ export const columns: ColDef<ExceptionRow>[] = [
   },
   {
     colId: "investigation",
-    headerName: "Investigation",
+    headerName: "AI result",
+    headerTooltip: "What the AI found when it looked into this exception.",
     valueGetter: (p) => (p.data ? verdictText(p.data) : ""),
     enableRowGroup: true,
     filter: "agSetColumnFilter",
-    width: 160,
+    width: 150,
   },
   {
     colId: "decision",
@@ -142,7 +146,7 @@ export const columns: ColDef<ExceptionRow>[] = [
     valueGetter: (p) => (p.data ? decisionText(p.data) : ""),
     enableRowGroup: true,
     filter: "agSetColumnFilter",
-    width: 118,
+    width: 135,
     cellRenderer: (p: ICellRendererParams<ExceptionRow>) =>
       p.data ? (
         <Pill text={p.value} tone={p.data.decision?.outcome ?? "undecided"} />
@@ -165,7 +169,7 @@ export const columnContext = {
     description: "The seller the exception affects",
     includeSetValues: true,
   },
-  impact: { description: "Size of the discrepancy, in its own currency" },
+  impact: { description: "Size of the difference, in its own currency" },
   currency: { description: "Currency of the impact", includeSetValues: true },
   placed: { description: "When the order was placed" },
   investigation: {

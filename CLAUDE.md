@@ -31,15 +31,17 @@ Also read, and in this order:
 **Phases 0, 0b, 1, 2, 3, Block A (4 + 5 + 6), the PayPal capture (R16), Block
 B (Phase 10), Block C (Phase 11), Block D (Phase 8 + R9 + the exception table)
 and Block E (Phase 12, the investigation agent, kept entire) are complete.
-Block F is next** — Phases 13 and 14, and it owns the one remaining deploy.
+Block F is next** — Phases 13 and 14. **Every merge to `main` deploys the
+API and the worker** (PRs #19-#22 each did), so there is no "one remaining
+deploy" to budget: Block E's merge deploys too, migration included.
 
 **Block F has no spec yet.** Every prior block wrote `requirements.md`,
 `plan.md` and `validation.md` into a dated `specs/` directory before
 implementing, and that is the first task rather than an optional preamble.
 **Read `specs/2026-11-10-investigation-agent/validation.md` §7b first** — five
-things that must be settled before the single deploy is spent, including that
-`render.yaml` declares **no agent credential at all**, so a deploy as it stands
-yields an agent that fails on every investigation.
+things to settle before a merge deploys, including that `render.yaml` declares
+**no agent credential at all**, so a deploy as it stands yields an agent that
+fails on every investigation.
 
 **Two things Block F builds that may not be obvious.** There is **no read API**
 — the deployed service exposes only `/`, `/health`, `/health/ready` and
@@ -176,11 +178,16 @@ now a position-moving ledger category**, which took changing both
 counts as having recorded a refund, and reading only `refund` entries there
 made one correct booking produce two findings.
 
-**The Cron Job is declared in `render.yaml` and not applied.** The deploy
-budget is spent, so Phase 8's fourth criterion is deferred to Block F, which
-owns the next deploy. It runs **daily**, not hourly: the window bounds and the
-idempotency key are both date-grained, so every tick in a UTC day is the same
-piece of work.
+**The Cron Job is deployed and has not yet fired.** The Blueprint sync that
+PR #22's merge triggered created it on 2026-11-10 14:27 UTC (`reckonai-recon`,
+`crn-dbpijkmi0phs73aa406g`). Render does not run a cron job at creation, so the
+first tick is 01:00 UTC on 2026-11-11, and Phase 8's fourth criterion stays
+unproven until its logs show a run (`render logs -r crn-dbpijkmi0phs73aa406g`).
+It runs **daily**, not hourly: the window bounds and the idempotency key are
+both date-grained, so every tick in a UTC day is the same piece of work. **The
+first tick covers 2 of the 18 seeded orders** - the window is `[11-10, 11-12)`
+and the seed is fixed-date (Nov 2-19) - so the full set of faults appears only
+as the calendar advances, unless a wide initial run is enqueued by hand.
 
 **A `/code-review medium` on Block D returned nine findings, all nine real** -
 two of them high, and seven invisible to the seeded dataset. That directory's

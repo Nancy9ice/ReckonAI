@@ -458,12 +458,12 @@ session reads, so it is kept current rather than left as a record of when the
 replan was written.
 
 **Blocks D and E are complete. Block F (queue, approval, dashboard: Phases 13
-and 14) is next**, and it owns the one remaining deploy.
+and 14) is next**. *Corrected 2026-11-10:* this used to add "and it owns the
+one remaining deploy", which was wrong - every merge to `main` deploys.
 
 **Block F starts by writing its own spec**, as every prior block did, and
 should read `specs/2026-11-10-investigation-agent/validation.md` §7b before
-anything else: five things that must be settled before the deploy budget is
-spent. The two largest are that `render.yaml` declares **no agent credential**,
+anything else: five things to settle before a merge deploys. The two largest are that `render.yaml` declares **no agent credential**,
 and that there is **neither a read API nor any frontend** - so Block F builds
 both halves rather than a UI over an existing API.
 
@@ -505,9 +505,13 @@ classifier's own findings, so the two are measured separately.
 **What Block D delivered**, kept here because its results are still load-bearing.
 `jobs` with `SKIP LOCKED`, `processed_events`, retry, a worker that claims
 rather than ticks, the `reconciliation_run` and `reconciliation_exception`
-tables, the date-windowed run, and the Cron Job **declared in `render.yaml` but
-not applied** - the deploy budget is spent, so Phase 8's fourth criterion is
-recorded as deferred to Block F rather than claimed. Four of its five criteria
+tables, the date-windowed run, and the Cron Job, which was **declared in
+`render.yaml` and then created by the Blueprint sync PR #22's merge triggered
+(2026-11-10 14:27 UTC)**. It has not yet fired - Render does not run a cron job
+at creation, and the first tick is 01:00 UTC on 2026-11-11 - so Phase 8's
+fourth criterion is recorded as unobserved rather than claimed. (This used to
+read "declared but not applied - the deploy budget is spent"; both halves were
+wrong.) Four of its five criteria
 are met, measured end to end: 18 orders selected, 6 findings, 5 exceptions,
 with the manifest's own figures.
 
@@ -617,6 +621,16 @@ not overlooked. The deployed app is verified healthy and serving
 `/sim/marketplace`; `validation.md` §10 has the checks. A later block that needs
 another deploy is therefore spending an unbudgeted one, which is a decision to
 make consciously rather than a rule being broken.
+
+**Corrected 2026-11-10: it was never a decision.** The paragraph above names
+the mechanism correctly - both services track `main` with no `autoDeploy`
+setting - and then draws the wrong conclusion from it. Merging *is* deploying.
+Render's history shows the API and the worker redeployed on PRs #19, #20, #21
+and #22 (each a `new_commit` deploy), and #22's merge also ran a Blueprint sync.
+There is no budget to spend or to save: Block E's merge will deploy, running its
+migration through the web service's `preDeployCommand`, and so will Block F's.
+What *is* choosable is when to merge, and what the deployed environment needs
+(an agent credential, a seeded database) by the time that happens.
 
 ## Related
 

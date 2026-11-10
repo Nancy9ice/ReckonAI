@@ -517,8 +517,10 @@ They are the argument for §3's two hand-run calls being worth their cost.
 
 ## 7b. What Block F must know before it deploys
 
-**R2 budgets one deploy and Block F owns it**, so these are stated here rather
-than discovered after it is spent.
+**Every merge to `main` deploys** - Render's history shows the API and the
+worker redeploying on each of PRs #19-#22 - so Block E's own merge will, and
+R2's "one deploy" was never a budget the platform enforced. These are stated
+here rather than discovered after a merge has already deployed them.
 
 1. **`render.yaml` declares no agent credential.** There is no
    `ANTHROPIC_API_KEY`, no `OPENAI_API_KEY`, no `AGENT_PROVIDER` and no
@@ -542,13 +544,16 @@ than discovered after it is spent.
    `gpt-4.1` against 18 orders and is specified for adaptive thinking on
    Haiku; a request-scoped route is the wrong shape. Debts 1 and 2 below are
    the queued form and the latest-per-exception read it needs.
-5. **Phase 8's fourth criterion is still deferred to this deploy** - the Cron
-   Job is declared in `render.yaml` and has never been applied.
+5. **Phase 8's fourth criterion is unobserved, not undeployed.** *Corrected
+   2026-11-10; this item first said the Cron Job "has never been applied".* It
+   was created by the Blueprint sync PR #22's merge triggered, at 14:27 UTC. It
+   has not fired because Render does not run a cron job at creation: the first
+   tick is 01:00 UTC on 2026-11-11, and covers 2 of the 18 seeded orders.
 
 ## 8. Debts this block hands on
 
-1. **No HTTP route and no job type** (D8). Block F owns the next deploy, the
-   dashboard and the queued form. `investigate()` is already separated from the
+1. **No HTTP route and no job type** (D8). Block F owns the dashboard and the
+   queued form. `investigate()` is already separated from the
    CLI so a job handler can call it without reaching through `main`.
 2. **A latest-per-exception read is not built.** The tables are append-only, so
    Block F's investigation detail wants the newest row per

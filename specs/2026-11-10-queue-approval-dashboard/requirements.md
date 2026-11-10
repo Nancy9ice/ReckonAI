@@ -82,6 +82,28 @@ saved views. **Master/detail is not used**: AG Grid does not allow it together
 with row grouping, so detail is a slide-in drawer. Visual language is a
 PayPal-adjacent palette (navy, blue, cyan); no PayPal mark is used.
 
+**D13. Cited references open as records.** `GET /api/evidence/{ref}` resolves
+through the agent's own `CitationResolver` and returns the record's fields with
+amounts in their own currency; an absent value is "not stated", never zero (P3).
+The provider's retained response is a second, on-demand call. A reference that
+resolves but is unstable (a platform fee id) says so. The module only reads, and
+a test pins that.
+
+**D14. Run now.** `POST /api/runs` queues a reconciliation over the whole
+dataset and the UI follows the job. **It is idempotent by design:** the window
+and its dedupe key are date-grained, so a second request the same day is
+answered ("already reconciled today"), not queued. It needs the worker running.
+
+**D15. Coverage.** `GET /api/coverage` accounts for every order: with an
+exception, parked as `awaiting_evidence`, or clean. **"Clean" means "no newest
+finding"**, and a run records how many orders it covered, not which, so an
+order no run has reached reads as clean; the response and the page say so.
+
+**D16. Export.** Server-side CSV of the queue (optionally one run) and of the
+whole decision log, amounts as strings beside their currency. Every cell is
+neutralised against formula injection. There is no export of the on-screen
+filtered view: client-side CSV would skip that neutralisation.
+
 ## 3. Deployed environment (settle before merge — a merge deploys)
 
 - `render.yaml` gains the agent credential (`sync: false`) and `AGENT_PROVIDER`

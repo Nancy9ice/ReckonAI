@@ -5,10 +5,10 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 
 from reckonai.agent import grid_assistant
-from reckonai.api import queries, schemas
+from reckonai.api import evidence, export, queries, schemas
 from reckonai.api.deps import SessionDep, TenantDep
 from reckonai.config import ConfigurationError, get_settings
 
@@ -104,3 +104,72 @@ def grid_assistant_route(body: schemas.GridAssistantIn) -> schemas.GridAssistant
     except grid_assistant.GridAssistantError as error:
         raise HTTPException(status_code=502, detail=str(error)) from error
     return schemas.GridAssistantOut(**result)
+
+
+@router.post("/runs", response_model=schemas.RunRequestOut, status_code=202)
+def request_run(session: SessionDep, tenant_id: TenantDep) -> schemas.RunRequestOut:
+    """Queue a reconciliation over the whole dataset (or say why not)."""
+    result = queries.request_run(session, tenant_id)
+    session.commit()
+    return result
+
+
+@router.get("/jobs/{job_id}", response_model=schemas.JobOut)
+def job_status(
+    job_id: uuid.UUID, session: SessionDep, tenant_id: TenantDep
+) -> schemas.JobOut:
+    job = queries.get_job(session, tenant_id, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="no such job")
+    return queries.job_out(job)
+
+
+@router.get("/coverage", response_model=schemas.CoverageOut)
+def coverage(session: SessionDep, tenant_id: TenantDep) -> schemas.CoverageOut:
+    """What was checked and found clean, and what is parked awaiting evidence."""
+    return queries.coverage(session, tenant_id)
+
+
+@router.get("/evidence/{ref:path}/raw")
+def evidence_raw(
+    ref: str, session: SessionDep, tenant_id: TenantDep
+) -> dict[str, object]:
+    """The provider's own response behind a record, as retained."""
+    body = evidence.raw_body(session, tenant_id, ref)
+    if body is None:
+        raise HTTPException(
+            status_code=404, detail="no retained payload for that record"
+        )
+    return body
+
+
+@router.get("/evidence/{ref:path}", response_model=schemas.EvidenceOut)
+def evidence_record(
+    ref: str, session: SessionDep, tenant_id: TenantDep
+) -> schemas.EvidenceOut:
+    """The record a cited reference names, or 404 if it names nothing."""
+    found = evidence.describe(session, tenant_id, ref)
+    if found is None:
+        raise HTTPException(status_code=404, detail="that reference names no record")
+    return found
+
+
+def _csv(body: str, name: str) -> Response:
+    return Response(
+        content=body,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )
+
+
+@router.get("/export/exceptions.csv")
+def export_exceptions(
+    session: SessionDep, tenant_id: TenantDep, run_id: uuid.UUID | None = None
+) -> Response:
+    return _csv(export.queue_csv(session, tenant_id, run_id), "reckonai-exceptions.csv")
+
+
+@router.get("/export/decisions.csv")
+def export_decisions(session: SessionDep, tenant_id: TenantDep) -> Response:
+    """The decision log, every row ever recorded: the audit trail."""
+    return _csv(export.decisions_csv(session, tenant_id), "reckonai-decisions.csv")

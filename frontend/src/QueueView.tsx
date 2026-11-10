@@ -30,6 +30,7 @@ interface Props {
   onSelect: (id: string) => void;
   runFilterActive: boolean;
   onClearRun: () => void;
+  runId?: string;
 }
 
 function Segmented<T extends string>(props: {
@@ -60,6 +61,7 @@ export default function QueueView({
   onSelect,
   runFilterActive,
   onClearRun,
+  runId,
 }: Props) {
   const gridApi = useRef<GridApi<ExceptionRow> | null>(null);
   const initial = useRef<GridState | null>(null);
@@ -142,6 +144,22 @@ export default function QueueView({
           </select>
         </label>
         <SavedViews gridApi={get as () => GridApi | null} initialState={start} />
+        <div className="views export">
+          <a
+            className="btn"
+            href={
+              runId
+                ? `/api/export/exceptions.csv?run_id=${runId}`
+                : "/api/export/exceptions.csv"
+            }
+            download
+          >
+            Export queue CSV
+          </a>
+          <a className="btn" href="/api/export/decisions.csv" download>
+            Decision log CSV
+          </a>
+        </div>
         {runFilterActive && (
           <button className="chip" type="button" onClick={onClearRun}>
             Showing one run - show all

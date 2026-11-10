@@ -149,3 +149,64 @@ class GridAssistantOut(BaseModel):
     gridState: dict[str, Any]  # noqa: N815 - the toolkit's own key names
     propertiesToIgnore: list[str]  # noqa: N815
     explanation: str
+
+
+class EvidenceField(BaseModel):
+    label: str
+    #: `None` with no `money` means the record does not state it, which is
+    #: shown as "not stated" and is never a zero.
+    value: str | None = None
+    money: MoneyOut | None = None
+
+
+class RawPayloadSummary(BaseModel):
+    source: str
+    record_type: str
+    retrieved_at: datetime
+    endpoint: str | None
+    sha256: str
+
+
+class EvidenceOut(BaseModel):
+    ref: str
+    kind: str
+    #: False for a reference that resolves but will not find the record again
+    #: after a reseed (a platform fee id).
+    stable: bool
+    fields: list[EvidenceField]
+    raw: RawPayloadSummary | None
+
+
+class ParkedOut(BaseModel):
+    id: uuid.UUID
+    order_ref: str
+    detail: str
+    run_id: uuid.UUID
+
+
+class CleanOrderOut(BaseModel):
+    order_ref: str
+    total: MoneyOut
+    placed_at: datetime
+    sellers: list[str]
+
+
+class CoverageOut(BaseModel):
+    orders_total: int
+    with_exceptions: int
+    parked: int
+    clean: int
+    parked_items: list[ParkedOut]
+    clean_orders: list[CleanOrderOut]
+    #: Said plainly, because it bounds the claim: a run records how many orders
+    #: it covered, not which, so this reads the newest findings per order.
+    basis: str
+
+
+class RunRequestOut(BaseModel):
+    #: queued, in_flight, already_done or no_orders.
+    status: str
+    window_start: datetime | None
+    window_end: datetime | None
+    job: JobOut | None
+    message: str

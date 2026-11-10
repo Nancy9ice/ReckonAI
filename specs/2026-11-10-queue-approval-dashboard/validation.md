@@ -113,6 +113,32 @@ test races two real connections.**
 - [ ] Render needs `VITE_AG_GRID_LICENSE_KEY` (build) and the four agent
   variables on the **web** service (declared, tested, values set by a person).
 
+## 4b. Run now, evidence, coverage, export
+
+- [x] **Run reconciliation, end to end in Chrome** with a real worker: queued,
+  then complete, then the queue and the clean count refreshed. Backend:
+  no orders, queued, in flight, already done today, job polling and tenant
+  isolation (`tests/test_api_extras.py`).
+- [x] **Evidence opens**: an order and a seller ledger entry seen in Chrome,
+  with the provider-record section. By test on the seeded dataset: a capture's
+  absent PayPal fee is "not stated" and not zero, the retained payload is
+  reachable, a platform fee id resolves but is marked unstable, another tenant's
+  record is a 404.
+- [x] **Coverage**: 18 orders, 5 with an exception, 1 parked (ORD-0017, the
+  late-refund case), 12 clean, seen in Chrome; the page states what "clean"
+  rests on.
+- [x] **Export**: both CSVs return; amounts are strings beside a currency;
+  superseded decisions are kept in the log; `=`, `+`, `-`, `@` and tab-led cells
+  are neutralised (tested, including a note of `=HYPERLINK(1)`).
+- [ ] **Not clicked in the browser:** the "Show the raw response" button, the
+  CSV downloads from the buttons (the endpoints were fetched with curl), and the
+  platform-fee warning text.
+- [ ] A run is date-grained, so "Run reconciliation" is a no-op the second time
+  in a day; that is by design (D14) but may surprise a demo.
+- [ ] The export buttons wrap onto a second toolbar line at laptop width.
+- The P6 guard on `api/` now allows one module to name money tables:
+  `evidence.py`, which a second test holds to read-only.
+
 ## 5. Corrections and debts handed on
 
 - **Age reads 0% on every seeded row.** The seed's orders are dated 2026-11-13 to

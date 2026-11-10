@@ -322,3 +322,68 @@ details summary { cursor: pointer; color: var(--blue); }
   .page { padding: 16px; }
   .facts { grid-template-columns: 1fr; }
 }
+
+/* ---- Run now, banners, evidence, export, coverage ----------------------- */
+
+.run-now {
+  margin-left: 10px;
+  background: #ffc439; /* the familiar PayPal-yellow call to action */
+  border-color: #ffc439;
+  color: #001c64;
+  font-weight: 650;
+}
+.run-now:hover:not(:disabled) { background: #f5b82e; border-color: #f5b82e; }
+
+.banner { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.banner.ok { background: var(--good-bg); color: var(--good); }
+.banner.busy { background: var(--tint); color: var(--navy); }
+.banner .dismiss { padding: 2px 10px; font-size: 12px; }
+
+.kpis { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.kpis.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.kpi.good { border-top-color: var(--good); }
+.basis { margin: -4px 0 16px; font-size: 12.5px; }
+.card.spaced { margin-bottom: 18px; }
+.card-head p { margin-top: 2px; }
+
+a.btn {
+  display: inline-block;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: 999px;
+  padding: 6px 14px;
+  color: var(--ink);
+  text-decoration: none;
+}
+a.btn:hover { background: var(--tint); border-color: #c9dcee; }
+.views.export { margin-left: auto; }
+
+button.ref {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+  padding: 1px 9px;
+  border-radius: 6px;
+  color: var(--blue);
+  background: var(--tint);
+  border-color: #cfe1f3;
+  cursor: pointer;
+}
+button.ref:hover:not(:disabled) { background: #dcecf9; border-color: var(--blue); text-decoration: underline; }
+.back { margin-bottom: 8px; font-size: 12.5px; padding: 3px 12px; }
+
+.facts.evidence { grid-template-columns: 1fr; gap: 0; }
+.fact-row { display: grid; grid-template-columns: 160px 1fr; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+.fact-row dd { word-break: break-word; }
+.sha { word-break: break-all; margin-bottom: 10px; }
+pre.raw {
+  background: #0b1b3a;
+  color: #d7e6ff;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 11.5px;
+  max-height: 340px;
+  overflow: auto;
+}
+
+@media (max-width: 1100px) { .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } .kpis.four { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .kpis, .kpis.four { grid-template-columns: repeat(2, minmax(0, 1fr)); } .fact-row { grid-template-columns: 1fr; gap: 0; } }

@@ -12,7 +12,7 @@ requirements rather than papered over.
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from sqlalchemy import func, select, text
@@ -27,6 +27,7 @@ from reckonai.models import (
     Job,
     Order,
     OrderItem,
+    ProcessedEvent,
     ReconciliationException,
     ReconciliationRun,
     Seller,
@@ -49,12 +50,19 @@ def list_runs(session: Session, tenant_id: uuid.UUID) -> list[ReconciliationRun]
 
 
 def _newest_exception_rows(
-    session: Session, tenant_id: uuid.UUID, run_id: uuid.UUID | None
+    session: Session,
+    tenant_id: uuid.UUID,
+    run_id: uuid.UUID | None,
+    *,
+    is_exception: bool = True,
+    code: str | None = None,
 ) -> list[ReconciliationException]:
     stmt = select(ReconciliationException).where(
         ReconciliationException.tenant_id == tenant_id,
-        ReconciliationException.is_exception.is_(True),
+        ReconciliationException.is_exception.is_(is_exception),
     )
+    if code is not None:
+        stmt = stmt.where(ReconciliationException.code == code)
     if run_id is not None:
         return list(
             session.scalars(stmt.where(ReconciliationException.run_id == run_id))
@@ -472,4 +480,180 @@ def request_investigation(
         tenant_id=tenant_id,
         job_type=investigation_job.JOB_TYPE,
         payload=investigation_job.payload_for(exception_id),
+    )
+
+
+def get_job(session: Session, tenant_id: uuid.UUID, job_id: uuid.UUID) -> Job | None:
+    return session.scalar(
+        select(Job).where(Job.tenant_id == tenant_id, Job.id == job_id)
+    )
+
+
+def coverage(session: Session, tenant_id: uuid.UUID) -> schemas.CoverageOut:
+    """What the newest findings say about every order the tenant has.
+
+    An order is **clean** only if it has neither an open exception nor a parked
+    `awaiting_evidence` finding. That is the claim "nothing was found", and it
+    is only as good as a run having looked: a run records how many orders it
+    covered, not which, so an order no run has reached reads as clean here.
+    The `basis` field says so, rather than the page implying more.
+    """
+    orders = list(
+        session.scalars(
+            select(Order)
+            .where(Order.tenant_id == tenant_id)
+            .order_by(Order.external_ref)
+        )
+    )
+    flagged = {
+        r.order_external_ref for r in _newest_exception_rows(session, tenant_id, None)
+    }
+    parked_rows = _newest_exception_rows(
+        session, tenant_id, None, is_exception=False, code="awaiting_evidence"
+    )
+    parked_refs = {r.order_external_ref for r in parked_rows}
+
+    seller_rows = session.execute(
+        select(OrderItem.order_id, Seller.name)
+        .join(
+            Seller,
+            (Seller.tenant_id == OrderItem.tenant_id)
+            & (Seller.id == OrderItem.seller_id),
+        )
+        .where(OrderItem.tenant_id == tenant_id)
+        .distinct()
+    )
+    sellers: dict[uuid.UUID, list[str]] = {}
+    for order_id, name in seller_rows:
+        sellers.setdefault(order_id, []).append(name)
+
+    clean = [
+        schemas.CleanOrderOut(
+            order_ref=o.external_ref,
+            total=MoneyOut.from_money(o.total),
+            placed_at=o.placed_at,
+            sellers=sorted(sellers.get(o.id, [])),
+        )
+        for o in orders
+        if o.external_ref not in flagged and o.external_ref not in parked_refs
+    ]
+    return schemas.CoverageOut(
+        orders_total=len(orders),
+        with_exceptions=len(flagged),
+        parked=len(parked_refs),
+        clean=len(clean),
+        parked_items=[
+            schemas.ParkedOut(
+                id=r.id,
+                order_ref=r.order_external_ref,
+                detail=r.detail,
+                run_id=r.run_id,
+            )
+            for r in parked_rows
+        ],
+        clean_orders=clean,
+        basis=(
+            "Read from the newest findings per order. A run records how many "
+            "orders it covered, not which, so an order no run has reached "
+            "appears here as clean."
+        ),
+    )
+
+
+def request_run(session: Session, tenant_id: uuid.UUID) -> schemas.RunRequestOut:
+    """Queue a reconciliation over every order the tenant has.
+
+    The window runs from the earliest order to the end of the day after the
+    latest (and never earlier than tomorrow), so one request covers the whole
+    dataset. **It is idempotent by design**: the window is date-grained and so
+    is the dedupe key, so asking twice on the same day is answered, not
+    queued twice. That is `reconcile_job.idempotency_key`'s rule and this
+    does not route around it.
+    """
+    from datetime import UTC, datetime
+
+    from reckonai.jobs import reconcile_job, window
+
+    bounds = session.execute(
+        select(func.min(Order.placed_at), func.max(Order.placed_at)).where(
+            Order.tenant_id == tenant_id
+        )
+    ).one()
+    first, last = bounds
+    if first is None or last is None:
+        return schemas.RunRequestOut(
+            status="no_orders",
+            window_start=None,
+            window_end=None,
+            job=None,
+            message="There are no orders to reconcile yet.",
+        )
+
+    def midnight(d: datetime) -> datetime:
+        return datetime(d.year, d.month, d.day, tzinfo=UTC)
+
+    tomorrow = midnight(datetime.now(UTC)) + timedelta(days=1)
+    win = window.Window(
+        start=midnight(first),
+        end=max(tomorrow, midnight(last) + timedelta(days=1)),
+    )
+
+    # One request at a time per tenant: the check and the enqueue are one step.
+    session.execute(
+        text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+        {"key": f"run:{tenant_id}"},
+    )
+
+    key = reconcile_job.idempotency_key(tenant_id, win)
+    done = session.scalar(
+        select(ProcessedEvent.id).where(
+            ProcessedEvent.tenant_id == tenant_id, ProcessedEvent.event_id == key
+        )
+    )
+    if done is not None:
+        return schemas.RunRequestOut(
+            status="already_done",
+            window_start=win.start,
+            window_end=win.end,
+            job=None,
+            message=(
+                "This window has already been reconciled today. A run is "
+                "date-grained by design, so the next one is available tomorrow."
+            ),
+        )
+
+    in_flight = session.scalar(
+        select(Job)
+        .where(
+            Job.tenant_id == tenant_id,
+            Job.job_type == reconcile_job.JOB_TYPE,
+            Job.status.in_(("queued", "claimed")),
+        )
+        .order_by(Job.created_at.desc())
+        .limit(1)
+    )
+    if in_flight is not None:
+        return schemas.RunRequestOut(
+            status="in_flight",
+            window_start=win.start,
+            window_end=win.end,
+            job=job_out(in_flight),
+            message="A run is already queued or running.",
+        )
+
+    job = queue.enqueue(
+        session,
+        tenant_id=tenant_id,
+        job_type=reconcile_job.JOB_TYPE,
+        payload={
+            "window_start": win.start.isoformat(),
+            "window_end": win.end.isoformat(),
+        },
+    )
+    return schemas.RunRequestOut(
+        status="queued",
+        window_start=win.start,
+        window_end=win.end,
+        job=job_out(job),
+        message="Run queued. The worker picks it up within its poll interval.",
     )

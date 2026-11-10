@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ExceptionDetail } from "./api";
 import { api } from "./api";
+import EvidenceView from "./EvidenceView";
 import { formatDateTime, label } from "./labels";
 import { formatFraction, formatMoney } from "./money";
 
@@ -29,6 +30,7 @@ export default function DetailDrawer({ id, onChanged, onClose }: Props) {
   const [approver, setApprover] = useState(readApprover);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
+  const [openRef, setOpenRef] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -173,7 +175,14 @@ export default function DetailDrawer({ id, onChanged, onClose }: Props) {
         ) : (
           <div className="refs">
             {detail.evidence_refs.map((r) => (
-              <code key={r}>{r}</code>
+              <button
+                key={r}
+                className="ref"
+                title="Open this record"
+                onClick={() => setOpenRef(r)}
+              >
+                {r}
+              </button>
             ))}
           </div>
         )}
@@ -243,15 +252,22 @@ export default function DetailDrawer({ id, onChanged, onClose }: Props) {
                     </span>
                   </div>
                   <div className="refs">
-                    {c.cited_refs.map((r) => (
-                      <code
-                        key={r}
-                        className={c.unresolved_refs.includes(r) ? "unresolved" : ""}
-                      >
-                        {r}
-                        {c.unresolved_refs.includes(r) ? " (does not resolve)" : ""}
-                      </code>
-                    ))}
+                    {c.cited_refs.map((r) =>
+                      c.unresolved_refs.includes(r) ? (
+                        <code key={r} className="unresolved">
+                          {r} (does not resolve)
+                        </code>
+                      ) : (
+                        <button
+                          key={r}
+                          className="ref"
+                          title="Open this record"
+                          onClick={() => setOpenRef(r)}
+                        >
+                          {r}
+                        </button>
+                      ),
+                    )}
                   </div>
                 </li>
               ))}
@@ -321,7 +337,11 @@ export default function DetailDrawer({ id, onChanged, onClose }: Props) {
 
   return (
     <aside className="drawer" aria-label="Exception detail">
-      {body()}
+      {openRef ? (
+        <EvidenceView refId={openRef} onBack={() => setOpenRef(null)} />
+      ) : (
+        body()
+      )}
     </aside>
   );
 }

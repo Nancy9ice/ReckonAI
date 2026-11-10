@@ -115,6 +115,49 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
+export interface EvidenceField {
+  label: string;
+  value: string | null;
+  money: Money | null;
+}
+
+export interface Evidence {
+  ref: string;
+  kind: string;
+  stable: boolean;
+  fields: EvidenceField[];
+  raw: {
+    source: string;
+    record_type: string;
+    retrieved_at: string;
+    endpoint: string | null;
+    sha256: string;
+  } | null;
+}
+
+export interface Coverage {
+  orders_total: number;
+  with_exceptions: number;
+  parked: number;
+  clean: number;
+  parked_items: { id: string; order_ref: string; detail: string; run_id: string }[];
+  clean_orders: {
+    order_ref: string;
+    total: Money;
+    placed_at: string;
+    sellers: string[];
+  }[];
+  basis: string;
+}
+
+export interface RunRequest {
+  status: "queued" | "in_flight" | "already_done" | "no_orders";
+  window_start: string | null;
+  window_end: string | null;
+  job: Job | null;
+  message: string;
+}
+
 export interface GridAssistantResult {
   gridState: Record<string, unknown>;
   propertiesToIgnore: string[];
@@ -122,6 +165,15 @@ export interface GridAssistantResult {
 }
 
 export const api = {
+  evidence: (ref: string) =>
+    request<Evidence>(`/api/evidence/${encodeURIComponent(ref)}`),
+  evidenceRaw: (ref: string) =>
+    request<Record<string, unknown>>(
+      `/api/evidence/${encodeURIComponent(ref)}/raw`,
+    ),
+  coverage: () => request<Coverage>("/api/coverage"),
+  requestRun: () => request<RunRequest>("/api/runs", { method: "POST" }),
+  job: (id: string) => request<Job>(`/api/jobs/${id}`),
   gridAssistant: (body: {
     request: string;
     state: Record<string, unknown>;

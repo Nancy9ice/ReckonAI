@@ -263,7 +263,7 @@ examined".
 
 - **Age reads 0% on every seeded row.** The seed's orders are dated 2026-11-13 to
   11-19 and today is 11-10, so age is clamped at zero. Real in the data, not a
-  bug in the factor; Block G's demo should account for it.
+  bug in the factor; a demo should account for it (Block G, which would have, was skipped).
 - **The queue cannot retract an exception a later run stops emitting**, because a
   run records how many orders it covered, not which.
 - **The recommendation shown is the top-ranked cause**; the agent produces no
@@ -273,7 +273,7 @@ examined".
 
 - **Approver is free text** (D5): confirmed in conversation, accepted for the
   MVP. A named-user login (about an hour) or SSO (about a day) is the fix.
-- **Block G's handoff:** seeded orders are dated 2026-11-13 to 11-19, so age is
+- **Left open (Block G was skipped, 2026-11-11):** seeded orders are dated 2026-11-13 to 11-19, so age is
   0%; the Anthropic provider and a successful investigation rendered in a browser
   are unproven; the deploy values (licence key, provider, API keys on web and
   worker) need a person; the worker's 30-second poll makes a deployed

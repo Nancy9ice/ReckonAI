@@ -162,6 +162,12 @@ later job types are a registration rather than a change to the loop.
 
 ### D8. The Cron Job is declared, not applied
 
+> **Corrected 2026-11-10; the decision text below is kept as written.** The
+> premise - that a deliberate Blueprint sync could be withheld to save a deploy
+> budget - was false. Both services track `main`, so merging this block's PR
+> deployed it, and the same merge synced the Blueprint and created the cron
+> service. See `validation.md` §4 for the evidence and what remains unobserved.
+
 `render.yaml` gains a `cron` service invoking the scheduled run **daily**, at
 01:00 UTC. *Corrected after code review: this was hourly, with a comment
 claiming that picked a late record up within the hour.* Both window bounds snap

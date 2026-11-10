@@ -111,6 +111,19 @@ def assert_no_committed_marketplace_rows(engine: Engine) -> None:
     `tests/test_order_dependence_guard.py` can provoke it **without committing
     a tenant row** - committing one is precisely what would break the
     downgrade for every module collected after it.
+
+    **The message names two causes, and that is the point of it.** It
+    originally offered only the collection-order one, because that was the
+    only cause when Block B wrote it. Block E added a second: the
+    investigation agent is a separate process and can only see *committed*
+    rows, so running it by hand requires seeding the database for real. A
+    developer who does that and forgets to reset gets 6 failures and 43
+    errors, none of which mentions the dataset - and a diagnosis sending them
+    to look for a pytest ordering bug that is not there.
+
+    That is `specs/2026-11-10-investigation-agent/validation.md` section 8
+    debt 3, and extending this message is what discharges it. A note in a spec
+    file would not: the failure happens here, so the explanation belongs here.
     """
     count = committed_tenant_count(engine)
     if count:
@@ -118,15 +131,24 @@ def assert_no_committed_marketplace_rows(engine: Engine) -> None:
             f"{count} committed tenant row(s) exist, so downgrading the schema "
             "to base would fail against ondelete=RESTRICT with an error that "
             "names neither this cause nor its fix.\n\n"
-            "This suite is order-dependent: tests/test_sim_api.py and "
+            "TWO THINGS CAUSE THIS.\n\n"
+            "1. The database was seeded outside the suite. Most likely "
+            "`reckonai.demo_data --ensure`, which commits - and which running "
+            "the investigation agent by hand requires, because the agent is a "
+            "separate process and can only see committed rows. Check this "
+            "first; it is one command to undo:\n\n"
+            "       uv run python -m reckonai.demo_data --reset\n\n"
+            "2. Collection order has been disturbed. This suite is "
+            "order-dependent: tests/test_sim_api.py and "
             "tests/test_connector_ingest.py commit rows and remove them at "
             "module teardown, and it only works because pytest collects "
-            "alphabetically. Something has reordered collection - "
-            "pytest-randomly, -n auto, a -k selection that runs a committing "
-            "module first, or an earlier module that failed before its "
-            "teardown ran.\n\n"
+            "alphabetically. pytest-randomly, -n auto, a -k selection that "
+            "runs a committing module first, or an earlier module that failed "
+            "before its teardown ran will each break that.\n\n"
             "See specs/2026-11-08-block-a-marketplace-connector/validation.md "
-            "section 8 debt 4."
+            "section 8 debt 4 for cause 2, and "
+            "specs/2026-11-10-investigation-agent/validation.md section 8 "
+            "debt 3 for cause 1."
         )
 
 

@@ -233,7 +233,7 @@ class ReconciliationException(TenantMixin, TimestampMixin, Base):
     #: **Not a comma-joined string.** A reference containing the separator
     #: would split into two ids that resolve to nothing, and the failure would
     #: look like bad evidence rather than bad storage.
-    evidence_refs: Mapped[list] = mapped_column(JSONB, nullable=False)
+    evidence_refs: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
 
     evidence_basis: Mapped[str] = mapped_column(String(32), nullable=False)
 

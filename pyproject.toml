@@ -27,6 +27,16 @@ dependencies = [
     # that only appears in deployment. tech-stack.md section 1 locks it, added
     # there 2026-11-08.
     "httpx2>=2.16",
+    # The investigation agent's two providers. tech-stack.md section 1 locks
+    # both rows - the Anthropic SDK from the start, the OpenAI SDK by the dated
+    # 2026-11-10 amendment that made the provider a setting. A runtime
+    # dependency absent from that table requires amending it first, which is
+    # why the amendment landed in the commit before this one.
+    #
+    # `anthropic` 1.x is built on httpx2, which this project already pins
+    # above - the same reasoning that put httpx2 here rather than httpx.
+    "anthropic>=1.1",
+    "openai>=1.60",
 ]
 
 [build-system]
@@ -122,6 +132,15 @@ addopts = "-ra"
 # engine and the classifier refuse
 # (specs/2026-11-09-queue-scheduled-run/requirements.md section 3). The absence
 # of one gate is why the other matters more here, not less.
-files = ["src/reckonai/engine", "src/reckonai/recon", "src/reckonai/jobs"]
+files = [
+    "src/reckonai/engine",
+    "src/reckonai/recon",
+    "src/reckonai/jobs",
+    # Added in Block E. Outside the purity gate for the same reason `jobs` is -
+    # it holds a session, a clock and a network client - and inside strict mypy
+    # for the same reason too: the absence of one gate is why the other matters
+    # more here, not less.
+    "src/reckonai/agent",
+]
 python_version = "3.12"
 strict = true

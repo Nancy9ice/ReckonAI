@@ -63,6 +63,17 @@ QUEUE_TABLES: tuple[str, ...] = (
     "reconciliation_run",
 )
 
+#: Block E's output: one row per investigation attempt, and one per ranked
+#: candidate cause. specs/2026-11-10-investigation-agent/requirements.md D1.
+#:
+#: Append-only, like the runs and exceptions above, and holding no monetary
+#: value - specs/mission.md P1 keeps every figure in a report coming from the
+#: deterministic engine.
+AGENT_TABLES: tuple[str, ...] = (
+    "investigation",
+    "investigation_cause",
+)
+
 #: Every table in `Base.metadata`. Excludes `alembic_version`, which Alembic
 #: owns and which never appears in the declarative metadata.
 MODEL_TABLES: tuple[str, ...] = tuple(
@@ -72,6 +83,7 @@ MODEL_TABLES: tuple[str, ...] = tuple(
         + CONNECTOR_TABLES
         + DEMO_TABLES
         + QUEUE_TABLES
+        + AGENT_TABLES
     )
 )
 

@@ -12,7 +12,7 @@
 | 1 | Two workers never claim the same job | `test_jobs_queue.py` - two real sessions, the first holding its lock **uncommitted** while the second claims; disjoint id sets, union is all six jobs | **met** |
 | 2 | A failing job retries and lands terminal with its error | `test_jobs_queue.py` three attempts to `failed`, plus `test_jobs_dispatch.py` through the real handler path | **met** |
 | 3 | The same event id twice raises a constraint violation | `test_jobs_queue.py` on the marker, and `test_jobs_reconcile_run.py` on a real repeated window | **met** |
-| 4 | The cron job fires a date-windowed run on the deployed environment | **deferred to Block F** - see §4 | deferred |
+| 4 | The cron job fires a date-windowed run on the deployed environment | **deployed, not yet observed to fire** (corrected 2026-11-10) - see §4 | unobserved |
 | 5 | An incomplete record and a parked exception are re-evaluated by a later run | `test_jobs_reevaluation.py`, on F5 in the real seeded dataset | **met** |
 
 Criterion 1 was not a condition to construct: two workers already overlap for
@@ -84,6 +84,17 @@ per fault across runs rather than one run's rows, so a single wide initial run
 populates every order and trailing runs keep it current.
 
 ## 4. What is deferred, and why it is not debt
+
+> **Corrected 2026-11-10, during Block E; the text below is kept as written.**
+> Two things here were wrong. The Blueprint *was* synced - by the merge of this
+> block's own PR #22 - and the cron service was created at 14:27 UTC that day;
+> and there was never a separate deploy to defer to, because **every merge to
+> `main` deploys** (PRs #19-#22 each redeployed the API and worker). The test
+> that asserted the file says "not applied" pinned that falsehood and has been
+> rewritten to pin the property instead. Criterion 4 is therefore *unobserved*
+> rather than *undeployed*: Render does not run a cron job at creation, so the
+> first tick is 01:00 UTC on 2026-11-11, and it will select 2 of the 18 seeded
+> orders (window `[11-10, 11-12)`; the seed is fixed-date, Nov 2-19).
 
 **Criterion 4 is deferred to Block F's deploy** (D8). R2 budgeted one deploy
 and Block A's merge spent it; a Blueprint sync also redeploys the web service

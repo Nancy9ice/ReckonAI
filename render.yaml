@@ -140,13 +140,20 @@ services:
   # The scheduled reconciliation. Block D
   # (specs/2026-11-09-queue-scheduled-run/requirements.md D8, D9).
   #
-  # **DECLARED BUT NOT APPLIED.** This Blueprint has not been synced since this
-  # service was added, so the cron job does not yet exist on Render. That is
-  # deliberate: the replan's R2 budgeted one deploy and Block A's merge spent
-  # it, and a Blueprint sync redeploys the web service and the worker too,
-  # re-running migrations and the demo seed. Phase 8's "the cron job fires on
-  # the deployed environment" is therefore recorded as **deferred to Block F**,
-  # which owns the next deploy, rather than claimed.
+  # **APPLIED 2026-11-10 14:27 UTC, and not yet observed to fire.** The
+  # Blueprint sync that the merge of PR #22 triggered created this service
+  # (deploy trigger `blueprint_sync`, live). Render does not run a cron job
+  # when it is created, only on its schedule, so the first tick is
+  # 01:00 UTC on 2026-11-11 and Phase 8's "the cron job fires a date-windowed
+  # run on the deployed environment" stays unproven until it does.
+  #
+  # This comment used to say "declared but not applied ... deferred to Block
+  # F, which owns the next deploy". That was wrong, and wrong in a way that
+  # mattered: **every merge to `main` deploys.** Both services track `main`
+  # with no `autoDeploy` override, so PRs #19, #20, #21 and #22 each produced
+  # a `new_commit` deploy of the web service and the worker, and #22's also
+  # synced this Blueprint. There is no "one remaining deploy" to budget; a
+  # merge is the deploy, migrations and demo seed included.
   #
   # **It enqueues; it does not reconcile.** The worker above is what executes.
   # A cron invocation that did the work itself would be a third process

@@ -714,12 +714,15 @@ data where Phases 0 and 0b confirmed it exists.
 > late PayPal record arrives.
 >
 > **The fifth - "the cron job fires a date-windowed run on the deployed
-> environment" - is deferred to Block F**, which owns the next deploy. The
-> `cron` service is declared in `render.yaml` and the Blueprint is not synced,
-> because R2's one deploy was spent on Block A's merge and a sync redeploys the
-> web service and worker too. Declared and unapplied is recorded as such, in
-> the Blueprint itself and in that block's `validation.md` §4; what is unproven
-> is a statement about Render, not about this code.
+> environment" - is still unobserved.** *Corrected 2026-11-10.* This note
+> originally said the `cron` service was declared but not applied and that the
+> criterion was "deferred to Block F, which owns the next deploy". Both were
+> wrong. The Blueprint sync that PR #22's merge triggered created the service
+> on 2026-11-10 at 14:27 UTC, and **every merge to `main` deploys** (PRs #19
+> through #22 each produced a `new_commit` deploy), so there was never a
+> separate deploy to wait for. What remains is observing the first scheduled
+> tick, 01:00 UTC on 2026-11-11, and that is a statement about Render, not
+> about this code.
 >
 > **R9's window needed a second clause.** `order.placed_at` alone cannot see a
 > refund that settles a dispute weeks after the order, so selection is that

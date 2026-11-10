@@ -51,6 +51,27 @@ FORBIDDEN_IMPORTS = ("sqlalchemy", "psycopg", "httpx", "requests", "reckonai.db"
 #: as one in the engine. specs/2026-11-09-matching-classification/requirements.md
 #: D1 records the decision to keep it a separate package rather than widening
 #: the engine's surface.
+#:
+#: **`jobs` and `agent` are deliberately absent from both lists**, and the
+#: reasoning is the same for each. They are the two packages that legitimately
+#: hold what the pure packages refuse - sessions, clocks, transaction
+#: boundaries, and in `agent`'s case a network client - so listing them in
+#: `PURE_PACKAGES` would fail on the first line of correct code. Strict mypy
+#: covers them instead (`[tool.mypy]` in pyproject.toml).
+#:
+#: They are absent from `MONEY_PATH_PACKAGES` because **neither computes a
+#: monetary value**. `agent` is the sharper case: specs/mission.md P1 forbids
+#: the LLM layer from doing arithmetic that reaches a financial conclusion, so
+#: every figure in an investigation report arrives already computed from
+#: `reckonai.reconcile` and is carried as a string. The one `float` in that
+#: package is a cause's `confidence`, which is not money - and adding `agent`
+#: here would flag exactly that field while proving nothing about the money
+#: rules it has no way to break.
+#:
+#: Its *column* is `NUMERIC(4, 3)` even so, because
+#: `tests/test_models_schema.py::test_no_column_is_a_binary_float` refuses a
+#: binary float anywhere in the schema and that gate was left absolute rather
+#: than given its first exception.
 PURE_PACKAGES = ("money", "engine", "recon")
 
 

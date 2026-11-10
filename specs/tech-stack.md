@@ -18,8 +18,8 @@
 | Database | PostgreSQL 16 | Yes |
 | Background jobs | Postgres-backed queue (no Redis) | Yes |
 | Scheduling | Render Cron Jobs | Yes |
-| LLM | Claude Opus 5.5 (`claude-opus-5-5`) | Yes |
-| LLM orchestration | Anthropic Python SDK, beta Tool Runner | Yes |
+| LLM | Claude Haiku 5.5 (`claude-haiku-5-5`), as a setting; OpenAI selectable | Yes, amended 2026-11-10 |
+| LLM orchestration | Anthropic Python SDK, beta Tool Runner; OpenAI Python SDK | Yes, amended 2026-11-10 |
 | Frontend | React 18 + TypeScript + Vite | Yes |
 | Data grid | AG Grid / AG Studio | Yes |
 | Payments | PayPal REST APIs (sandbox) | Yes |
@@ -274,7 +274,44 @@ every audit constraint in §5.2 — is unaffected and is not reducible. It is th
 LLM that produces evidence-backed recommendations, which [[mission]] §4 lists as
 the third of three capabilities.
 
+**Amended 2026-11-10: OpenAI is a second selectable provider.**
+`settings.agent_provider` chooses `anthropic` or `openai`; one investigation
+uses one provider start to finish. Operator decision, taken during Block E.
+
+The reasoning extends the amendment above rather than departing from it. That
+one made the *model* a setting because the strongest-model argument is asserted
+rather than measured, and Block G's eval is what can settle it on the six
+seeded faults. Making the *provider* a setting widens the same measurement, and
+costs the MVP nothing because the default is unchanged.
+
+**Every §5.2 audit constraint applies to both providers.** They are properties
+of an auditable financial product, not of an SDK: reasoning is persisted
+whatever produced it, the model id is stored and compared against the one
+requested, the loop is append-only, a refusal or policy stop is read before any
+content and reported as a failed investigation, and no tool mutates financial
+state or accepts a monetary amount.
+
+**The structured report is the seam.** Both providers return the same Pydantic
+report; only the transport differs. A provider that cannot produce that shape
+fails the investigation rather than returning a looser one — two reports that
+are not comparable would defeat the only reason for having two providers.
+
+**The no-fallback decision stands and is not reversed by this.** A refusal ends
+the investigation; it does not fall through to the other provider.
+Cross-provider fallback was offered and declined, which keeps `downgraded`
+meaning what §5.2 says it means and keeps a refusal honestly reported as a
+failure.
+
+*Limitation to record:* the OpenAI path is implemented and unit-tested but is
+not the measured default.
+
 ### 5.1 Request configuration
+
+> **This table is Anthropic-specific**, recorded by the 2026-11-10 provider
+> amendment above. Every row was derived from real Claude API behaviour and
+> several are 400s rather than preferences, so none of it transfers to the
+> OpenAI path. That provider's configuration is recorded in
+> `specs/2026-11-10-investigation-agent/validation.md` §3a.
 
 | Setting | Value | Why |
 |---|---|---|
@@ -345,7 +382,7 @@ never fall through to an unvalidated guess ([[mission]] P1). *Moot in the MVP,
 which has no Haiku pass (§5 amendment); the fail-closed behaviour it specifies
 is what the MVP does unconditionally.*
 
-**Agent loop:** the Anthropic SDK's beta Tool Runner —
+**Agent loop (Anthropic provider):** the Anthropic SDK's beta Tool Runner —
 `@beta_tool`-decorated functions passed to `client.beta.messages.tool_runner(...)`,
 driven with `runner.until_done()`. We do not hand-write the tool loop, and we do
 not use the Claude Agent SDK (a different product, for coding agents).

@@ -188,16 +188,33 @@ def test_the_blueprint_declares_the_cron_job() -> None:
     assert "--window-days 2" in blueprint
 
 
-def test_the_blueprint_says_the_cron_job_is_not_applied() -> None:
+def test_the_blueprint_states_exactly_one_status_for_the_cron_job() -> None:
     """D8, written where someone reading the Blueprint will see it.
 
-    The deploy budget was spent, so this service is declared and unsynced. A
-    reader who assumes otherwise would conclude Phase 8's fourth criterion is
-    met.
+    The point is that a reader cannot mistake a declared service for a running
+    one, or the reverse, and conclude Phase 8's fourth criterion is met or
+    unmet on a guess. So the file must carry an explicit status marker.
+
+    **This used to assert the literal text "DECLARED BUT NOT APPLIED"**, and
+    that was the wrong thing to pin: it asserted a *value* of the status, so it
+    went stale the moment the status changed. It did change - the Blueprint
+    sync that PR #22's merge triggered created the service on 2026-11-10, and
+    this test would have kept demanding the file say otherwise. A test that
+    enforces a falsehood is worse than none, because it makes correcting the
+    comment look like breaking the build.
+
+    It now pins the property that matters: one marker, never both, so the file
+    cannot be left contradicting itself half-edited.
     """
     blueprint = RENDER_YAML.read_text()
 
-    assert "DECLARED BUT NOT APPLIED" in blueprint
+    not_applied = "DECLARED BUT NOT APPLIED" in blueprint
+    applied = "**APPLIED " in blueprint
+
+    assert not_applied != applied, (
+        "render.yaml must state whether the cron job is applied, and only one "
+        f"way (found not-applied={not_applied}, applied={applied})"
+    )
 
 
 def test_the_scheduler_module_is_runnable_as_a_main() -> None:

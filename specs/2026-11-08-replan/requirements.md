@@ -453,16 +453,65 @@ record of completed phases and record what was true when written.
 
 ## State
 
-**Updated 2026-11-10 after Block D.** This section is the first thing a new
+**Updated 2026-11-10 after Block E.** This section is the first thing a new
 session reads, so it is kept current rather than left as a record of when the
 replan was written.
 
-**Block D is complete. Block E (the investigation agent, Phase 12) is next.**
+**Blocks D and E are complete. Block F (queue, approval, dashboard: Phases 13
+and 14) is next**. *Corrected 2026-11-10:* this used to add "and it owns the
+one remaining deploy", which was wrong - every merge to `main` deploys.
+
+**Block F starts by writing its own spec**, as every prior block did, and
+should read `specs/2026-11-10-investigation-agent/validation.md` §7b before
+anything else: five things to settle before a merge deploys. The two largest are that `render.yaml` declares **no agent credential**,
+and that there is **neither a read API nor any frontend** - so Block F builds
+both halves rather than a UI over an existing API.
+
+Block E delivered Phase 12 entire: read-only retrieval tools plus the engine as
+a recompute tool, the structured report with ranked causes and per-cause cited
+ids, the `insufficient_evidence` branch, the `investigation` and
+`investigation_cause` tables, and a `python -m` entry point. Five of its seven
+criteria are met offline; the two that need a real model call are evidenced by
+two hand-run investigations rather than by CI, because a paid call per test run
+is not acceptable and a key-gated test skipped in CI would be a green run that
+covered nothing.
+
+**Four things from Block E worth carrying at this level.**
+
+**OpenAI is a second selectable provider, by an operator decision taken during
+the block.** `settings.agent_provider` chooses; both return the same structured
+report, which is the seam. `tech-stack.md` §1 and §5 are amended, and **§5.1's
+request table is now marked Anthropic-specific** - every row of it was derived
+from real Claude API behaviour and several are 400s there rather than
+preferences. The no-fallback decision is **not** reversed: a refusal still ends
+the investigation.
+
+**Nothing downgrades, and the columns are what prove it.** With no refusal
+fallback on either provider, `investigation.downgraded` can never be set in the
+MVP. That is the honest version of §5.2's rule rather than an exemption, and a
+`CHECK` refuses a downgraded row that carries no returned model to compare.
+
+**"Cite the capture" was incomplete.** A platform fee PayPal *reverses* has no
+`capture_id` - its parent is the refund - and Scenario 1's own order carries
+exactly that shape. The stable reference is the fee's parent, whichever it is,
+and the fee tool returns `fee_kind` so a capture fee and a reversal are never
+added together.
+
+**Resolution and stability are different questions about a citation.** A
+`platform_fee.external_id` resolves to a real record and will not find it again
+after a reseed. Treating it as fabricated would be false and would fail on the
+classifier's own findings, so the two are measured separately.
+
+**What Block D delivered**, kept here because its results are still load-bearing.
 `jobs` with `SKIP LOCKED`, `processed_events`, retry, a worker that claims
 rather than ticks, the `reconciliation_run` and `reconciliation_exception`
-tables, the date-windowed run, and the Cron Job **declared in `render.yaml` but
-not applied** - the deploy budget is spent, so Phase 8's fourth criterion is
-recorded as deferred to Block F rather than claimed. Four of its five criteria
+tables, the date-windowed run, and the Cron Job, which was **declared in
+`render.yaml` and then created by the Blueprint sync PR #22's merge triggered
+(2026-11-10 14:27 UTC)**. It has not yet fired - Render does not run a cron job
+at creation, and the first tick is 01:00 UTC on 2026-11-11 - so Phase 8's
+fourth criterion is recorded as unobserved rather than claimed. (This used to
+read "declared but not applied - the deploy budget is spent"; both halves were
+wrong.) Four of its five criteria
 are met, measured end to end: 18 orders selected, 6 findings, 5 exceptions,
 with the manifest's own figures.
 
@@ -572,6 +621,16 @@ not overlooked. The deployed app is verified healthy and serving
 `/sim/marketplace`; `validation.md` §10 has the checks. A later block that needs
 another deploy is therefore spending an unbudgeted one, which is a decision to
 make consciously rather than a rule being broken.
+
+**Corrected 2026-11-10: it was never a decision.** The paragraph above names
+the mechanism correctly - both services track `main` with no `autoDeploy`
+setting - and then draws the wrong conclusion from it. Merging *is* deploying.
+Render's history shows the API and the worker redeployed on PRs #19, #20, #21
+and #22 (each a `new_commit` deploy), and #22's merge also ran a Blueprint sync.
+There is no budget to spend or to save: Block E's merge will deploy, running its
+migration through the web service's `preDeployCommand`, and so will Block F's.
+What *is* choosable is when to merge, and what the deployed environment needs
+(an agent credential, a seeded database) by the time that happens.
 
 ## Related
 

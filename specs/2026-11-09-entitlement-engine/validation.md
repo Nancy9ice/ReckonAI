@@ -172,6 +172,38 @@ for the current dataset, since no order has one seller spanning two categories.
 
 ## 8. Debts handed on
 
+> **Corrected 2026-11-10, during Block E. The count below was five when
+> written and is 25 now.** It was never re-measured, because D9 scopes the
+> gate to `engine/` and so nothing fails on it — which is exactly how a number
+> recorded "so the next block inherits a number rather than a surprise" became
+> the surprise. The table's own locations had also drifted: `sim/seed.py:506`
+> and `:574` are now `:584` and `:590`.
+>
+> **The growth is unchecked surface, not accumulated defects**, and the
+> distinction matters because the original framing of this section invited the
+> wrong reading. Of the 25, **17 are bare `dict`/`list` annotations** and 5 are
+> missing annotations — neither kind can change behaviour. The four
+> substantive ones are the three still listed below plus one more in
+> `sim/seed.py`, and each was assessed as correct code rather than a defect.
+> No bug has been found in any of them.
+>
+> **Two rows are now closed**, both the `connector/ingest.py` pair this table
+> marked "Real ... Block C or D" — neither of which took them. `_index` has a
+> value-constrained type parameter, and `TARGETS` is annotated `type[Any]`
+> because it is genuine runtime dispatch, with
+> `tests/test_connector_ingest.py::test_every_target_is_tenant_scoped_with_its_reference_column`
+> asserting what the type cannot. That guard is stronger than the annotation
+> would have been: it proves the columns exist. Neither error was a bug — both
+> were unverified assumptions.
+>
+> **What this section got right is that reporting beats suppressing.** What it
+> got wrong is assuming a written number stays true. The gate is the only
+> mechanism that keeps one honest, and widening it to `money/`, `connector/`
+> and `paypal/` is recorded in
+> `specs/2026-11-10-investigation-agent/validation.md` §8 as an open decision
+> rather than done, because it is preventative hygiene and Block E's hours
+> went to the live investigations instead.
+
 **Five mypy errors outside `engine/`, left reported rather than suppressed.**
 D9 scopes the gate to `engine/`, so these do not fail CI. Counted here so the
 next block inherits a number rather than a surprise.
@@ -181,7 +213,7 @@ next block inherits a number rather than a surprise.
 | `sim/seed.py:506` | `RuleT` cannot be `CommissionRule` `[type-var]` | **Not a defect.** `Mapped[X]` against a Protocol member `X`; see D9 |
 | `sim/seed.py:574` | `list[SellerLedgerEntry]` is not `Iterable[LedgerEntry]` | Same limitation |
 | `models/base.py:192` | `composite()` expects `Callable[..., Money]`, got one returning `Money \| None` | Real, and the `_money_or_none` factory Phase 2 added for nullable pairs. Worth a look by whoever next touches `models/base.py` |
-| `connector/ingest.py:341,437` | `"type" has no attribute "tenant_id"` (x2), plus a missing annotation | Real, and probably a `type[Model]` variable that wants a narrower annotation. Block C or D |
+| ~~`connector/ingest.py:341,437`~~ | `"type" has no attribute "tenant_id"` (x2), plus a missing annotation | **Closed in Block E.** Neither was a bug — both were unverified assumptions. See the note above |
 | `money/allocation.py:126` | unary `-` on `Literal['n','N','F'] \| int` | Real but benign: `Decimal.as_tuple().exponent` is typed as that union, and the value is an `int` for any finite Decimal, which the code has already guaranteed |
 
 **The protocol gap D8 found can recur.** The runtime `isinstance` tests check

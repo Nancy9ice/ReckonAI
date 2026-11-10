@@ -1096,9 +1096,12 @@ from strings per [[tech-stack]] §7.
 
 ## Phase 15 — Demo script and eval harness · 0.5 day · **SKIPPED 2026-11-11 (operator decision)**
 
-> Not built, and no spec exists. Detection and false positives are covered by
-> `tests/test_recon_gate.py`; the AI's root-cause accuracy is unmeasured. See
-> `CLAUDE.md`, "Block G was skipped".
+> The demo script, the rehearsal and the limitations audit were skipped. **The
+> eval half was built later on its own** (`specs/2026-11-11-eval-harness/`): one
+> command prints the metric table, and `--agent` scores the AI once. Its
+> criteria: the table prints from one command (met); the figures are measured
+> output (met, one draw); three scenarios from a clean database with no manual
+> step (not built). See `CLAUDE.md`, "Block G was skipped".
 
 > **Kept by the replan (R12), against the cutline below**, which names the
 > harness as the second thing to drop. The reasoning inverts at two days:

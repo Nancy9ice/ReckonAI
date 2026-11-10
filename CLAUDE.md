@@ -85,13 +85,13 @@ moves to `/service`). Things not to re-derive:
 block to start. Do not begin one unprompted, and do not write a spec for it
 unless asked. What this leaves, so nothing is claimed that was not measured:
 
-- **No eval harness exists.** Detection and false positives are asserted by tests
-  (`tests/test_recon_gate.py`, `test_manifest_agrees_with_seed.py`), not printed as
-  a table. **Root-cause accuracy of the AI is not measured.** What is known is
-  hand-run: Scenario 1 (F1) and the evidence-removed case in Block E on
-  `gpt-4.1`, F4 correct on production, F3 (FX) came back "no clear cause", F2 and
-  F6 never investigated. Anthropic has never run. State it that way, never as a
-  rate.
+- **The eval was built afterwards, on its own, and only the eval**
+  (`python -m reckonai.eval [--agent]`, `specs/2026-11-11-eval-harness/`): the
+  deterministic half gates and passes; `--agent` scores the AI once and reports.
+  **Read the results in that directory's `validation.md` before quoting any
+  number**: 0 of 5 faults pass the strict citation rule, a reader judged 4 of 5
+  causes right, both evidence-removed cases passed, and it is one draw on
+  `gpt-4.1`. Anthropic has never run. Never state the AI's accuracy as a rate.
 - **No scripted demo and no `demo.md` runbook.** The deployed app was exercised by
   hand after the Block F merge (a run, then an investigation, on production;
   `specs/2026-11-10-queue-approval-dashboard/validation.md` §3a).
@@ -184,8 +184,8 @@ calling every tool and asserting the session holds nothing pending.
 database with no committed marketplace rows — skipping the `--reset` afterwards
 fails six tests and errors 43 more, none of them about the agent. **The
 `insufficient_evidence` branch is still the criterion most at risk on a cheaper
-model; no eval scores that branch (Block G was skipped)**, so it is known only
-from hand-run investigations.
+model; the eval's two evidence-removed cases passed once on `gpt-4.1`**, so it is
+observed on one draw and not established.
 
 **Read `specs/2026-11-09-queue-scheduled-run/validation.md` §9 and §8 first**
 (three debts handed forward, three corrections to earlier documents), then

@@ -491,10 +491,12 @@ newest finding": a run records how many orders it covered, not which. And a run
 is date-grained, so "Run reconciliation" a second time in one day is answered,
 not queued.
 
-**Left open by skipping Block G**, none of it measured: the AI's root-cause
-accuracy (hand-run only: F1 and the evidence-removed case in Block E, F4 on
-production, F3 inconclusive, F2 and F6 not run), the Anthropic path, a scripted
-demo and runbook, and a line-by-line audit of the readme's limitations. Also
+**Only the eval of Block G was built later** (2026-11-11, on its own, with its
+own spec in `specs/2026-11-11-eval-harness/`): the deterministic gate passes and
+the AI was scored once on `gpt-4.1`, with results published as they came (see its
+`validation.md`). **Still skipped:** the scripted demo and runbook, the rehearsal,
+and a line-by-line audit of the readme's limitations. Still unmeasured: the
+Anthropic path. Also
 unresolved: the seeded orders are dated after today, so every age factor reads
 0%. R12's reasoning for keeping the harness (hand-scoring costs hours) was
 weighed again and declined. The decision and the lean version it would take are in

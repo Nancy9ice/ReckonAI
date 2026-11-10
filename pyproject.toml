@@ -143,6 +143,8 @@ files = [
     "src/reckonai/agent",
     # Added in Block F: holds sessions and a clock, like `jobs` and `agent`.
     "src/reckonai/api",
+    # The eval: holds a session and a model client, like `agent` and `api`.
+    "src/reckonai/eval",
 ]
 python_version = "3.12"
 strict = true

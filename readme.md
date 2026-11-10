@@ -31,8 +31,9 @@ model, a deterministic entitlement engine, classified exceptions, an AI agent
 that investigates each exception and reports ranked causes with cited record
 ids, a prioritised queue with human approve/reject, an operations dashboard, and
 a seeded fault manifest whose detection and false-positive results are asserted
-by the test suite. **There is no eval harness, and the AI's root-cause accuracy is
-not measured** (see the limitations below).
+by the test suite, and an eval (`python -m reckonai.eval`) that prints them as a
+table and, with `--agent`, scores the AI once (one draw, one model; see the
+limitations below).
 
 **What it does not do.** Each is a deliberate decision with a reason, not an
 oversight:
@@ -67,7 +68,7 @@ decision rather than an omission (`specs/tech-stack.md` §5, amended
 |---|---|
 | **A refused investigation is reported as failed, and is not retried** — not on a second model and not on the second provider | Claude Haiku 5.5 has no server-side refusal fallback, and a cross-provider fallback was offered and declined. A refusal therefore stops, and is surfaced as a failed investigation: no report, no cause list, nothing presented as a conclusion. The gap is recorded rather than papered over, which also keeps the downgrade flag meaning exactly what it says |
 | **The model is a setting, and the default is the cheaper one.** `settings.agent_model` defaults to `claude-haiku-5-5` | The argument that the strongest model pays for itself on multi-step evidence reasoning still stands, but it is asserted rather than measured. No eval was built to settle it (Phase 15 was skipped), so it stays an assertion; the model is configuration, so it can be changed with no code change. Every response's model id is stored and compared against the one requested, so the audit trail always states which model produced a report |
-| **No eval harness was built (Phase 15 was skipped), so the AI's root-cause accuracy is unmeasured** | Detection and false positives are asserted by tests against the seeded faults. For the AI, only hand-run investigations exist: the missing-refund case and the evidence-removed case passed in the agent block, the duplicate-entry case passed on the deployed app, the FX case returned "no clear cause", and the commission and payout cases were never run. No rate is claimed |
+| **The AI's root-cause accuracy was measured once, on one model, and is not a rate** | `python -m reckonai.eval --agent` on `gpt-4.1`: **0 of 5 faults pass the strict rule** (cite every reference the manifest names), because the agent omits generic ids and cites one refund under PayPal's id rather than the marketplace's; **a reader judged the stated cause right on 4 of 5** and hedged on the FX case. **Both evidence-removed cases passed**: it said it could not tell. The deterministic half passes (6 of 6 faults, exact impacts, 0 of 12 clean orders flagged). The scorer's rule was not changed after seeing the results; Anthropic has never run; the same model returned a different verdict on the FX case in an earlier hand run, so one draw is fragile |
 | **A second provider is selectable and is not the measured default.** `settings.agent_provider` chooses Anthropic or OpenAI | Both return the same structured report. **The OpenAI path (`gpt-4.1`) is the one that has run live**, in the agent block and on the deployed app, and it is what the deployed app uses; the Anthropic path is implemented and unit-tested but has never run live (that account has no credit). OpenAI returns no reasoning summary, so investigations served that way carry no recorded reasoning, a real difference between the two |
 
 **Limitations the dashboard carries** (`specs/2026-11-10-queue-approval-dashboard/`):

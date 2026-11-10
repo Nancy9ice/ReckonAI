@@ -329,3 +329,37 @@ def other_payload(session: Session, other_tenant: Tenant) -> RawPayload:
     session.add(row)
     session.flush()
     return row
+
+
+@pytest.fixture
+def seeded_exception(session: Session, tenant: Tenant):  # type: ignore[no-untyped-def]
+    """One persisted run and one exception under it, for Block F's tables."""
+    from datetime import UTC, datetime, timedelta
+    from decimal import Decimal
+
+    from reckonai.models import ReconciliationException, ReconciliationRun
+    from reckonai.money import Money
+
+    now = datetime.now(UTC)
+    run = ReconciliationRun(
+        tenant_id=tenant.id,
+        window_start=now,
+        window_end=now + timedelta(days=1),
+        status="completed",
+    )
+    session.add(run)
+    session.flush()
+    row = ReconciliationException(
+        tenant_id=tenant.id,
+        run_id=run.id,
+        code="commission_mismatch",
+        order_external_ref="ORD-TEST",
+        detail="test",
+        is_exception=True,
+        impact=Money(Decimal("10.00"), "USD"),
+        evidence_refs=[],
+        evidence_basis="provider_reported",
+    )
+    session.add(row)
+    session.flush()
+    return row

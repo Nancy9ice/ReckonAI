@@ -29,16 +29,44 @@ Also read, and in this order:
   evidence. The root specs state rules and point here; they do not repeat it.
 
 **Phases 0, 0b, 1, 2, 3, Block A (4 + 5 + 6), the PayPal capture (R16), Block
-B (Phase 10, the entitlement engine) and Block C (Phase 11, matching and
-classification) are complete. Block D is next** — `jobs`, `SKIP LOCKED`,
-`processed_events`, the Cron Job, the date-windowed run, **and the exception
-table** Block C assigned to it.
+B (Phase 10), Block C (Phase 11) and Block D (Phase 8 + R9 + the exception
+table) are complete. Block E is next** — the investigation agent, Phase 12,
+kept **entire**.
 
-**Read `specs/2026-11-09-matching-classification/requirements.md` §4 first.**
-It is Block C's handoff. In that directory's `validation.md`, **§9 tabulates
-the nine code-review findings and their fixes** — read it before extending the
-classifier — §10 lists the corrections this block made to earlier documents,
-and §11 what it did not prove.
+**Block E reads these, in this order, and little else.** [[roadmap]] Phase 12
+for the exit criteria; `specs/tech-stack.md` §5 for the model and §5.1 for the
+request configuration, which is unusually specific and was derived from real
+API behaviour — adaptive thinking with `display` set explicitly, `effort`
+`medium` set explicitly, no sampling parameters at all; and §5.2 for the four
+audit constraints, which are as binding as the money rules.
+
+**The model is `claude-haiku-5-5`, by the dated 2026-11-10 amendment in §5, and
+it lives in `settings.agent_model` rather than in code** so Block G can score
+both models on the same faults. Two consequences to carry: **Haiku 5.5 has no
+server-side refusal fallback**, so a `stop_reason: "refusal"` ends the
+investigation and is reported as failed — never as a report — and nothing
+downgrades, which is why §5.2's downgrade flag has nothing to flag. And the
+`insufficient_evidence` branch is the criterion most at risk on a cheaper
+model, so **Block G scores that branch specifically**, not just overall
+detection. Then R11 in the replan, which states plainly what was cut (a Haiku
+field-*name*-guessing pass) and what was not (this entire block), and
+distinguishes the three different things these specs call "confidence". Load
+the `claude-api` skill before writing agent code.
+
+Three things Block E inherits rather than builds. `reconcile.run(session,
+tenant_id)` is its recompute tool and returns **every** finding regardless of
+any window, so the agent is not limited to what a scheduled run covered.
+**Cite the capture, never `platform_fee.external_id`** — the latter is rebuilt
+from a payload UUID on every seed, and Block E's exit criterion is that every
+cited id resolves to a real record. And the agent is **read-only**: it may
+enqueue nothing and move nothing (P6).
+
+**Read `specs/2026-11-09-queue-scheduled-run/validation.md` §9 and §8 first**
+(three debts handed forward, three corrections to earlier documents), then
+`specs/2026-11-09-matching-classification/requirements.md` §4, which is Block
+C's handoff. In that directory's `validation.md`, **§9 tabulates the nine
+code-review findings and their fixes** — read it before extending the
+classifier — §10 lists its corrections, and §11 what it did not prove.
 
 The engine lives in `reckonai/engine/`: `rules.py`, `ledger.py`,
 `entitlement.py`, `refunds.py`, `positions.py`. **It compares nothing** — it
@@ -49,14 +77,56 @@ product, and nowhere else**), `classifier.py`. Both packages are pure, under
 the purity gate and strict mypy.
 
 `reckonai/reconcile.py` is the seam: the only module holding both a `Session`
-and an `OrderCase`, and the entry point Block D's windowed run wraps —
+and an `OrderCase`. Block D's windowed run wraps it and Block E calls it for a
+recompute — one classification path, no windowing or clock inside it —
 `run(session, tenant_id)` and `exceptions(session, tenant_id)`. **Count
 exceptions through `exceptions_only()`, never `len(findings)`** —
 `awaiting_evidence` is a finding and not an exception, so counting raw
 findings fails the false-positive gate while being correct.
 
-**Nothing persists a finding yet.** The `Finding` JSON contract is frozen and
-pinned by test; the table is Block D's, and Block F's dashboard depends on it.
+**Findings persist, and Block F's dashboard reads them.** Block D added
+`reconciliation_run` and `reconciliation_exception` — append-only, one row per
+`Finding`, the frozen contract column for column. Two things to know: the
+column is **`order_external_ref`**, not `order_ref`, because `order_ref` is one
+of the sim's deliberately non-canonical outward names and a guard fails if a
+canonical column claims one; and **`is_exception` is stored**, so a queue
+filters on a column rather than on a `WHERE code NOT IN (...)` that could
+disagree with `exceptions_only()`.
+
+The job side lives in `reckonai/jobs/`: `queue.py` (`SKIP LOCKED`),
+`window.py` (the two selection clauses), `reconcile_job.py` (the handler),
+`handlers.py` (the registry), `schedule.py` (the `python -m` entry point the
+Cron Job invokes). **It is the one package deliberately outside the purity
+gate** — it holds the sessions, clocks and transaction boundaries the engine
+and classifier refuse — and it is inside strict mypy for that reason.
+
+Three Block D results not to re-derive. **The claim is committed before the
+handler runs**: sharing one transaction means a failing handler's rollback
+undoes the attempt increment too, and the job retries forever looking untried.
+**The windowed run selects on `order.placed_at` unioned with new evidence since
+the last completed run** — the second clause is what makes a dispute settled
+weeks later visible at all, and it cannot be a SQL join because a late PayPal
+refund reaches its order only through the matcher's claim. And **`dispute` is
+now a position-moving ledger category**, which took changing both
+`POSITION_CATEGORIES` and `_partition_by_ledger`: the latter decides what
+counts as having recorded a refund, and reading only `refund` entries there
+made one correct booking produce two findings.
+
+**The Cron Job is declared in `render.yaml` and not applied.** The deploy
+budget is spent, so Phase 8's fourth criterion is deferred to Block F, which
+owns the next deploy. It runs **daily**, not hourly: the window bounds and the
+idempotency key are both date-grained, so every tick in a UTC day is the same
+piece of work.
+
+**A `/code-review medium` on Block D returned nine findings, all nine real** -
+two of them high, and seven invisible to the seeded dataset. That directory's
+`validation.md` §7b tabulates them with their fixes; read it before touching
+`jobs/` or the dispute rule. The two worth carrying: **a `claimed` job is
+recoverable only because `claim` reclaims a stale one** - nothing else moves a
+row out of `claimed`, and `drain` does not wrap `dispatch` - and **the
+dispute-versus-refund shape is undecidable from the records**, so a
+dispute-backed refund is `awaiting_evidence` rather than a guess in either
+direction.
 
 Three Block C results not to re-derive. **Do not widen the zero same-currency
 tolerance** — it rests on two measurements across all 21 captures, and F2's
@@ -106,8 +176,10 @@ Block A delivered the simulated marketplace (`reckonai.sim`), the six seeded
 faults with their manifest, and the connector (`reckonai.connector`). That
 directory's `validation.md` §9 records seven corrections to its own
 `requirements.md` and two bugs the checks caught; §8 records three debts
-handed forward. **Read §8 before Block C or Block D** — one of them is a
-cleanup Block D owes.
+handed forward. Of its five debts, 1 was Block C's first task, 2 was retired
+by the capture, 4 was settled by Block B, and 5 is Block F's; **debt 4's
+warning still binds** — the suite is order-dependent and must not be
+randomised.
 
 **What the MVP does not include**, so it is not half-built by accident: webhook
 ingestion (R8), live PayPal calls during the reconciliation run — records are
@@ -186,7 +258,9 @@ trimming of earlier tool results. See `specs/tech-stack.md` §5.2.
   the detail and the fix.
 - **The deployed database carries the schema and no rows**, and is not
   reachable externally, so nothing can currently seed it. The live demo needs
-  that; it is §8 debt 5, and Block D is the natural place for it.
+  that. It is §8 debt 5, owned by Block F — though `render.yaml`'s
+  `preDeployCommand` already runs `reckonai.demo_data --ensure`, so Block F
+  should verify rather than rebuild.
 - **Local work needs the compose database and `DATABASE_URL` exported.**
   Without them the database-backed tests skip locally and fail hard in CI, which
   is deliberate — a silent skip would be a green run that tested nothing.

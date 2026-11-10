@@ -453,18 +453,57 @@ record of completed phases and record what was true when written.
 
 ## State
 
-**Updated 2026-11-09 after Block C.** This section is the first thing a new
+**Updated 2026-11-10 after Block D.** This section is the first thing a new
 session reads, so it is kept current rather than left as a record of when the
 replan was written.
+
+**Block D is complete. Block E (the investigation agent, Phase 12) is next.**
+`jobs` with `SKIP LOCKED`, `processed_events`, retry, a worker that claims
+rather than ticks, the `reconciliation_run` and `reconciliation_exception`
+tables, the date-windowed run, and the Cron Job **declared in `render.yaml` but
+not applied** - the deploy budget is spent, so Phase 8's fourth criterion is
+recorded as deferred to Block F rather than claimed. Four of its five criteria
+are met, measured end to end: 18 orders selected, 6 findings, 5 exceptions,
+with the manifest's own figures.
+
+Four things from Block D worth carrying at this level.
+
+**The window needed a second clause, and the dispute case is what proved it.**
+Windowing on `order.placed_at` alone cannot see a refund that settles a dispute
+30 days after the order - every scheduled window has moved past it, so the
+order is never re-selected and R10 silently never fires. Selection is now that
+clause **unioned with** any order of any age holding evidence retrieved since
+the last completed run. It cannot be a SQL join, because a late PayPal refund
+reaches its order only through the matcher's claim.
+
+**`dispute` is now a position-moving ledger category, and that took two
+changes rather than one.** Block C excluded it for good evidence reasons, but
+the exclusion meant a dispute loss the expected entitlement had already
+absorbed was missing from the ledger sum - a false positive on correct data.
+Adding it to `POSITION_CATEGORIES` was only half: `_partition_by_ledger` also
+read only `refund` entries when deciding whether a provider refund had been
+recorded, so one correct booking produced two findings. A hand-authored fixture
+found the second half; the false-positive gate was re-run and is unchanged.
+
+**The claim must be committed before the handler runs.** Sharing one
+transaction means a failing handler's rollback undoes the attempt increment
+too, and the job retries forever looking untried. `handlers.dispatch` refuses
+an uncommitted claim, because the mistake is invisible until something raises.
+
+**A guard caught a column name.** `order_ref` is one of the sim's deliberately
+non-canonical outward field names, so the exception table's column is
+`order_external_ref` while the frozen JSON contract's key stays `order_ref`.
+Claiming the name would have weakened the guard that keeps the connector's
+mapping genuinely exercised.
 
 Phases 0, 0b, 1, 2, 3 and **Block A (4 + 5 + 6) are complete and merged** — PR
 #14, merge commit `2d002b1`, CI green.
 
-**The PayPal capture (R16), Block B (Phase 10) and Block C (Phase 11) are
-complete.** **Block D is next** — fixture replay is already done by R16, so
-what remains of it is `jobs`, `SKIP LOCKED`, `processed_events`, the Cron Job
-and the date-windowed run, **plus the exception table Block C assigned to it**
-(that directory's `requirements.md` D8; Block F's dashboard depends on it).
+**The PayPal capture (R16), Block B (Phase 10), Block C (Phase 11) and Block D
+(Phase 8 + R9 + the exception table) are complete.** Block D's spec and
+evidence are in `specs/2026-11-09-queue-scheduled-run/`; its `validation.md` §9
+lists three debts handed forward and §8 three corrections it made to earlier
+documents.
 
 Block C delivered `reckonai/recon/{vocabulary,matcher,tolerance,classifier}.py`
 — pure, under the same purity and mypy gates as the engine — and

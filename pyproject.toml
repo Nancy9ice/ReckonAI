@@ -117,6 +117,11 @@ addopts = "-ra"
 # suppressed here.
 # ---------------------------------------------------------------------------
 [tool.mypy]
-files = ["src/reckonai/engine", "src/reckonai/recon"]
+# `jobs` is in scope although it is the one package deliberately *outside* the
+# purity gate - it holds the sessions, clocks and transaction boundaries the
+# engine and the classifier refuse
+# (specs/2026-11-09-queue-scheduled-run/requirements.md section 3). The absence
+# of one gate is why the other matters more here, not less.
+files = ["src/reckonai/engine", "src/reckonai/recon", "src/reckonai/jobs"]
 python_version = "3.12"
 strict = true

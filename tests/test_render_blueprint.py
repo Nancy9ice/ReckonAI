@@ -56,16 +56,47 @@ def database(blueprint: dict[str, Any]) -> dict[str, Any]:
     return databases[0]
 
 
-def test_exactly_three_components(blueprint: dict[str, Any]) -> None:
-    """One web service, one worker, one database - and no fourth.
+def test_the_queue_has_no_broker_beside_postgres(blueprint: dict[str, Any]) -> None:
+    """The job queue lives in tables inside the one database.
 
-    The job queue lives in tables inside the same database. A fourth component
-    appearing here would mean that co-location had been given up, and with it
-    the single transaction covering a dedupe marker and its financial write
-    (specs/tech-stack.md section 4).
+    **Rewritten in Block D, which added the Cron Job this test used to
+    forbid.** It previously asserted exactly two services and one database,
+    and the count was a proxy: what it was really protecting is
+    specs/tech-stack.md section 4's decisive argument, that a dedupe marker
+    and the financial write it guards share one `COMMIT`. A Redis or other
+    broker is what would break that, because a crash between two stores
+    leaves a marker claiming an event was processed whose effect was rolled
+    back.
+
+    A cron job breaks none of it: it enqueues a row into that same Postgres
+    and holds no state of its own. So the invariant is now asserted directly -
+    one database, and nothing that could be a second queue.
     """
-    assert len(blueprint["services"]) == 2
     assert len(blueprint["databases"]) == 1
+
+    brokers = {
+        service["name"]
+        for service in blueprint["services"]
+        if service["type"] in {"redis", "keyvalue"}
+    }
+    assert not brokers, (
+        f"{sorted(brokers)} would split the dedupe marker from the financial "
+        "write it guards (specs/tech-stack.md section 4)"
+    )
+
+
+def test_the_components_are_the_four_declared(blueprint: dict[str, Any]) -> None:
+    """Web, worker, cron, and one database. A fifth is a decision, not a drift.
+
+    Named rather than counted, so the failure says which component appeared.
+    """
+    assert {
+        (service["type"], service["name"]) for service in blueprint["services"]
+    } == {
+        ("web", "reckonai-api"),
+        ("worker", "reckonai-worker"),
+        ("cron", "reckonai-recon"),
+    }
 
 
 def test_no_static_site_yet(blueprint: dict[str, Any]) -> None:

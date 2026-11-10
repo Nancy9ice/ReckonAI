@@ -36,10 +36,19 @@ kept **entire**.
 **Block E reads these, in this order, and little else.** [[roadmap]] Phase 12
 for the exit criteria; `specs/tech-stack.md` §5 for the model and §5.1 for the
 request configuration, which is unusually specific and was derived from real
-API behaviour — `claude-opus-5-5`, adaptive thinking with `display` set
-explicitly, no sampling parameters at all, forced `tool_choice` returns 400;
-and §5.2 for the four audit constraints, which are as binding as the money
-rules. Then R11 in the replan, which states plainly what was cut (a Haiku
+API behaviour — adaptive thinking with `display` set explicitly, `effort`
+`medium` set explicitly, no sampling parameters at all; and §5.2 for the four
+audit constraints, which are as binding as the money rules.
+
+**The model is `claude-haiku-5-5`, by the dated 2026-11-10 amendment in §5, and
+it lives in `settings.agent_model` rather than in code** so Block G can score
+both models on the same faults. Two consequences to carry: **Haiku 5.5 has no
+server-side refusal fallback**, so a `stop_reason: "refusal"` ends the
+investigation and is reported as failed — never as a report — and nothing
+downgrades, which is why §5.2's downgrade flag has nothing to flag. And the
+`insufficient_evidence` branch is the criterion most at risk on a cheaper
+model, so **Block G scores that branch specifically**, not just overall
+detection. Then R11 in the replan, which states plainly what was cut (a Haiku
 field-*name*-guessing pass) and what was not (this entire block), and
 distinguishes the three different things these specs call "confidence". Load
 the `claude-api` skill before writing agent code.

@@ -195,6 +195,11 @@ broker, the job interface is narrow enough to swap behind.
 
 ## 5. AI investigation layer
 
+> **Superseded for the MVP by the 2026-11-10 amendment below: the agent runs
+> Claude Haiku 5.5 by default, as a configuration setting.** The paragraph
+> immediately below records why Opus was chosen and is kept because the
+> argument still stands on its merits - Block G's eval is what decides it.
+
 **Model: Claude Opus 5.5 — `claude-opus-5-5`.**
 1M context, 128K max output, $4 / $20 per million input / output tokens.
 Chosen because exception investigation is multi-step evidence reasoning, which
@@ -212,7 +217,58 @@ mapping is deterministic only, and an unmatched field is mapped by hand. The
 decision stands for the MVP, not for the design — §9.2 keeps the pass documented
 because the three-pass ordering is the right shape once there is time for it.
 
-**This cut is scoped to field-name guessing and touches nothing in this
+**Amended 2026-11-10: the investigation model is Claude Haiku 5.5,
+`claude-haiku-5-5`, and is now a configuration setting rather than a locked
+constant.** ($0.10 / $0.50 per MTok up to 100K-token prompts, $0.50 / $2.50
+beyond.) Operator decision, taken before Block E started, with the reasoning
+recorded rather than assumed:
+
+The argument above - that the strongest model pays for itself on multi-step
+evidence reasoning - is not withdrawn. What changes is that it is **asserted
+rather than measured**, and Block G's eval harness is the instrument that can
+settle it on the six seeded faults. So `settings.agent_model` defaults to
+`claude-haiku-5-5` and the eval can be run against either model with no code
+change. §5.2 already requires persisting the model id from every response and
+comparing it against the model requested, so the audit trail states which model
+produced each report either way.
+
+**What of §5.1 transfers unchanged**, verified against current API behaviour:
+adaptive thinking with `display` set explicitly (Haiku 5.5 also defaults to
+`"omitted"`); `output_config={"effort": "medium"}` - its default is `medium`
+too, so the setting means the same thing; `max_tokens=64000` with streaming and
+`.get_final_message()`; never sending `temperature` / `top_p` / `top_k`, which
+return 400 on a non-default value here; prompt caching, still model-scoped; and
+the append-only loop, because Haiku 5.5 runs the same preserved-thinking check
+on accounts created on or after 2026-08-31. `budget_tokens` is a 400 here as
+well. Task budgets and mid-conversation system messages are both available.
+
+**One row does not transfer: Haiku 5.5 has no server-side refusal fallback.**
+The `betas=["server-side-fallback-2026-07-01"]` / `fallbacks="default"` row has
+no equivalent, so a `stop_reason: "refusal"` simply stops. Decided: **no
+fallback, and the gap is recorded rather than papered over.** A refused
+investigation is surfaced as a failed investigation - no report, no cause list,
+nothing presented as a conclusion. §5.2's downgrade flag therefore has nothing
+to flag, which is the honest version of that rule rather than an exemption from
+it: **nothing downgrades silently because nothing downgrades at all.** The
+model-id persistence and comparison stay, because they are what prove it.
+
+*Limitation to record in the readme:* a refused investigation is not retried on
+a second model; it is reported as failed.
+
+**The risk this accepts, named so it is measured rather than discovered.**
+Phase 12's hardest criterion is `insufficient_evidence` - returning "I cannot
+tell" instead of assembling a plausible cause from thin evidence ([[mission]]
+P5, and the replan's never-dropped list). That is precisely where model
+capability shows, and a cheaper model is likelier to confabulate a cause that
+reads well. **Block G must score that branch specifically on both models**, not
+only overall detection accuracy, and `stop_reason` must be checked before any
+content is read regardless.
+
+Forced `tool_choice` is a separate matter: Haiku 5.5 is not among the models
+that 400 on `any` / `tool`, so §5.1's note about it is Opus-specific. It
+changes nothing, since the agent uses `auto` plus `strict: true` either way.
+
+**The R11 cut below is scoped to field-name guessing and touches nothing in this
 section's primary model.** The Opus 5.5 investigation layer below — including
 every audit constraint in §5.2 — is unaffected and is not reducible. It is the
 LLM that produces evidence-backed recommendations, which [[mission]] §4 lists as

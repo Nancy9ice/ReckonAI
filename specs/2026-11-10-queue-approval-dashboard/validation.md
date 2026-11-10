@@ -61,6 +61,35 @@ named; `[ ]` means **not proven**, and the reason is stated, not softened.
   will look nearly empty until a wide run is enqueued by hand, as was done
   locally with window 2026-10-12 to 2026-11-21.
 
+## 3a. What the deploy showed (PR #24, merged 2026-11-10 23:00 UTC)
+
+Checked from outside, with `curl` and the Render CLI, 23:04 UTC.
+
+- [x] **Both services went live** in about three minutes from the merge (the
+  `blueprint_sync` deploys of `69a3a0c`; the plain commit deploys were superseded
+  by them). The pre-deploy step ran, so **the migration and the demo seed
+  succeeded**: the deployed database holds the 18 seeded orders.
+- [x] **Node is available in Render's Python runtime.** `GET /` returns the
+  dashboard (`text/html`), its 3 MB script loads (200), and `/service` returns the
+  JSON index. This was the largest unverified risk; it is closed.
+- [x] `/health`, `/health/ready` and `/api/coverage` answer 200.
+- [x] **The model credential is set on the web service**: one tiny request to
+  `/api/grid-assistant` returned a valid grid state (HTTP 200). One cheap model
+  call was spent. Which provider it used was not read.
+- [x] **Coverage is honest on an unreconciled database**: 18 orders, 0 clean, 18
+  "not examined", and `/api/runs` is empty. This is the post-review wording doing
+  its job: no run has looked, so nothing is called clean.
+- [ ] **The worker's model key is not verified.** It is a separate service with
+  its own variables. The only check is an investigation completing there, which
+  has not been run.
+- [ ] **No reconciliation has run on the deployed database.** The Cron Job
+  redeployed and is live but has not fired; its first tick is 01:00 UTC
+  2026-11-11 and covers 2 of 18 orders. Until a wider run is queued (the
+  dashboard's "Run reconciliation" does it), the deployed queue is empty.
+- [ ] **The nightly investigation path has not run on Render.**
+- [ ] Whether the AG Grid watermark is gone, and the wording on the deployed
+  pages, were not seen in a browser.
+
 ## 4. Regression gates
 
 - [x] 1872 tests pass in order; `ruff`, strict `mypy` (now including `api/`),

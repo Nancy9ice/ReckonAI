@@ -1,8 +1,7 @@
 # ReckonAI — Roadmap
 
 > **Status:** Constitution. Implementation order and phase boundaries.
-> **Updated 2026-11-10: Phases 12, 13 and 14 are built (Blocks E and F; F is
-> unmerged). Next is Block G (Phase 15: eval, demo, limitations).** The rest of
+> **Updated 2026-11-10: Phases 12, 13 and 14 are built and merged (Blocks E and F). Next is Block G (Phase 15: eval, demo, limitations).** The rest of
 > this note is the earlier handoff to Block D, kept as history. **Block D** — the `jobs` table, `FOR UPDATE SKIP LOCKED`,
 > `processed_events`, the Cron Job, the date-windowed run, **and the exception
 > table Phase 11 assigned to it** (that block's `requirements.md` D8). Phases
@@ -1028,7 +1027,7 @@ model.
 
 ---
 
-## Phase 13 — Investigation queue and approval gate · 0.5 day · **BUILT 2026-11-10, not yet merged**
+## Phase 13 — Investigation queue and approval gate · 0.5 day · **COMPLETE 2026-11-10 (PR #24)**
 
 > Evidence: `specs/2026-11-10-queue-approval-dashboard/validation.md` §1.
 
@@ -1058,7 +1057,7 @@ recorded.
 
 ---
 
-## Phase 14 — Operations dashboard · 1 day · **BUILT 2026-11-10, not yet merged**
+## Phase 14 — Operations dashboard · 1 day · **COMPLETE 2026-11-10 (PR #24)**
 
 > Evidence: `validation.md` §2, §4a, §4b in the same directory. Unproven until a
 > deploy: Node on Render, the agent credential, a successful investigation

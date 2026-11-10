@@ -30,7 +30,12 @@ from reckonai.agent.providers import provider_for
 from reckonai.config import ConfigurationError, Settings, get_settings
 from reckonai.jobs import queue
 from reckonai.logging import event
-from reckonai.models import Investigation, Job, ReconciliationException
+from reckonai.models import (
+    Investigation,
+    Job,
+    ReconciliationException,
+    ReconciliationRun,
+)
 
 logger = logging.getLogger("reckonai.jobs")
 
@@ -145,18 +150,56 @@ class AutoResult:
     skipped_reason: str | None = None
 
 
+def open_exceptions(
+    session: Session, tenant_id: uuid.UUID
+) -> list[ReconciliationException]:
+    """Every open exception: the newest row per `(order, code)` across all runs.
+
+    The same definition the queue uses, so "open" means one thing. Like the
+    queue it cannot retract an exception a later run stopped reporting, because
+    a run records how many orders it covered and not which.
+    """
+    return list(
+        session.scalars(
+            select(ReconciliationException)
+            .join(
+                ReconciliationRun,
+                (ReconciliationRun.tenant_id == ReconciliationException.tenant_id)
+                & (ReconciliationRun.id == ReconciliationException.run_id),
+            )
+            .where(
+                ReconciliationException.tenant_id == tenant_id,
+                ReconciliationException.is_exception.is_(True),
+            )
+            .distinct(
+                ReconciliationException.order_external_ref,
+                ReconciliationException.code,
+            )
+            .order_by(
+                ReconciliationException.order_external_ref,
+                ReconciliationException.code,
+                ReconciliationRun.started_at.desc(),
+            )
+        )
+    )
+
+
 def auto_investigate(
     session: Session,
     tenant_id: uuid.UUID,
-    run_id: uuid.UUID,
     *,
     settings: Settings | None = None,
 ) -> AutoResult:
-    """Queue an investigation for each of a run's exceptions that needs one.
+    """Queue an investigation for every open exception that needs one.
 
     Called from the scheduled run, inside its transaction, so the jobs and the
-    run they follow commit together. **It enqueues and nothing else**: the worker
-    investigates, one job at a time, and the agent is read-only (P6).
+    run they follow commit together. **It sweeps all open exceptions, not only
+    the ones this run concluded**: a run is bound to its date window, so an
+    older exception the window no longer reaches would otherwise stay
+    uninvestigated for ever. The reconciliation itself is unchanged and still
+    windowed; only what gets investigated is wider. **It enqueues and nothing
+    else**: the worker investigates, one job at a time, and the agent is
+    read-only (P6).
 
     Needs one means no settled investigation yet; a previous `failed` one does
     not count, so a credential fixed overnight is picked up the next night.
@@ -177,17 +220,7 @@ def auto_investigate(
         )
         return AutoResult(0, 0, 0, 0, "no credential")
 
-    rows = session.scalars(
-        select(ReconciliationException)
-        .where(
-            ReconciliationException.tenant_id == tenant_id,
-            ReconciliationException.run_id == run_id,
-            ReconciliationException.is_exception.is_(True),
-        )
-        .order_by(
-            ReconciliationException.order_external_ref, ReconciliationException.code
-        )
-    ).all()
+    rows = open_exceptions(session, tenant_id)
 
     queued = settled = in_flight = over = 0
     for row in rows:

@@ -163,7 +163,7 @@ def execute(
     # Only runs the scheduler asked for. A person's "Run reconciliation" does
     # not spend model credit on their behalf; they choose what to investigate.
     if payload.get("auto_investigate") is True:
-        investigation_job.auto_investigate(session, tenant_id, run_row.id)
+        investigation_job.auto_investigate(session, tenant_id)
     return run_row
 
 

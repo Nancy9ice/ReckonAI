@@ -248,6 +248,17 @@ examined".
   uncommon field falls back to its raw name.
 - [ ] "Order date" is hidden by default to make room; it is in the Columns panel.
 
+## 4f. The nightly sweep covers every open exception (2026-11-11)
+
+- [x] `tests/test_auto_investigate.py`: an earlier run holds five exceptions, a
+  later run holds none, and the sweep still queues the five (tied to the later
+  run's own exceptions it would queue nothing); two runs that concluded the same
+  faults give five investigations, not ten. The other cases (cap, 0, no
+  credential, retry of `failed`, skip of concluded) are unchanged. Full suite:
+  1939 passed.
+- [ ] Not seen running on Render: the first nightly tick is 01:00 UTC.
+- [ ] A stale exception (fixed in the data, not retracted) can still cost one call.
+
 ## 5. Corrections and debts handed on
 
 - **Age reads 0% on every seeded row.** The seed's orders are dated 2026-11-13 to

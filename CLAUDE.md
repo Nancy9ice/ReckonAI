@@ -47,8 +47,10 @@ moves to `/service`). Things not to re-derive:
 
 - **Investigations: the nightly run queues them, a person's does not.** The cron
   job only enqueues a reconciliation carrying `auto_investigate`; the worker then
-  queues up to `AUTO_INVESTIGATE_MAX` investigations (a `failed` one is retried,
-  a concluded one is not), and skips with a warning if no model key is set. The
+  sweeps **every open exception** (newest per order and type, any run, not just
+  the night's) and queues up to `AUTO_INVESTIGATE_MAX` investigations (a `failed`
+  one is retried, a concluded one is not), skipping with a warning if no model
+  key is set. The reconciliation itself stays bound to its date window. The
   queue also has bulk "Investigate all" and checkbox "Investigate selected".
 - **All user-facing wording is in `frontend/src/copy.ts`**, written for a
   marketplace **finance** reader. The engine's `expected` and `reported` are not

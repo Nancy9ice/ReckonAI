@@ -109,13 +109,20 @@ filtered view: client-side CSV would skip that neutralisation.
 exceptions that already have a conclusion (a `failed` one does not count as
 one); ticking rows investigates exactly those, again if need be. Both confirm
 inline first, because each is a paid model call, and both dedupe against jobs
-already queued or running. **The scheduled run investigates what it finds**: its
-job carries `auto_investigate`, and the worker, inside the run's own
-transaction, queues an investigation per exception without a conclusion, capped
+already queued or running. **The scheduled run investigates every open exception**
+(changed 2026-11-11 from "what the run itself concluded"): its job carries
+`auto_investigate`, and the worker, inside the run's own transaction, sweeps the
+newest finding per order and type across all runs and queues an investigation
+for each without a conclusion, capped
 at `AUTO_INVESTIGATE_MAX` (default 25, 0 disables). It is skipped with a warning
 when no model credential is set, so a missing key does not fill the queue with
-expected failures. The cron job itself still only enqueues. A person's "Run
-reconciliation" never investigates by itself. Which exceptions are left when the
+expected failures. The cron job itself still only enqueues. **The reconciliation
+is unchanged and still bound to its date window**; only the investigation sweep
+is wider, because a window-bound sweep would leave an older exception
+uninvestigated for ever. Like the queue, the sweep cannot tell that an exception
+has since been fixed (a run records how many orders it covered, not which), so it
+can spend a call on a stale one. A person's "Run reconciliation" never
+investigates by itself. Which exceptions are left when the
 cap bites is by order reference, not by priority (the score lives in the API
 layer).
 

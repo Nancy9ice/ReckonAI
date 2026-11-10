@@ -115,7 +115,22 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
+export interface GridAssistantResult {
+  gridState: Record<string, unknown>;
+  propertiesToIgnore: string[];
+  explanation: string;
+}
+
 export const api = {
+  gridAssistant: (body: {
+    request: string;
+    state: Record<string, unknown>;
+    schema: Record<string, unknown>;
+  }) =>
+    request<GridAssistantResult>("/api/grid-assistant", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   runs: () => request<Run[]>("/api/runs"),
   exceptions: (runId?: string) =>
     request<ExceptionRow[]>(

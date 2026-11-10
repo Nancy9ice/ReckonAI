@@ -263,7 +263,7 @@ def test_the_predeploy_command_seeds_but_never_calls_paypal(
     assert command.count("--no-sync") == 2
 
 
-def test_the_agent_credential_is_on_the_worker_and_never_in_the_file(
+def test_the_agent_credential_is_on_the_model_calling_services_and_never_in_the_file(
     services: list[dict[str, Any]],
 ) -> None:
     """Block F: the investigation job runs on the worker, so the key does.
@@ -276,7 +276,9 @@ def test_the_agent_credential_is_on_the_worker_and_never_in_the_file(
     for service in services:
         keys = {v["key"]: v for v in service["envVars"]}
         has = wanted & keys.keys()
-        if service["name"] == "reckonai-worker":
+        # The worker runs investigations; the web service runs the dashboard's
+        # grid assistant. Nothing else calls a model.
+        if service["name"] in ("reckonai-worker", "reckonai-api"):
             assert has == wanted, wanted - has
             for key in wanted:
                 assert keys[key].get("sync") is False, key
@@ -293,3 +295,12 @@ def test_the_web_build_attempts_the_dashboard_without_depending_on_it(
     assert "npm run build" in command
     # Any failure of the dashboard step, not only a missing npm, is soft.
     assert "npm run build ||" in command
+
+
+def test_the_licence_key_is_a_build_variable_never_in_the_file(
+    web: dict[str, Any],
+) -> None:
+    keys = {v["key"]: v for v in web["envVars"]}
+    licence = keys["VITE_AG_GRID_LICENSE_KEY"]
+    assert licence.get("sync") is False
+    assert "value" not in licence

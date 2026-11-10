@@ -87,6 +87,32 @@ named; `[ ]` means **not proven**, and the reason is stated, not softened.
 The concurrency fix is covered only by the sequential double-click test; **no
 test races two real connections.**
 
+## 4a. The redesign and the assistant (added after the first pass)
+
+- [x] **Assistant, end to end in Chrome**: "only Bellweather Books, highest
+  priority first" filtered the queue to 3 of 5 rows and sorted it, with the
+  model's explanation shown. Run on `openai` / `gpt-4.1`; **not observed on
+  Anthropic**, whose account has no credit. Backend covered by
+  `tests/test_grid_assistant.py` (15 tests, stub clients, no live call): both
+  providers, no sampling parameters, refusal read before content, a reply with
+  an unknown property is an error, the model is sent only the sentence, state
+  and schema.
+- [x] Native grouping by seller (counts in headers), sidebar, status bar,
+  priority meter, KPI strip, slide-in drawer, saved views (inline name field, no
+  browser dialog) - seen in Chrome. **Saved views and the sidebar were not
+  clicked through**; the Runs tab was not re-checked after the redesign.
+- [x] Impact column is now right-aligned and orders as decimal strings
+  (`localeCompare` numeric); the numeric-coercion grep is still clean.
+- [ ] **Impact's number filter was not exercised.** AG Grid's number filter is
+  given a decimal string; whether it parses it correctly was not checked.
+- [ ] Bundle is about 3 MB (850 kB gzipped) because `AllEnterpriseModule` is
+  registered; registering only the modules used would shrink it.
+- [ ] Licence: the key is read by Vite from the local environment file, which
+  this session was not permitted to read, so **whether the watermark is gone
+  was not confirmed** - open the page and look.
+- [ ] Render needs `VITE_AG_GRID_LICENSE_KEY` (build) and the four agent
+  variables on the **web** service (declared, tested, values set by a person).
+
 ## 5. Corrections and debts handed on
 
 - **Age reads 0% on every seeded row.** The seed's orders are dated 2026-11-13 to

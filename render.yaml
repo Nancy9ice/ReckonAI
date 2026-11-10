@@ -99,6 +99,22 @@ services:
         value: production
       - key: NODE_VERSION
         value: "22"
+      # AG Grid Enterprise licence, read by Vite at BUILD time and embedded in
+      # the shipped JavaScript (that is how AG Grid licensing works). Unset, the
+      # grid shows an evaluation watermark and nothing breaks.
+      - key: VITE_AG_GRID_LICENSE_KEY
+        sync: false
+      # The dashboard's natural-language assistant (`/api/grid-assistant`)
+      # calls the model from this service, so the same four variables the worker
+      # declares are declared here. See the worker's comment for the rules.
+      - key: AGENT_PROVIDER
+        sync: false
+      - key: AGENT_MODEL
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
       # PayPal sandbox credentials, for the demo's one live order (R15).
       # `sync: false` means Render prompts for the value rather than reading
       # it from this file, so no credential enters the repository - the same

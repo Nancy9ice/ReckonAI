@@ -65,6 +65,23 @@ An exception with no investigation shows no confidence, not zero (P3).
 **D10. Tenant** resolves server-side to the seeded demo tenant; every query
 still filters `tenant_id`.
 
+**D11. The queue has a natural-language assistant** (AG Grid's AI Toolkit).
+The grid describes itself (schema and state); `POST /api/grid-assistant` asks
+the configured provider for a new grid *state*; the grid applies it. It changes
+the display only: no record or amount is sent or returned, and the `aggregation`
+and `pivot` features are excluded from the schema so it cannot be asked to total
+anything. The key stays server-side. It runs on the **web** service, so the
+model credential is declared there as well as on the worker. No failover.
+
+**D12. AG Grid Enterprise, and a redesign.** The licence key is the build-time
+variable `VITE_AG_GRID_LICENSE_KEY` (local environment file, and a `sync: false`
+variable on the web service); it is embedded in the shipped JavaScript, as AG
+Grid licensing requires. Native row grouping replaces the earlier workaround
+(group headers show counts only), with a sidebar, a status bar and browser-local
+saved views. **Master/detail is not used**: AG Grid does not allow it together
+with row grouping, so detail is a slide-in drawer. Visual language is a
+PayPal-adjacent palette (navy, blue, cyan); no PayPal mark is used.
+
 ## 3. Deployed environment (settle before merge — a merge deploys)
 
 - `render.yaml` gains the agent credential (`sync: false`) and `AGENT_PROVIDER`

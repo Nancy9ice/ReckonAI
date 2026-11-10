@@ -346,3 +346,87 @@ def test_with_no_run_at_all_nothing_is_clean(
     assert cov["clean"] == 0
     assert cov["not_examined"] == cov["orders_total"] == 1
     assert cov["not_examined_orders"] == ["ORD-ALONE"]
+
+
+# ---------------------------------------------------------------------------
+# Bulk investigation
+# ---------------------------------------------------------------------------
+
+
+def _bulk(client: TestClient, ids: list[object], **extra: object) -> dict:  # type: ignore[type-arg]
+    response = client.post(
+        "/api/investigations",
+        json={"exception_ids": [str(i) for i in ids], **extra},
+    )
+    assert response.status_code == 202, response.text
+    return response.json()  # type: ignore[no-any-return]
+
+
+def test_several_exceptions_are_queued_in_one_request(
+    client: TestClient, session: Session, seeded_exception: ReconciliationException
+) -> None:
+    body = _bulk(client, [seeded_exception.id])
+    assert (body["queued"], body["in_flight"], body["skipped"]) == (1, 0, 0)
+    assert body["jobs"][0]["status"] == "queued"
+
+
+def test_a_repeat_is_reported_in_flight_not_queued_again(
+    client: TestClient, seeded_exception: ReconciliationException
+) -> None:
+    _bulk(client, [seeded_exception.id])
+    again = _bulk(client, [seeded_exception.id])
+    assert (again["queued"], again["in_flight"]) == (0, 1)
+
+
+def test_duplicate_ids_in_one_request_count_once(
+    client: TestClient, seeded_exception: ReconciliationException
+) -> None:
+    body = _bulk(client, [seeded_exception.id, seeded_exception.id])
+    assert body["queued"] == 1
+
+
+def test_all_skips_a_settled_exception_but_a_chosen_row_does_not(
+    client: TestClient, session: Session, seeded_exception: ReconciliationException
+) -> None:
+    from reckonai.models import Investigation
+
+    session.add(
+        Investigation(
+            tenant_id=seeded_exception.tenant_id,
+            order_external_ref=seeded_exception.order_external_ref,
+            code=seeded_exception.code,
+            provider="openai",
+            model_requested="gpt-4.1",
+            verdict="reported",
+        )
+    )
+    session.flush()
+    skipped = _bulk(client, [seeded_exception.id], skip_settled=True)
+    assert (skipped["queued"], skipped["skipped"]) == (0, 1)
+    chosen = _bulk(client, [seeded_exception.id], skip_settled=False)
+    assert chosen["queued"] == 1
+
+
+def test_an_unknown_or_foreign_id_is_counted_not_queued(
+    client: TestClient,
+    other_tenant: Tenant,
+    seeded_exception: ReconciliationException,
+) -> None:
+    unknown = uuid.uuid4()
+    body = _bulk(client, [unknown])
+    assert (body["queued"], body["not_found"]) == (0, 1)
+    app.dependency_overrides[get_tenant_id] = lambda: other_tenant.id
+    foreign = _bulk(client, [seeded_exception.id])
+    assert (foreign["queued"], foreign["not_found"]) == (0, 1)
+
+
+def test_the_batch_is_bounded(client: TestClient) -> None:
+    too_many = [str(uuid.uuid4()) for _ in range(101)]
+    assert (
+        client.post("/api/investigations", json={"exception_ids": too_many}).status_code
+        == 422
+    )
+    assert (
+        client.post("/api/investigations", json={"exception_ids": []}).status_code
+        == 422
+    )

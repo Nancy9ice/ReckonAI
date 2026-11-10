@@ -304,3 +304,12 @@ def test_the_licence_key_is_a_build_variable_never_in_the_file(
     licence = keys["VITE_AG_GRID_LICENSE_KEY"]
     assert licence.get("sync") is False
     assert "value" not in licence
+
+
+def test_the_worker_states_the_automatic_investigation_cap(
+    services: list[dict[str, Any]],
+) -> None:
+    """The nightly run spends model credit, so its ceiling is written down."""
+    worker = next(s for s in services if s["name"] == "reckonai-worker")
+    keys = {v["key"]: v for v in worker["envVars"]}
+    assert keys["AUTO_INVESTIGATE_MAX"]["value"].isdigit()

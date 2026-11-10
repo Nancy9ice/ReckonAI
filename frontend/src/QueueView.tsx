@@ -9,6 +9,8 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import type { ExceptionRow } from "./api";
 import AssistantBar from "./AssistantBar";
 import { columns, decisionText } from "./columns";
+
+const SETTLED = new Set(["reported", "insufficient_evidence"]);
 import SavedViews from "./SavedViews";
 import { gridTheme } from "./theme";
 
@@ -32,6 +34,8 @@ interface Props {
   runFilterActive: boolean;
   onClearRun: () => void;
   runId?: string;
+  investigating: boolean;
+  onInvestigate: (ids: string[], skipSettled: boolean) => void;
 }
 
 function Segmented<T extends string>(props: {
@@ -63,6 +67,8 @@ export default function QueueView({
   runFilterActive,
   onClearRun,
   runId,
+  investigating,
+  onInvestigate,
 }: Props) {
   const gridApi = useRef<GridApi<ExceptionRow> | null>(null);
   const initial = useRef<GridState | null>(null);
@@ -70,6 +76,13 @@ export default function QueueView({
   const [certainty, setCertainty] = useState<Certainty>("all");
   const [decided, setDecided] = useState<Decided>("all");
   const [group, setGroup] = useState("");
+  const [checked, setChecked] = useState<string[]>([]);
+  // Two-step, inline: every investigation is a paid model call, and a browser
+  // dialog would block the page.
+  const [confirm, setConfirm] = useState<{
+    kind: "all" | "selected";
+    ids: string[];
+  } | null>(null);
 
   const visible = useMemo(
     () =>
@@ -94,6 +107,17 @@ export default function QueueView({
     else setGroup("__custom");
   }, []);
 
+  const onSelection = useCallback(() => {
+    setChecked((gridApi.current?.getSelectedRows() ?? []).map((r) => r.id));
+  }, []);
+
+  // "All" means every row in view that has no conclusion yet; a failed or
+  // missing investigation counts as none.
+  const unsettled = useMemo(
+    () => visible.filter((r) => !SETTLED.has(r.investigation?.verdict ?? "")),
+    [visible],
+  );
+
   const onReady = useCallback((e: GridReadyEvent<ExceptionRow>) => {
     gridApi.current = e.api;
     initial.current = e.api.getState();
@@ -115,6 +139,61 @@ export default function QueueView({
 
   return (
     <section className="card queue">
+      <div className="queue-head">
+        <h2>Exception queue</h2>
+        <div className="queue-actions">
+          {checked.length > 0 && (
+            <button
+              type="button"
+              disabled={investigating}
+              onClick={() => setConfirm({ kind: "selected", ids: checked })}
+            >
+              Investigate selected ({checked.length})
+            </button>
+          )}
+          <button
+            type="button"
+            className="primary"
+            disabled={investigating || unsettled.length === 0}
+            title={
+              unsettled.length === 0
+                ? "Everything in view already has a conclusion"
+                : "Investigate every exception in view that has no conclusion yet"
+            }
+            onClick={() =>
+              setConfirm({ kind: "all", ids: unsettled.map((r) => r.id) })
+            }
+          >
+            {investigating ? "Investigating..." : `Investigate all (${unsettled.length})`}
+          </button>
+        </div>
+      </div>
+
+      {confirm && (
+        <div className="confirm" role="alertdialog" aria-label="Confirm investigation">
+          <span>
+            Investigate <strong>{confirm.ids.length}</strong>{" "}
+            {confirm.ids.length === 1 ? "exception" : "exceptions"}? Each one is a
+            paid model call, run one at a time by the worker.
+          </span>
+          <span className="confirm-buttons">
+            <button
+              type="button"
+              className="primary"
+              onClick={() => {
+                onInvestigate(confirm.ids, confirm.kind === "all");
+                setConfirm(null);
+              }}
+            >
+              Confirm
+            </button>
+            <button type="button" onClick={() => setConfirm(null)}>
+              Cancel
+            </button>
+          </span>
+        </div>
+      )}
+
       <AssistantBar gridApi={get as () => GridApi | null} />
 
       <div className="toolbar">
@@ -203,11 +282,16 @@ export default function QueueView({
             getRowId={(p) => p.data.id}
             onGridReady={onReady}
             onColumnRowGroupChanged={onGroupChanged}
+            // Ticking a row selects it for a bulk action; clicking the row
+            // itself opens the detail drawer.
             rowSelection={{
-              mode: "singleRow",
-              checkboxes: false,
-              enableClickSelection: true,
+              mode: "multiRow",
+              checkboxes: true,
+              headerCheckbox: true,
+              enableClickSelection: false,
+              groupSelects: "descendants",
             }}
+            onSelectionChanged={onSelection}
             onRowClicked={(e: RowClickedEvent<ExceptionRow>) =>
               e.data && onSelect(e.data.id)
             }

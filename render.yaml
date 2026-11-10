@@ -163,6 +163,11 @@ services:
       # reasoning specs/tech-stack.md section 5.1 applies to model settings.
       - key: WORKER_TICK_SECONDS
         value: "30"
+      # After the scheduled run, the worker queues investigations for what it
+      # found, up to this many per run (each is a paid model call). 0 turns it
+      # off. Skipped, with a warning, if no model credential is set here.
+      - key: AUTO_INVESTIGATE_MAX
+        value: "25"
 
       # The investigation agent runs here, as a queued job (Block F D2), so
       # the credential belongs on the worker and nowhere else. `sync: false`:

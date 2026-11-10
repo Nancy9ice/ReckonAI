@@ -45,6 +45,11 @@ investigation, run-now, evidence, coverage, CSV export and the grid assistant;
 AG Grid **Enterprise**, served by FastAPI at `/` when built (the JSON index
 moves to `/service`). Things not to re-derive:
 
+- **Investigations: the nightly run queues them, a person's does not.** The cron
+  job only enqueues a reconciliation carrying `auto_investigate`; the worker then
+  queues up to `AUTO_INVESTIGATE_MAX` investigations (a `failed` one is retried,
+  a concluded one is not), and skips with a warning if no model key is set. The
+  queue also has bulk "Investigate all" and checkbox "Investigate selected".
 - **A decision is keyed by (order, code)**, not by exception id: every run writes
   a fresh row for the same fault.
 - **The approver is free text, unauthenticated** (D5). Do not describe it as an

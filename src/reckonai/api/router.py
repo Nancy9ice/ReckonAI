@@ -196,3 +196,19 @@ def export_exceptions(
 def export_decisions(session: SessionDep, tenant_id: TenantDep) -> Response:
     """The decision log, every row ever recorded: the audit trail."""
     return _csv(export.decisions_csv(session, tenant_id), "reckonai-decisions.csv")
+
+
+@router.post(
+    "/investigations", response_model=schemas.BulkInvestigateOut, status_code=202
+)
+def investigate_many(
+    body: schemas.BulkInvestigateIn, session: SessionDep, tenant_id: TenantDep
+) -> schemas.BulkInvestigateOut:
+    """Queue investigations for several exceptions. Returns at once.
+
+    The agent is read-only (`mission.md` P6): this adds investigation rows when
+    the jobs complete and changes nothing about the books.
+    """
+    result = queries.request_investigations(session, tenant_id, body)
+    session.commit()
+    return result

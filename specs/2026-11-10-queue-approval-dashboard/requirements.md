@@ -104,6 +104,21 @@ whole decision log, amounts as strings beside their currency. Every cell is
 neutralised against formula injection. There is no export of the on-screen
 filtered view: client-side CSV would skip that neutralisation.
 
+**D17. Investigating in bulk, and after the scheduled run.**
+`POST /api/investigations` queues up to 100 at once. "Investigate all" skips
+exceptions that already have a conclusion (a `failed` one does not count as
+one); ticking rows investigates exactly those, again if need be. Both confirm
+inline first, because each is a paid model call, and both dedupe against jobs
+already queued or running. **The scheduled run investigates what it finds**: its
+job carries `auto_investigate`, and the worker, inside the run's own
+transaction, queues an investigation per exception without a conclusion, capped
+at `AUTO_INVESTIGATE_MAX` (default 25, 0 disables). It is skipped with a warning
+when no model credential is set, so a missing key does not fill the queue with
+expected failures. The cron job itself still only enqueues. A person's "Run
+reconciliation" never investigates by itself. Which exceptions are left when the
+cap bites is by order reference, not by priority (the score lives in the API
+layer).
+
 ## 3. Deployed environment (settle before merge — a merge deploys)
 
 - `render.yaml` gains the agent credential (`sync: false`) and `AGENT_PROVIDER`
@@ -118,4 +133,5 @@ filtered view: client-side CSV would skip that neutralisation.
 ## 4. Limitations to record
 
 No auth (D5); no seller position view (R13); impact not comparable across
-currencies (D6); investigations run only on request, not automatically.
+currencies (D6); a person's "Run reconciliation" does not investigate by
+itself (D17).

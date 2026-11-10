@@ -160,6 +160,14 @@ export interface RunRequest {
   message: string;
 }
 
+export interface BulkInvestigate {
+  queued: number;
+  in_flight: number;
+  skipped: number;
+  not_found: number;
+  jobs: Job[];
+}
+
 export interface GridAssistantResult {
   gridState: Record<string, unknown>;
   propertiesToIgnore: string[];
@@ -167,6 +175,14 @@ export interface GridAssistantResult {
 }
 
 export const api = {
+  investigateMany: (exceptionIds: string[], skipSettled: boolean) =>
+    request<BulkInvestigate>("/api/investigations", {
+      method: "POST",
+      body: JSON.stringify({
+        exception_ids: exceptionIds,
+        skip_settled: skipSettled,
+      }),
+    }),
   evidence: (ref: string) =>
     request<Evidence>(`/api/evidence/${encodeURIComponent(ref)}`),
   evidenceRaw: (ref: string) =>

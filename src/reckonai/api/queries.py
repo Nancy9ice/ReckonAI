@@ -435,51 +435,59 @@ def job_out(job: Job) -> schemas.JobOut:
 def latest_investigation_job(
     session: Session, tenant_id: uuid.UUID, exception_id: uuid.UUID
 ) -> Job | None:
-    return session.scalar(
-        select(Job)
-        .where(
-            Job.tenant_id == tenant_id,
-            Job.job_type == investigation_job.JOB_TYPE,
-            Job.payload["exception_id"].astext == str(exception_id),
-        )
-        .order_by(Job.created_at.desc(), Job.run_after.desc())
-        .limit(1)
-    )
+    return investigation_job.latest_job(session, tenant_id, exception_id)
 
 
 def request_investigation(
     session: Session, tenant_id: uuid.UUID, exception_id: uuid.UUID
 ) -> Job | None:
-    """Enqueue an investigation, or return the one already in flight.
+    """Enqueue an investigation, or return the one already in flight."""
+    found = investigation_job.request(session, tenant_id, exception_id)
+    return None if found is None else found[0]
 
-    A double click is one job: while a `queued` or `claimed` job exists for the
-    exception, that job is returned rather than a second enqueued. `None` if
-    the exception is not this tenant's.
+
+def request_investigations(
+    session: Session,
+    tenant_id: uuid.UUID,
+    body: schemas.BulkInvestigateIn,
+) -> schemas.BulkInvestigateOut:
+    """Queue investigations for several exceptions at once.
+
+    Per exception: one already settled is skipped when `skip_settled` is set,
+    one already queued or running is reported as in flight rather than queued
+    again, and an id that is not this tenant's is counted, not queued.
     """
-    # Serialises concurrent requests for the same exception for the rest of
-    # this transaction, so the check below and the enqueue are one step. Without
-    # it two simultaneous clicks both see "no job in flight" and both enqueue,
-    # and a paid investigation runs twice. Found by code review.
-    session.execute(
-        text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
-        {"key": f"investigate:{exception_id}"},
-    )
-    exists = session.scalar(
-        select(ReconciliationException.id).where(
-            ReconciliationException.tenant_id == tenant_id,
-            ReconciliationException.id == exception_id,
+    queued = in_flight = skipped = missing = 0
+    jobs: list[schemas.JobOut] = []
+    for exception_id in dict.fromkeys(body.exception_ids):
+        row = session.scalar(
+            select(ReconciliationException).where(
+                ReconciliationException.tenant_id == tenant_id,
+                ReconciliationException.id == exception_id,
+            )
         )
-    )
-    if exists is None:
-        return None
-    current = latest_investigation_job(session, tenant_id, exception_id)
-    if current is not None and current.status in ("queued", "claimed"):
-        return current
-    return queue.enqueue(
-        session,
-        tenant_id=tenant_id,
-        job_type=investigation_job.JOB_TYPE,
-        payload=investigation_job.payload_for(exception_id),
+        if row is None:
+            missing += 1
+            continue
+        if body.skip_settled and investigation_job.is_settled(session, row):
+            skipped += 1
+            continue
+        found = investigation_job.request(session, tenant_id, exception_id)
+        if found is None:
+            missing += 1
+            continue
+        job, created = found
+        jobs.append(job_out(job))
+        if created:
+            queued += 1
+        else:
+            in_flight += 1
+    return schemas.BulkInvestigateOut(
+        queued=queued,
+        in_flight=in_flight,
+        skipped=skipped,
+        not_found=missing,
+        jobs=jobs,
     )
 
 

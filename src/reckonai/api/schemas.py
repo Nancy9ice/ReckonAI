@@ -226,3 +226,21 @@ class RunRequestOut(BaseModel):
     window_end: datetime | None
     job: JobOut | None
     message: str
+
+
+class BulkInvestigateIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    #: Bounded: each one is a paid model call.
+    exception_ids: Annotated[list[uuid.UUID], Field(min_length=1, max_length=100)]
+    #: "Investigate all" skips what already has a conclusion; checking specific
+    #: rows does not, because choosing a row is asking for it again.
+    skip_settled: bool = False
+
+
+class BulkInvestigateOut(BaseModel):
+    queued: int
+    in_flight: int
+    skipped: int
+    not_found: int
+    jobs: list[JobOut]

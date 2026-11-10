@@ -165,6 +165,31 @@ workers allow twice the rate; and "examined" cannot recognise an old order a run
 re-examined only because new evidence arrived, so it errs toward "not yet
 examined".
 
+## 4d. Bulk and automatic investigation
+
+- [x] **In Chrome, with the real worker and OpenAI**: ticked one row, "Investigate
+  selected (1)", the inline confirm appeared, and after confirming the banner
+  followed the job ("1 queued. Investigating: 0 of 1 done" then "All finished")
+  and the row changed to "Insufficient evidence"; the "Investigated" card went
+  from 1 to 2 and "Investigate all" dropped from 4 to 3. It also showed "Investigate
+  all" skipping an exception someone had already investigated. One model call
+  was spent.
+- [x] Backend (`tests/test_api_extras.py`, `tests/test_auto_investigate.py`):
+  queued, in flight, already concluded, unknown and foreign ids; the 100-id bound;
+  duplicate ids; and for the scheduled run: one job per exception and none for the
+  parked finding, nothing for a run nobody scheduled, the schedule sets the flag,
+  a repeat does not queue twice, a concluded exception is skipped, a `failed` one
+  is retried, the cap, 0 disables, and no credential queues nothing.
+- [ ] **"Investigate all" itself was not clicked**: it would have spent three more
+  calls. It shares the code path of "selected"; only the id list and the skip flag
+  differ, and both are tested at the API.
+- [ ] **The nightly path has not run on Render**, and its first tick is
+  2026-11-11 01:00 UTC. Locally it is proven by test, not by a cron firing.
+- [ ] The cap picks by order reference, not by priority.
+- [ ] A successful `reported` verdict was seen in the grid ("Cause reported" on
+  ORD-0016, run on the operator's own server) but its drawer was not opened in
+  this session.
+
 ## 5. Corrections and debts handed on
 
 - **Age reads 0% on every seeded row.** The seed's orders are dated 2026-11-13 to

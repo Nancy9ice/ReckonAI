@@ -31,6 +31,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [runNote, setRunNote] = useState<RunNote>(null);
   const [running, setRunning] = useState(false);
+  const [investigating, setInvestigating] = useState(false);
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -129,6 +130,74 @@ export default function App() {
     }
   };
 
+  // Queue investigations, then follow their jobs. The worker runs them one at a
+  // time, so this polls until every job settles, refreshing the queue as each
+  // finishes so rows change from "Not investigated" while it works.
+  const investigate = async (ids: string[], skipSettled: boolean) => {
+    setInvestigating(true);
+    setRunNote({ tone: "busy", text: "Queueing investigations..." });
+    try {
+      const result = await api.investigateMany(ids, skipSettled);
+      const parts = [`${result.queued} queued`];
+      if (result.in_flight) parts.push(`${result.in_flight} already running`);
+      if (result.skipped) parts.push(`${result.skipped} already concluded`);
+      if (result.not_found) parts.push(`${result.not_found} not found`);
+
+      let pending = result.jobs.filter(
+        (j) => j.status === "queued" || j.status === "claimed",
+      );
+      const total = pending.length;
+      let failed = 0;
+      for (let waited = 0; pending.length > 0; ) {
+        if (!mounted.current) return;
+        if (waited >= 900) {
+          setRunNote({
+            tone: "bad",
+            text: `Still waiting on ${pending.length} investigations. Is the worker running?`,
+          });
+          return;
+        }
+        setRunNote({
+          tone: "busy",
+          text: `${parts.join(", ")}. Investigating: ${total - pending.length} of ${total} done...`,
+        });
+        await new Promise((r) => setTimeout(r, 3000));
+        waited += 3;
+        const next = [];
+        let settledNow = false;
+        for (const job of pending) {
+          try {
+            const fresh = await api.job(job.id);
+            if (fresh.status === "done") settledNow = true;
+            else if (fresh.status === "failed") {
+              failed += 1;
+              settledNow = true;
+            } else next.push(fresh);
+          } catch {
+            next.push(job); // a missed poll is not a failed job
+          }
+        }
+        pending = next;
+        if (settledNow) await refresh();
+      }
+      await refreshAll();
+      setRunNote({
+        tone: failed > 0 ? "bad" : "ok",
+        text:
+          `${parts.join(", ")}. ` +
+          (total === 0
+            ? "Nothing new to investigate."
+            : failed > 0
+              ? `Finished, ${failed} could not run - open one to see why.`
+              : "All finished."),
+      });
+    } catch (e) {
+      setRunNote({ tone: "bad", text: String(e) });
+    } finally {
+      setInvestigating(false);
+    }
+  };
+
   const stats = useMemo(() => {
     const all = rows ?? [];
     return {
@@ -222,6 +291,8 @@ export default function App() {
             onSelect={setSelected}
             runFilterActive={runId !== undefined}
             runId={runId}
+            investigating={investigating}
+            onInvestigate={(ids, skip) => void investigate(ids, skip)}
             onClearRun={() => {
               setRunId(undefined);
               setSelected(null);

@@ -29,19 +29,26 @@ Also read, and in this order:
   evidence. The root specs state rules and point here; they do not repeat it.
 
 **Phases 0, 0b, 1, 2, 3, Block A (4 + 5 + 6), the PayPal capture (R16), Block
-B (Phase 10), Block C (Phase 11), Block D (Phase 8 + R9 + the exception table)
-and Block E (Phase 12, the investigation agent, kept entire) are complete.
-Block F is next** — Phases 13 and 14. **Every merge to `main` deploys the
-API and the worker** (PRs #19-#22 each did), so there is no "one remaining
-deploy" to budget: Block E's merge deploys too, migration included.
+B (Phase 10), Block C (Phase 11), Block D (Phase 8 + R9 + the exception table),
+Block E (Phase 12) and Block F (Phases 13 + 14) are built; Block F is on branch
+`block-f-queue-approval-dashboard` and not yet merged.** Block G (eval harness,
+demo, limitations) is next. **Every merge to `main` deploys** the API and the
+worker.
 
-**Block F has no spec yet.** Every prior block wrote `requirements.md`,
-`plan.md` and `validation.md` into a dated `specs/` directory before
-implementing, and that is the first task rather than an optional preamble.
-**Read `specs/2026-11-10-investigation-agent/validation.md` §7b first** — five
-things to settle before a merge deploys, including that `render.yaml` declares
-**no agent credential at all**, so a deploy as it stands yields an agent that
-fails on every investigation.
+**Read `specs/2026-11-10-queue-approval-dashboard/validation.md` before
+touching `reckonai/api/`, `frontend/` or the decision table**; §3 lists what is
+unproven until a deploy (Node on Render, the agent credential, which only a
+person can set in the dashboard) and §4 tabulates the code review. In short:
+`reckonai/api/` is the read API plus the append-only decision route and the
+queued-investigation route; `reckonai/recon/priority.py` is the pure score;
+`frontend/` is React + Vite + AG Grid Community, served by FastAPI at `/` when
+built (the JSON index moves to `/service`). **A decision is keyed by (order,
+code), not by exception id**, because every run writes a fresh row for the same
+fault. AG Grid grouping is Enterprise, so grouping is built outside the grid.
+
+The notes below on Block F describe it as it was before it was built; the facts
+(no read API, no frontend, no agent credential in `render.yaml`) are now
+addressed except the credential value, which is set in the Render dashboard.
 
 **Two things Block F builds that may not be obvious.** There is **no read API**
 — the deployed service exposes only `/`, `/health`, `/health/ready` and

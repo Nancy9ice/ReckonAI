@@ -25,7 +25,6 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from reckonai.config import get_settings
@@ -44,6 +43,20 @@ logger = logging.getLogger("reckonai.jobs.schedule")
 #: costs nothing: re-reconciling a day whose verdicts are unchanged appends
 #: identical rows, and the dedupe marker stops the *same* window running
 #: twice.
+#:
+#: **The schedule is daily, and this is why.** The Cron Job was hourly, with a
+#: comment claiming that meant a late PayPal record was picked up within the
+#: hour. Code review found that false: `window_ending` snaps both bounds to
+#: midnight UTC and `idempotency_key` uses only their dates, so all 24 ticks
+#: in a UTC day compute the same key, the first one does the work and the
+#: other 23 log a skip. The hourly schedule bought nothing and the comment
+#: said otherwise.
+#:
+#: Keeping the key date-grained and running once a day is the honest version.
+#: Making the key hourly instead would reconcile the same two dates 24 times a
+#: day, appending 24 sets of identical rows for Block F's queue to read
+#: through - which is worse than a day's latency on a provider that is itself
+#: about a day behind.
 DEFAULT_WINDOW_DAYS = 2
 
 
@@ -62,9 +75,11 @@ def window_ending(now: datetime, *, days: int) -> window.Window:
 def enqueue_runs(session: Session, *, days: int) -> list[uuid.UUID]:
     """Enqueue one run per tenant, skipping any window already reconciled.
 
-    **One job per tenant**, rather than one job that loops over tenants: a
-    tenant whose reconciliation fails must not stop another tenant's, and the
-    retry and the error belong to the tenant they happened to.
+    **One job per tenant, committed per tenant**, rather than one job that
+    loops over tenants: a tenant whose reconciliation fails must not stop
+    another tenant's, and the retry and the error belong to the tenant they
+    happened to. The per-tenant commit is what makes that true at enqueue time
+    as well as at execution time.
     """
     win = window_ending(datetime.now(UTC), days=days)
     enqueued: list[uuid.UUID] = []
@@ -94,6 +109,11 @@ def enqueue_runs(session: Session, *, days: int) -> list[uuid.UUID]:
                 "window_end": win.end.isoformat(),
             },
         )
+        # **Committed per tenant, and that is the point of the loop.** Code
+        # review found the isolation claim below false at enqueue time: one
+        # commit for every tenant meant any failure part-way discarded every
+        # tenant's enqueue, not just the failing one.
+        session.commit()
         enqueued.append(job.id)
         logger.info(
             event(
@@ -158,16 +178,15 @@ def main(argv: list[str] | None = None) -> int:
     engine = create_app_engine(settings.sqlalchemy_url, pool_size=1, max_overflow=1)
     try:
         with Session(engine) as session:
-            try:
-                enqueued = enqueue_runs(session, days=args.window_days)
-                session.commit()
-            except IntegrityError:
-                # Two cron invocations overlapping. The constraint did its job;
-                # this is not an error worth a non-zero exit, which on Render
-                # would show as a failed scheduled run.
-                session.rollback()
-                logger.info(event("reckonai.jobs.schedule.raced"))
-                return 0
+            # **No `IntegrityError` branch here**, which there used to be.
+            # Code review found it could not fire for the reason it stated:
+            # this function inserts only `job` rows, and those carry no unique
+            # constraint two overlapping cron invocations could collide on.
+            # The race is real but lands elsewhere - both invocations enqueue,
+            # and the second job's handler meets the `processed_event`
+            # constraint, which `reconcile_job.AlreadyReconciled` now reports
+            # as work already done rather than as a failure to retry.
+            enqueued = enqueue_runs(session, days=args.window_days)
 
         logger.info(event("reckonai.jobs.schedule.done", enqueued=len(enqueued)))
     finally:

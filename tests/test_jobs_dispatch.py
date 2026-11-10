@@ -262,3 +262,37 @@ def test_a_job_due_later_is_not_drained(
 
     assert worker.drain(migrated_database) is False
     assert registered == []
+
+
+# ---------------------------------------------------------------------------
+# Code review finding 8 - a duplicate window is done, not failed
+# ---------------------------------------------------------------------------
+
+
+def test_an_already_reconciled_window_completes_rather_than_retrying(
+    migrated_database: Engine, committed_tenant: uuid.UUID, registered: list[str]
+) -> None:
+    """`AlreadyReconciled` is work already done, not a retryable failure.
+
+    Review found the `processed_event` violation treated as an ordinary
+    failure: rescheduled, retried to the cap, and left as a terminal `failed`
+    row carrying an `IntegrityError` - the "queue full of expected failures
+    hides a real one" outcome the design claims to avoid, reached by another
+    route. Two overlapping cron invocations are the realistic cause.
+    """
+    from reckonai.jobs.reconcile_job import AlreadyReconciled
+
+    def handler(session: Session, tenant_id: uuid.UUID, payload: dict) -> None:
+        registered.append("tried")
+        raise AlreadyReconciled("recon:test:2026-11-09:2026-11-11")
+
+    handlers.HANDLERS[JOB_TYPE] = handler
+
+    job_id = _enqueue(migrated_database, committed_tenant)
+
+    assert worker.drain(migrated_database) is True
+
+    job = _reload(migrated_database, job_id)
+    assert job.status == "done", "an already-reconciled window needs no retry"
+    assert job.last_error is None, "nothing failed, so nothing to record"
+    assert registered == ["tried"]

@@ -19,7 +19,7 @@ import uuid
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from reckonai.models.jobs import (
@@ -28,6 +28,20 @@ from reckonai.models.jobs import (
     Job,
     ProcessedEvent,
 )
+
+#: How long a `claimed` job may sit before another worker may take it.
+#:
+#: Chosen against the only job type there is: a reconciliation run over the
+#: seeded tenant completes in well under a second, and Render's rolling deploy
+#: overlaps two workers for about 90 seconds. Five minutes is therefore far
+#: longer than any healthy claim and short enough that a lost job is picked up
+#: within one cron interval.
+#:
+#: **This is not a heartbeat and does not pretend to be.** It cannot tell a
+#: dead worker from a very slow one, so a job slower than this may be run
+#: twice - which is survivable here precisely because the dedupe marker makes
+#: a second run of the same window write nothing (D5).
+STALE_CLAIM_SECONDS = 300
 
 
 def enqueue(
@@ -69,19 +83,49 @@ def claim(session: Session, *, limit: int = 1) -> Sequence[Job]:
     into one.
 
     The status change is committed by the caller, and that commit is what
-    releases the lock. So a worker that dies mid-job leaves a `claimed` row
-    rather than a locked one, recoverable through `run_after` (D6's stated
-    reason for not building a heartbeat).
+    releases the lock, so a worker that dies mid-job leaves a `claimed` row
+    rather than a locked one.
 
-    Eligibility is `queued` and `run_after` in the past. Ordered by
-    `run_after` so the oldest due work goes first; without the ordering a
-    retried job could starve behind a steady stream of new ones.
+    **A stale claim is reclaimed here, and that is what makes the no-heartbeat
+    decision sound.** Code review found the original form unrecoverable:
+    nothing moved a row from `claimed` back to `queued`, so a process that
+    died between the claim and the handler's own error handling - or hit the
+    status guard in `handlers.dispatch`, or failed to commit its failure -
+    left a job no worker would ever pick up again, with no error recorded and
+    its window silently never reconciled. `run_after` was cited as the
+    recovery path and could not be one, because the claim never returned to
+    the status `run_after` is filtered on.
+
+    So eligibility is either of:
+
+      - `queued` with `run_after` in the past, or
+      - `claimed` with `claimed_at` older than `STALE_CLAIM_SECONDS`.
+
+    Both are capped by `attempts < max_attempts`, which the `CHECK
+    (attempts <= max_attempts)` constraint requires - without it a repeatedly
+    reclaimed job would increment past its cap and fail the flush rather than
+    its own job. A stale job already at its cap is terminated by
+    `reap_stale_claims` instead.
+
+    Ordered by `run_after` so the oldest due work goes first; without the
+    ordering a retried job could starve behind a steady stream of new ones.
     """
     now = datetime.now(UTC)
+    stale_before = now - timedelta(seconds=STALE_CLAIM_SECONDS)
 
     statement = (
         select(Job)
-        .where(Job.status == "queued", Job.run_after <= now)
+        .where(
+            Job.attempts < Job.max_attempts,
+            or_(
+                and_(Job.status == "queued", Job.run_after <= now),
+                and_(
+                    Job.status == "claimed",
+                    Job.claimed_at.is_not(None),
+                    Job.claimed_at < stale_before,
+                ),
+            ),
+        )
         .order_by(Job.run_after)
         .limit(limit)
         .with_for_update(skip_locked=True)
@@ -153,3 +197,40 @@ def mark_processed(
     session.add(marker)
     session.flush()
     return marker
+
+
+def reap_stale_claims(session: Session) -> Sequence[Job]:
+    """Terminate `claimed` jobs that are stale *and* out of attempts.
+
+    `claim` reclaims a stale job while it has attempts left. This is the other
+    half: a job whose worker died on its final attempt would otherwise sit
+    `claimed` forever, below `claim`'s `attempts < max_attempts` filter and
+    invisible to every worker.
+
+    It records why, because a job that simply stopped being worked is the
+    hardest kind to diagnose later.
+    """
+    stale_before = datetime.now(UTC) - timedelta(seconds=STALE_CLAIM_SECONDS)
+
+    statement = (
+        select(Job)
+        .where(
+            Job.status == "claimed",
+            Job.attempts >= Job.max_attempts,
+            Job.claimed_at.is_not(None),
+            Job.claimed_at < stale_before,
+        )
+        .with_for_update(skip_locked=True)
+    )
+
+    jobs = list(session.scalars(statement))
+
+    for job in jobs:
+        job.status = "failed"
+        job.last_error = (
+            "ClaimExpired: the worker holding this job stopped without "
+            "recording an outcome, and no attempts remain"
+        )
+
+    session.flush()
+    return jobs

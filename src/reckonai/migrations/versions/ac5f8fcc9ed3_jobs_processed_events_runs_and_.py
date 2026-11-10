@@ -24,10 +24,14 @@ needs reading in anger:
     of the sim's deliberately non-canonical outward field names, and
     `tests/test_sim_fields.py` fails if a canonical column claims one.
 
+`reconciliation_run` carries **no `last_error`**. A run shares one transaction
+with its handler, so a run that dies is rolled back entirely and leaves no row
+to annotate; the failure is recorded on the `job` row, which is what retries.
 
-Revision ID: bd7a9064c7c6
+
+Revision ID: ac5f8fcc9ed3
 Revises: ece93d587b17
-Create Date: 2026-11-10 01:03:47.256820
+Create Date: 2026-11-10 06:34:31.248682
 
 """
 
@@ -38,7 +42,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = 'bd7a9064c7c6'
+revision: str = 'ac5f8fcc9ed3'
 down_revision: str | Sequence[str] | None = 'ece93d587b17'
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
@@ -96,7 +100,6 @@ def upgrade() -> None:
     sa.Column('order_count', sa.Integer(), server_default='0', nullable=False),
     sa.Column('finding_count', sa.Integer(), server_default='0', nullable=False),
     sa.Column('exception_count', sa.Integer(), server_default='0', nullable=False),
-    sa.Column('last_error', sa.Text(), nullable=True),
     sa.Column('tenant_id', sa.Uuid(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.CheckConstraint("status IN ('running', 'completed', 'failed')", name=op.f('ck_reconciliation_run_status')),

@@ -16,6 +16,7 @@ from collections.abc import Callable
 from sqlalchemy.orm import Session
 
 from reckonai.jobs import queue, reconcile_job
+from reckonai.jobs.reconcile_job import AlreadyReconciled
 from reckonai.logging import event
 from reckonai.models import Job
 
@@ -83,6 +84,22 @@ def dispatch(session: Session, job: Job) -> bool:
         handler(session, job.tenant_id, dict(job.payload))
         queue.complete(session, job)
         session.commit()
+    except AlreadyReconciled as exc:
+        # Not a failure: the window is done, so the job is done. Retrying it
+        # would hit the same constraint three more times and leave a terminal
+        # `failed` row that reads like a defect.
+        session.rollback()
+        queue.complete(session, job)
+        session.commit()
+        logger.info(
+            event(
+                "reckonai.jobs.already_done",
+                job_id=str(job.id),
+                job_type=job.job_type,
+                key=str(exc),
+            )
+        )
+        return True
     except Exception as exc:
         session.rollback()
         queue.fail(session, job, exc)

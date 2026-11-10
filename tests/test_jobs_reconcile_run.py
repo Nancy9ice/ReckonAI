@@ -237,8 +237,14 @@ def test_the_same_window_cannot_be_reconciled_twice(
     first = reconcile_job.execute(session, tenant_id=tenant.id, payload=payload)
     assert first.status == "completed"
 
-    with pytest.raises(IntegrityError):
+    # `AlreadyReconciled` wraps the constraint violation rather than replacing
+    # it: the database is still what refuses the duplicate (`__cause__` is the
+    # `IntegrityError`), and the wrapper is what lets `handlers.dispatch` tell
+    # "already done" from "failed and should retry".
+    with pytest.raises(reconcile_job.AlreadyReconciled) as raised:
         reconcile_job.execute(session, tenant_id=tenant.id, payload=payload)
+
+    assert isinstance(raised.value.__cause__, IntegrityError)
 
 
 def test_the_key_ignores_the_time_of_day(tenant: Tenant) -> None:
@@ -308,14 +314,21 @@ def test_a_run_records_the_window_it_covered(
     )
 
 
-def test_the_watermark_comes_from_the_last_completed_run(
+def test_the_watermark_is_the_last_completed_runs_start(
     session: Session, tenant: Tenant
 ) -> None:
-    """D3, and why a failed run must not move it.
+    """D3, as corrected by code review: `started_at`, not `finished_at`.
 
-    A run that failed partway may have reconciled some of its window, so
-    treating it as a watermark would skip evidence that arrived during it.
+    Evidence that arrives *while* a run executes is invisible to that run,
+    because the payload times are read near its beginning. Taking the
+    watermark from `finished_at` would then also put that evidence behind the
+    next run's watermark, so it would never be read at all. `started_at`
+    makes that window empty, at the cost of re-covering ground.
+
+    A failed run must not move the watermark either, since it cannot be
+    trusted to have covered its window.
     """
+    started = datetime(2026, 11, 9, 11, 55, tzinfo=UTC)
     finished = datetime(2026, 11, 9, 12, tzinfo=UTC)
 
     session.add_all(
@@ -324,7 +337,7 @@ def test_the_watermark_comes_from_the_last_completed_run(
                 tenant_id=tenant.id,
                 window_start=WINDOW.start,
                 window_end=WINDOW.end,
-                started_at=finished - timedelta(minutes=5),
+                started_at=started,
                 finished_at=finished,
                 status="completed",
             ),
@@ -340,7 +353,7 @@ def test_the_watermark_comes_from_the_last_completed_run(
     )
     session.flush()
 
-    assert window.last_completed_finish(session, tenant.id) == finished
+    assert window.last_completed_watermark(session, tenant.id) == started
 
 
 def test_the_watermark_is_per_tenant(
@@ -360,7 +373,7 @@ def test_the_watermark_is_per_tenant(
     )
     session.flush()
 
-    assert window.last_completed_finish(session, tenant.id) is None
+    assert window.last_completed_watermark(session, tenant.id) is None
 
 
 def test_two_tenants_may_reconcile_the_same_window(

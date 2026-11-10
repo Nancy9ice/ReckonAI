@@ -89,9 +89,25 @@ def drain(engine: Engine) -> bool:
     out of a pool sized at two.
     """
     with Session(engine) as session:
+        # Stale claims first: a job whose worker died on its final attempt is
+        # below `claim`'s attempt cap and would otherwise sit `claimed`
+        # forever, invisible to every worker.
+        reaped = queue.reap_stale_claims(session)
+        if reaped:
+            session.commit()
+            for job in reaped:
+                logger.warning(
+                    event(
+                        "reckonai.jobs.claim_expired",
+                        job_id=str(job.id),
+                        job_type=job.job_type,
+                        attempts=job.attempts,
+                    )
+                )
+
         claimed = queue.claim(session, limit=CLAIM_LIMIT)
         if not claimed:
-            return False
+            return bool(reaped)
         session.commit()
 
         for job in claimed:

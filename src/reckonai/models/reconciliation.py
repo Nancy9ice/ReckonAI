@@ -48,9 +48,20 @@ from reckonai.money import Money
 
 #: How a run ended.
 #:
-#: `failed` is carried because a run that died partway must be distinguishable
-#: from one that found nothing. Both have a low exception count, and only one
-#: of them means the number can be trusted.
+#: **Only `completed` is ever committed today, and that is a consequence of
+#: the one-transaction design rather than an oversight.** The handler, the run
+#: row and every exception row share a single transaction, so a run that dies
+#: partway is rolled back entirely and leaves no row at all - its failure is
+#: recorded on the `job` row, which is also the thing that retries it. A
+#: `running` row is never visible outside its own transaction either.
+#:
+#: The vocabulary keeps all three because the states are real and a future
+#: partial-run design would need them, and because a `CHECK` is cheaper to
+#: keep than to add. Code review found this stated the other way round: a
+#: `last_error` column here and docstrings reasoning about failed runs that
+#: "may have reconciled some of their window", which this design cannot
+#: produce. The column is gone and the reasoning is corrected rather than
+#: left to mislead whoever reads the table next.
 RUN_STATUSES: tuple[str, ...] = ("running", "completed", "failed")
 
 #: Every conclusion a row may carry, pinned to `reckonai.recon.vocabulary`.
@@ -135,10 +146,6 @@ class ReconciliationRun(TenantMixin, TimestampMixin, Base):
     #: is a finding and not an exception, so the naive count would fail the
     #: gate while being entirely correct about how many findings there were.
     exception_count: Mapped[int] = mapped_column(nullable=False, server_default="0")
-
-    #: Why a `failed` run failed. Exception type and message, never a
-    #: traceback.
-    last_error: Mapped[str | None] = mapped_column(Text)
 
     __table_args__ = (
         state_check("status", RUN_STATUSES, name="status"),

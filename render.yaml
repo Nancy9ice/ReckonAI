@@ -154,12 +154,16 @@ services:
   # `FOR UPDATE SKIP LOCKED` protects the queue rather than whoever bypasses
   # it.
   #
-  # Hourly rather than daily. The job is idempotent per window - the
-  # `processed_event` unique constraint is what guarantees that, not this
-  # schedule - so a tick whose window is already reconciled logs a skip and
-  # exits. Hourly means a late PayPal record is picked up within the hour
-  # instead of the next day, which is the whole point of R9's windowed run
-  # given reporting lags about a day.
+  # Daily, at 01:00 UTC. It was hourly, with a comment claiming that picked a
+  # late PayPal record up within the hour; code review found that false. The
+  # window bounds snap to midnight UTC and the idempotency key uses only their
+  # dates, so every tick in a UTC day computes the same key: the first does the
+  # work, the other 23 log a skip. Hourly bought nothing.
+  #
+  # 01:00 rather than 00:00 so the window's final day is a whole day behind the
+  # provider, which specs/tech-stack.md section 8 records as roughly a day
+  # behind anyway. The job is idempotent per window regardless - the
+  # `processed_event` unique constraint guarantees that, not this schedule.
   #
   # `--window-days 2`, not 1: the reporting APIs are eventually consistent and
   # roughly a day behind (specs/tech-stack.md section 8), so a one-day window
@@ -172,7 +176,7 @@ services:
     region: frankfurt
     branch: main
     buildCommand: pip install uv && uv sync --frozen --no-dev
-    schedule: "0 * * * *"
+    schedule: "0 1 * * *"
 
     # No preDeployCommand. The web service owns migrations (D7), and a cron
     # job racing it to migrate is the problem that avoids.

@@ -347,3 +347,53 @@ def test_a_newly_arrived_provider_payment_is_selected() -> None:
 
     assert selection.provider_refs == {"PAY-NEW"}
     assert selection.all_refs == {"PAY-NEW"}
+
+
+# ---------------------------------------------------------------------------
+# Code review finding 2 - unmatched provider payments were dropped forever
+# ---------------------------------------------------------------------------
+
+
+def test_an_unmatched_provider_payment_is_reported_on_the_first_run() -> None:
+    """With no watermark, every unmatched payment is selected.
+
+    Review found these dropped permanently: clause 1 cannot reach a payment
+    with no `placed_at`, the first run has no watermark, and every later run's
+    watermark is already past the payload's `retrieved_at` - so a payment
+    matching no marketplace order produced an `awaiting_evidence` finding that
+    the windowed run filtered out of every run, forever. `reconcile.py` goes
+    out of its way not to lose that side.
+    """
+    selection = window.select_cases(
+        [],
+        ["PAY-ORPHAN"],
+        window=window.Window(start=NOV, end=NOV + timedelta(days=10)),
+        times={},
+        provider_times={"PAY-ORPHAN": datetime(2026, 10, 1, tzinfo=UTC)},
+        in_window=frozenset(),
+    )
+
+    assert selection.provider_refs == {"PAY-ORPHAN"}
+
+
+def test_an_already_reported_provider_payment_is_not_re_reported() -> None:
+    """Once a watermark exists, only newly arrived ones are selected.
+
+    An unmatched payment already reported does not need re-reporting on every
+    run until someone resolves it - the append-only history already holds the
+    finding.
+    """
+    selection = window.select_cases(
+        [],
+        ["PAY-OLD"],
+        window=window.Window(
+            start=NOV,
+            end=NOV + timedelta(days=10),
+            evidence_since=datetime(2026, 11, 8, tzinfo=UTC),
+        ),
+        times={},
+        provider_times={"PAY-OLD": datetime(2026, 10, 1, tzinfo=UTC)},
+        in_window=frozenset(),
+    )
+
+    assert not selection.provider_refs

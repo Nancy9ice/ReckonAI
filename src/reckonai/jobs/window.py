@@ -96,25 +96,35 @@ class Selection:
         return len(self.all_refs)
 
 
-def last_completed_finish(
+def last_completed_watermark(
     session: Session, tenant_id: uuid.UUID
 ) -> datetime | None:
-    """When this tenant's most recent completed run finished.
+    """The instant the next run should treat as "evidence seen up to here".
 
-    **`completed` only.** A run that failed partway may have reconciled some
-    of its window and written some of its rows, so treating its start as a
-    watermark would skip evidence that arrived during it. A failed run
-    therefore does not move the watermark, and the next run re-covers the
-    same ground - which is the safe direction to be wrong in.
+    **The previous completed run's `started_at`, not its `finished_at`.**
+    Code review found the `finished_at` form lost evidence: `payload_times` is
+    read near the beginning of a run, and `finished_at` is stamped at the end,
+    so a `raw_payload` inserted in between is invisible to that run *and* has
+    a `retrieved_at` earlier than the `finished_at` the next run reads as its
+    watermark. Clause 2's strict `>` then skips it too, and for an order older
+    than the date window clause 1 cannot rescue it - so the late refund is
+    never read, which is the exact failure clause 2 exists to prevent.
+
+    `started_at` makes the window of lost evidence empty. The cost is that a
+    run re-covers evidence the previous run already saw, which appends
+    identical rows and is the safe direction to be wrong in.
+
+    **`completed` only**, because a run that died partway cannot be trusted to
+    have covered its window.
     """
     return session.scalars(
-        select(ReconciliationRun.finished_at)
+        select(ReconciliationRun.started_at)
         .where(
             ReconciliationRun.tenant_id == tenant_id,
             ReconciliationRun.status == "completed",
             ReconciliationRun.finished_at.is_not(None),
         )
-        .order_by(ReconciliationRun.finished_at.desc())
+        .order_by(ReconciliationRun.started_at.desc())
         .limit(1)
     ).first()
 
@@ -249,8 +259,22 @@ def select_cases(
         if moment is not None and moment > window.evidence_since:
             new_evidence.add(case.order_ref)
 
+    # **Unmatched provider payments, which clause 1 can never reach** - they
+    # have no `placed_at` to test. Code review found them dropped permanently:
+    # the first run has no watermark, and every later run's watermark is
+    # already past the payload's `retrieved_at`, so a payment matched to no
+    # marketplace order produced an `awaiting_evidence` finding that was
+    # filtered out of every run forever. `reconcile.py` goes out of its way
+    # not to lose that side, and the windowed run quietly did.
+    #
+    # With no watermark - a tenant's first run - every one is selected, so it
+    # is reported once rather than never. After that, only newly arrived ones,
+    # because an unmatched payment that has already been reported does not
+    # need re-reporting on every run until someone resolves it.
     provider_refs: set[str] = set()
-    if window.evidence_since is not None and provider_times:
+    if window.evidence_since is None:
+        provider_refs = set(provider_only)
+    elif provider_times:
         provider_refs = {
             ref
             for ref in provider_only

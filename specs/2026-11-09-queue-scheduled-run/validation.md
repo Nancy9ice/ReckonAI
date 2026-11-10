@@ -162,6 +162,39 @@ expected-versus-ledger comparison in the product.
   which is the same lock behaviour and not the same scheduler.
 - **That the manifest scores** - Block G's eval harness.
 
+## 7b. The code review, and the nine fixes
+
+`/code-review medium` on PR #22, 2026-11-10. **Nine findings, all nine real**
+on verification - the mechanical claims were each checked against the code
+before being accepted, since Block C's round contained two false positives.
+Every one is fixed, and each has a regression test.
+
+| # | Severity | What was wrong | Fix |
+|---|---|---|---|
+| 1 | high | **A `claimed` job was unrecoverable.** Nothing moved a row from `claimed` back to `queued`, and `drain` does not wrap `dispatch`, so a process dying between the claim and the handler's own error handling left a job no worker would take again - no error recorded, window silently never reconciled. Two docstrings cited `run_after` as the recovery path, which it could not be, because the claim never returned to the status `run_after` filters on | `claim` also takes a `claimed` job whose `claimed_at` is older than `STALE_CLAIM_SECONDS` (300), capped by `attempts < max_attempts`; `reap_stale_claims` terminates a stale job already at its cap, with the reason recorded. The worker reaps before claiming |
+| 2 | high | **Unmatched provider payments were dropped forever.** Clause 1 cannot reach a payment with no `placed_at`; the first run has no watermark, and every later watermark is past the payload's `retrieved_at` - so an `awaiting_evidence` finding `reconcile.run` deliberately produces was filtered out of every run | With no watermark, every unmatched payment is selected, so it is reported once rather than never; after that, only newly arrived ones |
+| 3 | medium | **The hourly cron was effectively daily**, contradicting the comment written to justify hourly. Both window bounds snap to midnight UTC and the key uses only their dates, so all 24 ticks compute one key: the first works, 23 skip | Schedule is daily at 01:00 UTC, and both comments corrected. Making the key hourly instead would append 24 identical row sets a day for Block F to read through, which is worse than a day's latency on a provider that is itself a day behind |
+| 4 | medium | **Evidence arriving mid-run was missed by that run and excluded by the next.** `payload_times` is read at the start, `finished_at` stamped at the end, so a payload inserted between is invisible to this run and behind the next run's watermark | The watermark is the previous completed run's `started_at`. `last_completed_finish` renamed `last_completed_watermark`. Re-covering ground is the safe direction, which that function's own docstring already argued |
+| 5 | medium | **The D11 fix had a symmetric false negative.** A `dispute` debit of 30.00 vouching for a 30.00 provider refund with no `refund` row is indistinguishable from an unrecorded refund beside an unrelated chargeback loss - two losses booked once, netting to zero and reporting nothing | Neither guess. `_partition_by_ledger` returns a third group, and a dispute-backed refund is reported `awaiting_evidence` naming both records - P4's first-class non-error state, P5's escalate-rather-than-guess. Treated as reflected for the arithmetic so no residual is invented, `confirmed=False` so Block F shows it as suspected |
+| 6 | low | `ReconciliationRun.last_error` was unwritable and `failed`/`running` unreachable: the run shares one transaction with its handler, so a dead run leaves no row to annotate. Three docstrings reasoned about failed runs the design cannot produce | Column dropped, migration regenerated, vocabulary kept with the reason stated - the failure is recorded on the `job` row, which is what retries |
+| 7 | low | `order_count` was `len(selection)`, which is `all_refs` - including unmatched payment references | `len(selection.order_refs)` |
+| 8 | low | The `IntegrityError` branch in `main` could not fire for its stated reason, and a duplicate window was retried to exhaustion into a terminal `failed` row - the noisy queue the pre-check exists to avoid | `AlreadyReconciled` wraps the constraint violation; `dispatch` completes the job instead of retrying. The dead branch is removed |
+| 9 | low | The per-tenant isolation claim was false at enqueue: one commit for all tenants meant any failure discarded every tenant's enqueue | Committed per tenant |
+
+**Two framings corrected rather than accepted.** Finding 2's reasoning said
+newly arrived payments were dropped too; they are not, and the test proving it
+passes - the real defect is narrower and is the permanent drop above. Finding 5
+is a trade-off, not a plain defect: the old code guessed one way, this block
+guessed the other, and the shape is genuinely undecidable from the records.
+
+**The lesson is Block C's, again.** Seven of the nine are invisible to the
+seeded dataset: it has no `dispute` ledger row, no unmatched provider payment,
+no job that dies mid-claim, and one run per test. The gate proves the dataset,
+not the logic.
+
+**The false-positive gate was re-run after all nine**: 18 orders, 6 findings,
+5 exceptions, the manifest's own figures, unchanged.
+
 ## 8. Corrections this block made to earlier documents
 
 1. **D3 gained a second clause before implementation.** `placed_at` alone

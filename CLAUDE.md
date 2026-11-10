@@ -114,7 +114,19 @@ made one correct booking produce two findings.
 
 **The Cron Job is declared in `render.yaml` and not applied.** The deploy
 budget is spent, so Phase 8's fourth criterion is deferred to Block F, which
-owns the next deploy.
+owns the next deploy. It runs **daily**, not hourly: the window bounds and the
+idempotency key are both date-grained, so every tick in a UTC day is the same
+piece of work.
+
+**A `/code-review medium` on Block D returned nine findings, all nine real** -
+two of them high, and seven invisible to the seeded dataset. That directory's
+`validation.md` §7b tabulates them with their fixes; read it before touching
+`jobs/` or the dispute rule. The two worth carrying: **a `claimed` job is
+recoverable only because `claim` reclaims a stale one** - nothing else moves a
+row out of `claimed`, and `drain` does not wrap `dispatch` - and **the
+dispute-versus-refund shape is undecidable from the records**, so a
+dispute-backed refund is `awaiting_evidence` rather than a guess in either
+direction.
 
 Three Block C results not to re-derive. **Do not widen the zero same-currency
 tolerance** — it rests on two measurements across all 21 captures, and F2's

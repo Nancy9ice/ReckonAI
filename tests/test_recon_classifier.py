@@ -1116,20 +1116,62 @@ def _with_order(case: OrderCase, entry: Entry) -> Entry:
     return entry
 
 
-def test_a_dispute_loss_booked_as_a_dispute_debit_produces_nothing() -> None:
-    """D11's first row, and the false positive the exclusion used to cause.
+def test_a_dispute_loss_booked_as_a_dispute_debit_is_reported_as_ambiguous() -> None:
+    """D11's first row, as corrected by code review.
 
-    Before `dispute` joined `POSITION_CATEGORIES` this debit was invisible to
-    the ledger sum while the expected entitlement had already absorbed the
-    loss through the refund, so a correct marketplace was reported as not
-    having reflected its refund.
+    Two false answers were available here and the block shipped the second
+    before review caught it. Before `dispute` joined `POSITION_CATEGORIES`
+    this debit was invisible to the ledger sum while the expectation had
+    already absorbed the loss through the refund, so a correct marketplace was
+    reported as not having reflected its refund - a false positive. Counting
+    it silently instead made the symmetric input - an unrecorded refund beside
+    an unrelated chargeback loss of the same amount - net to zero and report
+    nothing, a false negative.
+
+    Nothing in the records separates those two, so the honest answer is
+    neither: `awaiting_evidence`, naming both records. **Not an exception**,
+    so the false-positive gate is unaffected, and R10's next run re-evaluates
+    it.
     """
     booking = _booking("dispute", "LED-D11-dispute")
     case = _disputed_order()
     booking.order_id = case.order.id
     case = replace(case, ledger_entries=(*case.ledger_entries, booking))
 
-    assert classify_order(case) == ()
+    findings = classify_order(case)
+
+    assert codes(findings) == [ExceptionCode.AWAITING_EVIDENCE]
+    assert not findings[0].is_exception, (
+        "an ambiguity is not a discrepancy; counting it would fail the gate"
+    )
+    assert findings[0].confirmed is False
+    assert findings[0].impact.amount == 0
+    # Both sides of the ambiguity are cited, or an investigation cannot see
+    # what made it ambiguous.
+    assert set(findings[0].evidence_refs) == {"RFND-D11-A", "LED-D11-dispute"}
+
+
+def test_an_unrecorded_refund_beside_a_dispute_debit_is_not_silently_netted() -> None:
+    """The false negative that review found, from the other direction.
+
+    A 30.00 provider refund the ledger never recorded, and a 30.00 dispute
+    debit booked for a different loss: two real losses, one booking. Counting
+    the dispute debit as the refund's counterpart made the position net to
+    zero and the run report nothing at all.
+
+    It must not be silent. It is also not a confirmed discrepancy, because
+    this input and the correct one above are indistinguishable - so the same
+    `awaiting_evidence` verdict covers both, which is the point.
+    """
+    case = _disputed_order()
+    booking = _booking("dispute", "LED-D11-dispute")
+    booking.order_id = case.order.id
+    case = replace(case, ledger_entries=(*case.ledger_entries, booking))
+
+    findings = classify_order(case)
+
+    assert findings, "two losses booked once must not produce silence"
+    assert ExceptionCode.AWAITING_EVIDENCE in codes(findings)
 
 
 def test_a_dispute_loss_booked_as_a_refund_debit_produces_nothing() -> None:

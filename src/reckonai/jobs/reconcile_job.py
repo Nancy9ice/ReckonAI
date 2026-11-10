@@ -20,6 +20,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from reckonai import reconcile
@@ -28,6 +29,22 @@ from reckonai.models import ReconciliationException, ReconciliationRun
 from reckonai.recon.classifier import Finding, exceptions_only
 
 JOB_TYPE = "reconciliation_run"
+
+
+class AlreadyReconciled(Exception):
+    """This tenant's window has already been reconciled.
+
+    Raised instead of letting the `processed_event` `IntegrityError` escape as
+    an ordinary failure. Code review found that it was being treated as one:
+    `queue.fail` rescheduled it, retried to the cap, and left a terminal
+    `failed` row carrying an `IntegrityError` - the "queue full of expected
+    failures hides a real one" outcome the pre-check in `schedule.py` exists
+    to avoid, arrived at by a different route.
+
+    A window already done is a job that needs no further work, so
+    `handlers.dispatch` completes it rather than retrying it. The constraint is
+    still what decides; this only changes how the answer is read.
+    """
 
 
 def idempotency_key(tenant_id: uuid.UUID, win: window.Window) -> str:
@@ -99,7 +116,7 @@ def run_window(
     for finding in findings:
         session.add(_row_for(finding, tenant_id=tenant_id, run_id=run_row.id))
 
-    run_row.order_count = len(selection)
+    run_row.order_count = len(selection.order_refs)
     run_row.finding_count = len(findings)
     # **Counted through `exceptions_only`, never `len(findings)`.**
     # `awaiting_evidence` is a finding and not an exception, so the naive count
@@ -130,15 +147,16 @@ def execute(
         win = window.Window(
             start=win.start,
             end=win.end,
-            evidence_since=window.last_completed_finish(session, tenant_id),
+            evidence_since=window.last_completed_watermark(session, tenant_id),
         )
 
-    queue.mark_processed(
-        session,
-        tenant_id=tenant_id,
-        event_id=idempotency_key(tenant_id, win),
-        job_type=JOB_TYPE,
-    )
+    key = idempotency_key(tenant_id, win)
+    try:
+        queue.mark_processed(
+            session, tenant_id=tenant_id, event_id=key, job_type=JOB_TYPE
+        )
+    except IntegrityError as exc:
+        raise AlreadyReconciled(key) from exc
 
     return run_window(session, tenant_id=tenant_id, win=win)
 

@@ -354,3 +354,103 @@ def test_an_unknown_job_type_is_refused(session: Session, tenant: Tenant) -> Non
             job_type="recociliation_run",
             payload={},
         )
+
+
+# ---------------------------------------------------------------------------
+# Stale claims - code review finding 1
+# ---------------------------------------------------------------------------
+
+
+def test_a_stale_claim_is_reclaimed(session: Session, tenant: Tenant) -> None:
+    """A job whose worker died is picked up again, which it was not before.
+
+    Nothing moved a row from `claimed` back to `queued`, so a process that
+    died between the claim and the handler's own error handling left a job no
+    worker would ever take again - with no error recorded and its window
+    silently never reconciled. `run_after` was cited as the recovery path and
+    could not be one, because the claim never returned to the status
+    `run_after` is filtered on.
+    """
+    job = queue.enqueue(
+        session, tenant_id=tenant.id, job_type=JOB_TYPE, payload={}, max_attempts=3
+    )
+    queue.claim(session, limit=1)
+    assert job.status == "claimed"
+
+    # The worker vanishes here: no complete, no fail, nothing.
+    assert queue.claim(session, limit=1) == [], "not stale yet"
+
+    job.claimed_at = datetime.now(UTC) - timedelta(
+        seconds=queue.STALE_CLAIM_SECONDS + 1
+    )
+    session.flush()
+
+    reclaimed = queue.claim(session, limit=1)
+
+    assert [c.id for c in reclaimed] == [job.id]
+    assert job.attempts == 2, "a reclaim is an attempt, and must be counted"
+
+
+def test_a_stale_claim_out_of_attempts_is_terminated(
+    session: Session, tenant: Tenant
+) -> None:
+    """The other half: a job that died on its final attempt.
+
+    It sits below `claim`'s `attempts < max_attempts` filter, so without this
+    it would stay `claimed` forever - invisible to every worker and to anyone
+    reading the queue for failures.
+    """
+    job = queue.enqueue(
+        session, tenant_id=tenant.id, job_type=JOB_TYPE, payload={}, max_attempts=1
+    )
+    queue.claim(session, limit=1)
+    assert job.attempts == 1
+
+    job.claimed_at = datetime.now(UTC) - timedelta(
+        seconds=queue.STALE_CLAIM_SECONDS + 1
+    )
+    session.flush()
+
+    assert queue.claim(session, limit=1) == [], "no attempts left to reclaim with"
+
+    reaped = queue.reap_stale_claims(session)
+
+    assert [r.id for r in reaped] == [job.id]
+    assert job.status == "failed"
+    assert job.last_error is not None and "ClaimExpired" in job.last_error
+
+
+def test_a_fresh_claim_is_not_reaped(session: Session, tenant: Tenant) -> None:
+    """The reaper must not shoot a job that is simply still running."""
+    job = queue.enqueue(
+        session, tenant_id=tenant.id, job_type=JOB_TYPE, payload={}, max_attempts=1
+    )
+    queue.claim(session, limit=1)
+
+    assert queue.reap_stale_claims(session) == []
+    assert job.status == "claimed"
+
+
+def test_a_reclaim_never_exceeds_the_attempt_cap(
+    session: Session, tenant: Tenant
+) -> None:
+    """`CHECK (attempts <= max_attempts)` would otherwise fail the flush.
+
+    Without the cap in the claim query, a repeatedly reclaimed job increments
+    past its ceiling and the constraint fails *someone else's* flush rather
+    than its own job.
+    """
+    job = queue.enqueue(
+        session, tenant_id=tenant.id, job_type=JOB_TYPE, payload={}, max_attempts=2
+    )
+
+    for _ in range(2):
+        queue.claim(session, limit=1)
+        job.claimed_at = datetime.now(UTC) - timedelta(
+            seconds=queue.STALE_CLAIM_SECONDS + 1
+        )
+        session.flush()
+
+    assert job.attempts == 2
+    assert queue.claim(session, limit=1) == []
+    session.flush()  # must not raise on the CHECK

@@ -321,7 +321,15 @@ def classify_order(case: OrderCase) -> tuple[Finding, ...]:
     # fault surface three times - as a commission mismatch, as a missing
     # adjustment, and as a residual shortfall - and two of those three would
     # be false positives on a correctly detected fault.
-    reflected, unreflected = _partition_by_ledger(known, case, grouped)
+    reflected, unreflected, dispute_backed = _partition_by_ledger(
+        known, case, grouped
+    )
+
+    # **A dispute-backed refund is treated as reflected for the arithmetic**,
+    # so its movement is not counted twice and no residual is invented, while
+    # the ambiguity itself is reported below as `awaiting_evidence`. The
+    # verdict says "I cannot tell"; the figures stay internally consistent.
+    reflected = reflected + dispute_backed
 
     for refund in reflected:
         try:
@@ -403,6 +411,7 @@ def classify_order(case: OrderCase) -> tuple[Finding, ...]:
         )
     )
     findings.extend(duplicate_findings)
+    findings.extend(_dispute_backed_findings(case, dispute_backed, grouped))
     findings.extend(_residual_findings(case, expected, grouped, explained))
 
     return tuple(findings)
@@ -412,8 +421,12 @@ def _partition_by_ledger(
     refunds: Sequence[RefundRecordLike],
     case: OrderCase,
     grouped: Mapping[tuple[uuid.UUID, str], tuple[LedgerEntryLike, ...]],
-) -> tuple[tuple[RefundRecordLike, ...], tuple[RefundRecordLike, ...]]:
-    """Split refunds into those the seller ledger records and those it does not.
+) -> tuple[
+    tuple[RefundRecordLike, ...],
+    tuple[RefundRecordLike, ...],
+    tuple[RefundRecordLike, ...],
+]:
+    """Split refunds by whether, and how, the seller ledger records them.
 
     Paired on amount, and each ledger row is consumed once: two refunds of
     equal value need two rows, or the second is correctly reported as
@@ -437,9 +450,31 @@ def _partition_by_ledger(
     categories decide what moves a position, and this decides what counts as
     having recorded a refund. Both had to change, and the dispute fixture is
     what showed it.
+
+    **A `dispute` match is ambiguous, and is reported as such rather than
+    guessed.** Code review found the symmetric input to the fix above: a
+    `dispute` debit of 30.00 with a provider refund of 30.00 and no `refund`
+    ledger row is indistinguishable, on the only key available, from an
+    unrecorded refund sitting beside an unrelated chargeback loss of the same
+    size. One is correct bookkeeping; the other is two losses booked once. No
+    link can separate them, because `dispute.capture_id` is `NULL` throughout
+    and the dispute-to-capture join is not established.
+
+    Treating it as reflected hides a real discrepancy; treating it as
+    unreflected reports a correct marketplace. Both are guesses, so the third
+    group below exists: these refunds are **dispute-backed**, the caller
+    reports them `awaiting_evidence` naming both records, and a human or a
+    later run with better evidence decides. That is specs/mission.md P5 -
+    escalate rather than guess - and the same move `matcher.match_refunds`
+    already makes for two refunds of equal value.
+
+    A `refund` debit is consumed before a `dispute` debit, so a marketplace
+    that booked the ordinary way is never made ambiguous by a dispute entry
+    that happens to match.
     """
     provider_ids = {refund.id for refund in case.provider_refunds}
     available: dict[tuple[uuid.UUID, str, str], int] = {}
+    dispute_available: dict[tuple[uuid.UUID, str, str], int] = {}
 
     for (order_id, category), entries in grouped.items():
         if order_id != case.order.id or category not in ("refund", "dispute"):
@@ -450,10 +485,12 @@ def _partition_by_ledger(
                 str(entry.amount.quantize().amount),
                 entry.amount.currency,
             )
-            available[key] = available.get(key, 0) + 1
+            bucket = available if category == "refund" else dispute_available
+            bucket[key] = bucket.get(key, 0) + 1
 
     reflected: list[RefundRecordLike] = []
     unreflected: list[RefundRecordLike] = []
+    dispute_backed: list[RefundRecordLike] = []
 
     for refund in sorted(refunds, key=lambda r: r.external_id):
         if refund.seller_id is None or refund.id not in provider_ids:
@@ -468,10 +505,13 @@ def _partition_by_ledger(
         if available.get(key, 0) > 0:
             available[key] -= 1
             reflected.append(refund)
+        elif dispute_available.get(key, 0) > 0:
+            dispute_available[key] -= 1
+            dispute_backed.append(refund)
         else:
             unreflected.append(refund)
 
-    return tuple(reflected), tuple(unreflected)
+    return tuple(reflected), tuple(unreflected), tuple(dispute_backed)
 
 
 def _by_id(records: Sequence[RefundRecordLike], wanted: uuid.UUID) -> RefundRecordLike:
@@ -726,6 +766,73 @@ def _dispute_surplus(
                 break
 
     return held_out
+
+
+def _dispute_backed_findings(
+    case: OrderCase,
+    dispute_backed: Sequence[RefundRecordLike],
+    grouped: Mapping[tuple[uuid.UUID, str], tuple[LedgerEntryLike, ...]],
+) -> list[Finding]:
+    """A provider refund whose only ledger counterpart is a `dispute` debit.
+
+    `specs/2026-11-09-queue-scheduled-run/requirements.md` D11, as corrected
+    by code review. The shape is genuinely ambiguous - correct bookkeeping of
+    a dispute settlement, or an unrecorded refund next to an unrelated
+    chargeback loss of the same amount - and nothing in the data separates
+    them, so neither silence nor a discrepancy would be honest.
+
+    `awaiting_evidence` is the product's existing answer for exactly this:
+    specs/mission.md P4 makes awaited evidence a first-class state distinct
+    from a genuine discrepancy, and P5 requires escalating rather than
+    guessing. So this is **not** an exception, it does not count toward the
+    false-positive gate, and the next scheduled run re-evaluates it - which is
+    the replan's R10 doing the work it was kept for.
+
+    `confirmed` is `False`: Block F shows it as suspected rather than
+    confirmed, which is what that flag is for.
+    """
+    findings: list[Finding] = []
+
+    for refund in dispute_backed:
+        entries = [
+            entry
+            for entry in grouped.get((case.order.id, "dispute"), ())
+            if entry.seller_id == refund.seller_id
+            and entry.amount.quantize() == refund.amount.quantize()
+        ]
+
+        findings.append(
+            Finding(
+                code=ExceptionCode.AWAITING_EVIDENCE,
+                order_ref=case.order_ref,
+                detail=(
+                    f"PayPal refund {refund.external_id} of "
+                    f"{refund.amount.quantize().amount} "
+                    f"{refund.amount.currency} has no refund entry in the "
+                    "seller ledger, and a dispute debit of the same amount "
+                    "for the same seller. Either the marketplace recorded the "
+                    "refund as a dispute settlement, which is correct, or the "
+                    "refund is unrecorded and the dispute debit is a separate "
+                    "loss. The records do not distinguish the two, so no "
+                    "discrepancy is claimed. The next scheduled run "
+                    "re-evaluates it."
+                ),
+                impact=Money.zero(refund.amount.currency),
+                evidence_refs=(
+                    refund.external_id,
+                    *(entry.external_ref for entry in entries),
+                ),
+                evidence_basis=(
+                    EvidenceBasis.DERIVED_LINKAGE
+                    if refund.capture_linkage_is_derived
+                    else EvidenceBasis.PROVIDER_REPORTED
+                ),
+                seller_id=refund.seller_id,
+                confirmed=False,
+            )
+        )
+
+    return findings
 
 
 def _duplicate_findings(

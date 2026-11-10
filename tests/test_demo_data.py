@@ -14,13 +14,24 @@ from __future__ import annotations
 
 import json
 import uuid
+from datetime import UTC, datetime
+from decimal import Decimal
 
 import pytest
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from reckonai import demo_data
-from reckonai.models import DemoSeed, Order, Tenant
+from reckonai.models import (
+    DemoSeed,
+    Investigation,
+    InvestigationCause,
+    Job,
+    Order,
+    ReconciliationRun,
+    Tenant,
+)
+from reckonai.models.base import Base
 from reckonai.sim import data
 
 
@@ -264,3 +275,92 @@ def test_an_unknown_uuid_is_not_mistaken_for_the_demo_tenant(
     run it before anything exists."""
     demo_data.reset(clean)
     assert uuid.UUID(int=0)
+
+
+def test_reset_empties_every_tenant_scoped_table(session: Session) -> None:
+    """`reset`'s delete list is explicit, so it can fall behind the schema.
+
+    It did. A real `--reset` failed on `fk_investigation_tenant_id_tenant`
+    once Block E's agent committed an investigation from outside the test
+    suite - and Block D's four tables had the same gap, never fired because
+    nothing had committed a run row outside the suite either.
+
+    **The expected set is derived from `Base.metadata`, not listed**, so a
+    model added later is covered by this gate whether or not anyone remembers
+    `reset`. That is the same reasoning `tests/test_model_registry.py` uses
+    for the evidence gate: a hand-written list is a thing to forget.
+    """
+    demo_data.reset(session)
+    session.flush()
+    demo_data.ensure(session)
+    session.flush()
+
+    tenant_id = session.scalar(
+        select(Tenant.id).where(Tenant.slug == data.TENANT_SLUG)
+    )
+    assert tenant_id is not None
+
+    # One row in each of Block D's and Block E's tables, which `ensure` does
+    # not create - they are produced by a run and an investigation. Without
+    # these the gate would pass on a `reset` that cannot delete them.
+    run = ReconciliationRun(
+        tenant_id=tenant_id,
+        window_start=datetime(2026, 11, 1, tzinfo=UTC),
+        window_end=datetime(2026, 11, 2, tzinfo=UTC),
+        status="completed",
+    )
+    session.add(run)
+    session.flush()
+    investigation = Investigation(
+        tenant_id=tenant_id,
+        order_external_ref="ORD-0013",
+        code="missing_ledger_adjustment",
+        provider="anthropic",
+        model_requested="claude-haiku-5-5",
+        verdict="failed",
+    )
+    session.add(investigation)
+    session.flush()
+    session.add(
+        InvestigationCause(
+            tenant_id=tenant_id,
+            investigation_id=investigation.id,
+            rank=1,
+            description="A cause.",
+            confidence=Decimal("0.500"),
+            cited_refs=["ORD-0013"],
+        )
+    )
+    session.add(
+        Job(
+            tenant_id=tenant_id,
+            job_type="reconciliation_run",
+            payload={},
+            status="queued",
+        )
+    )
+    session.flush()
+
+    demo_data.reset(session)
+    session.flush()
+
+    scoped = sorted(
+        name
+        for name, table in Base.metadata.tables.items()
+        if "tenant_id" in table.columns and name != "tenant"
+    )
+    assert scoped, "no tenant-scoped tables found, so this gate proves nothing"
+
+    remaining = {
+        name: count
+        for name in scoped
+        if (
+            count := session.scalar(
+                select(func.count()).select_from(Base.metadata.tables[name])
+            )
+        )
+    }
+    assert not remaining, (
+        f"reset left rows in {remaining}. Add the model to "
+        "`reckonai.demo_data.reset`'s delete list, children first."
+    )

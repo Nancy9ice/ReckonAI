@@ -180,6 +180,13 @@ def reset(session: Session) -> None:
     Every foreign key here is `ondelete="RESTRICT"` - deleting evidence
     under a financial record is never silent - so there is no cascade and
     the order is explicit.
+
+    **An explicit list falls behind the schema, and this one did.** A table
+    added without being added here makes `--reset` fail on a foreign key
+    violation naming the constraint but not the fix.
+    `tests/test_demo_data.py::test_reset_empties_every_tenant_scoped_table`
+    derives the expected set from `Base.metadata` instead, so a new model is
+    covered by that gate whether or not anyone remembers this function.
     """
     from reckonai.models import (
         Capture,
@@ -187,12 +194,18 @@ def reset(session: Session) -> None:
         Disbursement,
         Dispute,
         FxConversion,
+        Investigation,
+        InvestigationCause,
+        Job,
         Order,
         OrderItem,
         Payment,
         PlatformFee,
+        ProcessedEvent,
         QuarantinedRecord,
         RawPayload,
+        ReconciliationException,
+        ReconciliationRun,
         Refund,
         Seller,
         SellerLedgerEntry,
@@ -205,6 +218,17 @@ def reset(session: Session) -> None:
         return
 
     for model in (
+        # Block E's output, children first. Added 2026-11-10 after a real
+        # `--reset` failed on `fk_investigation_tenant_id_tenant`: the
+        # investigation agent is the first component that commits rows from
+        # outside the test suite, so it is the first to expose that this list
+        # had fallen behind the schema.
+        InvestigationCause, Investigation,
+        # **Block D's four had the same gap**, and had simply never fired -
+        # nothing committed a run row outside the rolled-back suite, so the
+        # RESTRICT never bit. Added in the same pass rather than left for
+        # whoever commits one first.
+        ReconciliationException, ReconciliationRun, Job, ProcessedEvent,
         FxConversion, PlatformFee, Disbursement, QuarantinedRecord,
         SellerLedgerEntry, Refund, Dispute, Capture, Payment,
         OrderItem, CommissionRule, Order, Seller, RawPayload, DemoSeed,

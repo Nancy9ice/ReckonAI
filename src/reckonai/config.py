@@ -12,7 +12,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import SecretStr, ValidationError, field_validator
+from pydantic import SecretStr, ValidationError, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # SQLAlchemy selects its DBAPI from the URL. A bare "postgresql://" means
@@ -82,6 +82,32 @@ class Settings(BaseSettings):
     paypal_bn_code: str | None = None
     paypal_api_base: str = "https://api-m.sandbox.paypal.com"
 
+    # ---- The investigation agent (Block E) --------------------------------
+    #
+    # **The model lives here rather than in code**, by the dated 2026-11-10
+    # amendment to specs/tech-stack.md section 5, so Block G's eval can score
+    # both models - and, by the second amendment the same day, both providers -
+    # on the same six seeded faults with no code change.
+    #
+    # One investigation uses one provider start to finish. There is
+    # deliberately **no fallback between them**: Haiku 5.5 has no server-side
+    # refusal fallback, and section 5 decided that a refused investigation is
+    # reported as failed rather than papered over. Having a second provider
+    # available does not reverse that.
+    agent_provider: Literal["anthropic", "openai"] = "anthropic"
+    agent_model: str = "claude-haiku-5-5"
+
+    # Both optional, and the service runs without either - the same shape as
+    # `marketplace_base_url`, and for the same reason: the web service and the
+    # worker both read this object and neither makes a model call. The agent
+    # asserts the key for its selected provider at the point of use, through
+    # `require_agent_api_key` below.
+    #
+    # Unlike `marketplace_base_url`, a missing key here cannot produce a wrong
+    # financial answer - it produces no answer at all, which is a safe failure.
+    anthropic_api_key: SecretStr | None = None
+    openai_api_key: SecretStr | None = None
+
     # Injected by Render into web services; absent locally, in CI, and in the
     # worker, which has no public URL. Logged on startup so a deployed service
     # announces its own address rather than it having to be found in a
@@ -105,6 +131,60 @@ class Settings(BaseSettings):
             "DATABASE_URL must use one of "
             f"{', '.join(_ACCEPTED_SCHEMES)} - got an unrecognised scheme"
         )
+
+    @model_validator(mode="after")
+    def _provider_and_model_agree(self) -> Settings:
+        """Refuse a provider paired with another provider's model.
+
+        specs/tech-stack.md section 5.2 requires the model id from every
+        response to be stored and compared against the model we requested. A
+        provider set to `openai` while the model is still `claude-haiku-5-5`
+        would make that comparison meaningless: the stored audit trail would
+        name a model the request never reached, and an investigation's
+        provenance is exactly what a finance team is entitled to rely on.
+
+        Checked on the `claude-` prefix only. Anthropic's ids all carry it and
+        no other provider's do, so this catches the mistake that actually
+        happens - changing one setting and forgetting the other - without
+        pinning a list of model names that would need editing on every release.
+        """
+        is_claude = self.agent_model.startswith("claude-")
+
+        if self.agent_provider == "anthropic" and not is_claude:
+            raise ValueError(
+                f"AGENT_PROVIDER is 'anthropic' but AGENT_MODEL is "
+                f"{self.agent_model!r}, which is not a Claude model. Set "
+                "AGENT_MODEL to a claude-* id, or change AGENT_PROVIDER."
+            )
+
+        if self.agent_provider == "openai" and is_claude:
+            raise ValueError(
+                f"AGENT_PROVIDER is 'openai' but AGENT_MODEL is "
+                f"{self.agent_model!r}, which is a Claude model. Set "
+                "AGENT_MODEL to an OpenAI id, or change AGENT_PROVIDER."
+            )
+
+        return self
+
+    def require_agent_api_key(self) -> SecretStr:
+        """The API key for the selected provider, or a named error.
+
+        Asserted here rather than as a required field, so that importing
+        `Settings` in the web service or the worker does not demand a
+        credential neither of them uses.
+        """
+        key = (
+            self.anthropic_api_key
+            if self.agent_provider == "anthropic"
+            else self.openai_api_key
+        )
+        if key is None:
+            variable = f"{self.agent_provider.upper()}_API_KEY"
+            raise ConfigurationError(
+                f"AGENT_PROVIDER is {self.agent_provider!r}, so {variable} "
+                "must be set to run an investigation."
+            )
+        return key
 
     @property
     def sqlalchemy_url(self) -> str:

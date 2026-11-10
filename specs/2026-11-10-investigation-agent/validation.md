@@ -157,6 +157,64 @@ result.** See §7 finding 3: the first run returned `reported` at confidence
 tool layer rather than in the model. The same model declines once the
 distinction is made available to it.
 
+#### The control case, and why this criterion is weaker than it reads
+
+**`recompute`'s `detail` states the conclusion**, and `prompt.user_turn` puts
+it in the prompt verbatim: "PayPal recorded refund ... and the seller ledger
+carries neither the refund debit nor the commission reversal, so the seller's
+position is overstated."
+
+So a model could pass criterion 1 by **paraphrasing that sentence and citing
+the refund**, performing no retrieval at all - and it would read as a success.
+Withholding the ledger does not remove the evidence for the cause; it removes
+the agent's ability to *corroborate* it.
+
+Run as a control, with every retrieval kind withheld and only `recompute`
+left:
+
+```
+uv run python -m reckonai.agent.investigate --fault F1     --provider openai --model gpt-4.1     --withhold captures --withhold disbursements --withhold disputes     --withhold fees --withhold items --withhold ledger --withhold order     --withhold payloads --withhold payments --withhold refunds     --withhold rules --withhold sellers
+```
+
+| Field | Value |
+|---|---|
+| verdict | **`insufficient_evidence`** |
+| causes | **0** |
+
+> "The records required to verify whether the refund debit or the commission
+> reversal was booked to the seller ledger for order ORD-0013, or to confirm
+> PayPal's commission record, are unavailable. As a result, it is not possible
+> to determine from the accessible evidence why the seller's position is
+> overstated."
+
+**`gpt-4.1` does not parrot the detail.** It was handed the conclusion and
+declined to adopt it, naming the records it would have needed. That is the
+behaviour the product wants: "the engine says X" and "I have evidence for X"
+are different claims, and it kept them apart.
+
+**This should be a negative test in Block G's eval, not a one-off.** Any
+`reported` verdict on the all-withheld case is a parroting failure wearing a
+success, and `claude-haiku-5-5` - the untested default, and the cheaper model
+- is where that is likeliest. One observation on one model is not a property
+of the system.
+
+**Why `insufficient_evidence` is the correct answer here**, stated so the
+criterion is not just taken on its wording. [[mission]] P5 requires a
+conclusion to cite the records it rests on. The successful run cited
+`LED-ORD-0013-vendor-bellweather-comm` and `-sale` - the entries that *do*
+exist, against which the missing refund debit is visible. Without ledger
+access a cause can cite only the refund, and a refund alone is equally
+consistent with one that was correctly booked. The agent cannot support the
+cause in the form the product requires, so declining is right rather than
+timid.
+
+*A design option this surfaces, deliberately not taken:* an operator might
+prefer "the engine reports the ledger is missing the adjustment; I could not
+verify it independently" over a flat decline. The report model cannot express
+that - a cause carries a confidence, and a confident cause resting on thin
+citations is the exact failure mode §5.2 warns about. Adding a
+relayed-but-unverified form would be a product decision, not a fix.
+
 **Why these are hand-run and not in CI.** A paid call per test run is not
 acceptable and CI has no key. A live test skipped on a missing key would make a
 green CI run cover nothing, which this project already treats as the worse

@@ -261,3 +261,34 @@ def test_the_predeploy_command_seeds_but_never_calls_paypal(
     # Without --no-sync, uv run syncs before executing and undoes the build's
     # --no-dev, installing packages at container start.
     assert command.count("--no-sync") == 2
+
+
+def test_the_agent_credential_is_on_the_worker_and_never_in_the_file(
+    services: list[dict[str, Any]],
+) -> None:
+    """Block F: the investigation job runs on the worker, so the key does.
+
+    `validation.md` section 7b of the investigation block found the Blueprint
+    declared no agent credential at all, which made every deployed
+    investigation fail. Each is `sync: false`, so none carries a value.
+    """
+    wanted = {"AGENT_PROVIDER", "AGENT_MODEL", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"}
+    for service in services:
+        keys = {v["key"]: v for v in service["envVars"]}
+        has = wanted & keys.keys()
+        if service["name"] == "reckonai-worker":
+            assert has == wanted, wanted - has
+            for key in wanted:
+                assert keys[key].get("sync") is False, key
+                assert "value" not in keys[key], key
+        else:
+            assert not has, f"{service['name']} declares {has}"
+
+
+def test_the_web_build_attempts_the_dashboard_without_depending_on_it(
+    web: dict[str, Any],
+) -> None:
+    """A missing Node must not fail the deploy: `/` falls back to the index."""
+    command = " ".join(web["buildCommand"].split())
+    assert "npm run build" in command
+    assert "command -v npm" in command

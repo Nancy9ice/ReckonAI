@@ -141,6 +141,8 @@ files = [
     # for the same reason too: the absence of one gate is why the other matters
     # more here, not less.
     "src/reckonai/agent",
+    # Added in Block F: holds sessions and a clock, like `jobs` and `agent`.
+    "src/reckonai/api",
 ]
 python_version = "3.12"
 strict = true

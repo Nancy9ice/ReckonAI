@@ -25,6 +25,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 
 from reckonai import __version__
+from reckonai.api import router as api_router
 from reckonai.config import get_settings
 from reckonai.db import check_connection, create_app_engine
 from reckonai.logging import configure_logging, event
@@ -85,6 +86,9 @@ app = FastAPI(
 # integration, not part of the product: the connector reads it over HTTP as it
 # would any third party, pointed at `MARKETPLACE_BASE_URL`.
 app.include_router(sim_router, prefix="/sim")
+
+# The product's own read API (Block F). Distinct from `/sim`, which feeds data in.
+app.include_router(api_router)
 
 
 @app.get("/")

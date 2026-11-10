@@ -332,15 +332,44 @@ def other_payload(session: Session, other_tenant: Tenant) -> RawPayload:
 
 
 @pytest.fixture
-def seeded_exception(session: Session, tenant: Tenant):  # type: ignore[no-untyped-def]
-    """One persisted run and one exception under it, for Block F's tables."""
+def seeded_exception(session: Session, tenant: Tenant, seller: Seller):  # type: ignore[no-untyped-def]
+    """One persisted run and one exception under it, for Block F's tables.
+
+    The order and its one item exist because every real exception names an
+    order the matcher claimed; the API reads its age and seller count there.
+    """
     from datetime import UTC, datetime, timedelta
     from decimal import Decimal
 
-    from reckonai.models import ReconciliationException, ReconciliationRun
+    from reckonai.models import (
+        Order,
+        OrderItem,
+        ReconciliationException,
+        ReconciliationRun,
+    )
     from reckonai.money import Money
 
     now = datetime.now(UTC)
+    order = Order(
+        tenant_id=tenant.id,
+        external_ref="ORD-TEST",
+        total=Money(Decimal("100.00"), "USD"),
+        placed_at=now - timedelta(days=6),
+    )
+    session.add(order)
+    session.flush()
+    session.add(
+        OrderItem(
+            tenant_id=tenant.id,
+            order_id=order.id,
+            seller_id=seller.id,
+            external_ref="ITEM-TEST",
+            quantity=1,
+            unit_price=Money(Decimal("100.00"), "USD"),
+            line_total=Money(Decimal("100.00"), "USD"),
+        )
+    )
+    session.flush()
     run = ReconciliationRun(
         tenant_id=tenant.id,
         window_start=now,

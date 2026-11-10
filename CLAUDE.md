@@ -54,7 +54,8 @@ of work against ~20, and this is where that gap lands.
 `reckonai/agent/`.** §6 lists five corrections this block made to earlier
 documents — two of them to rules stated in `CLAUDE.md` itself, corrected below
 — **§7 lists five things found by running it, three of which only a live call
-could find**, §7a four more from building it, and §8 the five debts.
+could find**, §7a four more from building it, **§4a the code review (14
+findings, all real, all worked)**, and §8 the six debts.
 
 **The two model-dependent criteria are met on `gpt-4.1`, not on the Anthropic
 default**, whose account had no credit on the day. `claude-haiku-5-5` is
@@ -69,7 +70,10 @@ an absent value and a measured zero are different claims — applied to
 evidence. A withheld kind raises `Withheld` and reaches the model as an
 explicit marker. **Any new tool must preserve that distinction**; returning an
 empty collection for something you are declining to show is how the agent
-fabricates a finding about the marketplace's books.
+fabricates a finding about the marketplace's books. **Review found it three
+times by three different routes** - a withheld kind, a raw-payload lookup that
+bypassed the withhold, and an order with no assembled case - so the rule is
+about every path to an empty result, not about `Withheld` alone.
 
 The agent lives in `reckonai/agent/`: `tools.py` (the read-only surface),
 `citations.py`, `registry.py` (one tool description, adapted to both

@@ -33,7 +33,7 @@ from reckonai.agent.report import (
     InvestigationReport,
     ModelVerdict,
 )
-from reckonai.models import Tenant
+from reckonai.models import Investigation, Tenant
 from reckonai.recon import ExceptionCode, exceptions_only
 from reckonai.reconcile import run
 from reckonai.sim import data, manifest
@@ -473,3 +473,160 @@ def test_the_cli_refuses_a_provider_paired_with_the_wrong_model() -> None:
     the environment.
     """
     assert main(["--fault", "F1", "--provider", "openai"]) == 2
+
+
+def test_an_inconsistent_report_still_records_the_attempt(
+    session: Session, seeded: uuid.UUID
+) -> None:
+    """A paid model call must leave a row, whatever came back.
+
+    `store_investigation` refuses a `reported` verdict with no causes, and it
+    raises **before** adding anything. Nothing caught that, so the CLI exited
+    on a traceback, `session.commit()` never ran, and no `investigation` row
+    existed at all - contradicting "one row per attempt, whatever the
+    outcome" and emptying the audit trail in exactly the case where something
+    went wrong.
+
+    Both providers can produce it: neither schema puts `minItems` on
+    `causes`, so a `reported` verdict with an empty list is schema-valid.
+    Found by code review.
+    """
+    inconsistent = InvestigationReport.model_construct(
+        verdict=ModelVerdict.REPORTED, summary="Nothing found.", causes=[]
+    )
+
+    outcome = investigate(
+        session,
+        seeded,
+        order_ref=ORDER_REF,
+        provider=_StubProvider(report=inconsistent),
+        model="claude-haiku-5-5",
+    )
+
+    assert outcome.report is None
+    assert outcome.investigation.verdict == "failed"
+    assert "inconsistent" in (outcome.investigation.summarized_reasoning or "")
+
+    # **The observed response is recorded**, unlike the ProviderError branch
+    # where no response arrived. Writing NULL here would understate what is
+    # known about a call that was paid for.
+    assert outcome.investigation.model_returned == "claude-haiku-5-5"
+    assert outcome.investigation.stop_reason == "end_turn"
+
+    stored = session.scalars(
+        select(Investigation).where(Investigation.tenant_id == seeded)
+    ).all()
+    assert len(stored) == 1
+
+
+# ---------------------------------------------------------------------------
+# CLI findings from code review
+# ---------------------------------------------------------------------------
+
+
+def test_an_unknown_fault_is_a_named_error_not_a_traceback() -> None:
+    """Finding 11. Every other bad input in `main()` is one logged line.
+
+    `manifest.fault` raises a bare `KeyError`, which escaped as a traceback
+    although the module docstring states one-line errors as the design.
+    """
+    from reckonai.agent.investigate import UnknownFault, _order_for_fault
+
+    with pytest.raises(UnknownFault) as raised:
+        _order_for_fault("F9")
+
+    assert "F9" in str(raised.value)
+    assert "F1" in str(raised.value), "the message should list the known faults"
+    assert main(["--fault", "F9"]) == 2
+
+
+def test_impacts_in_different_currencies_are_never_ranked_by_number(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Finding 8. 500 JPY is not larger than 100 USD.
+
+    The old `max(key=impact.amount)` compared bare Decimals across currencies,
+    which specs/mission.md P2 forbids - two amounts are not comparable merely
+    because their numbers look alike. `mixed_currency_order` exists precisely
+    because one order can carry both.
+    """
+    from types import SimpleNamespace
+
+    from reckonai.agent import investigate as module
+    from reckonai.money import Money
+
+    def finding(code: str, amount: str, currency: str) -> SimpleNamespace:
+        return SimpleNamespace(
+            code=code,
+            order_ref="ORD-X",
+            impact=Money(amount, currency),
+        )
+
+    usd = finding("commission_mismatch", "100.00", "USD")
+    jpy = finding("fx_discrepancy", "500", "JPY")
+
+    monkeypatch.setattr(module, "run", lambda _session, _tenant: [])
+    monkeypatch.setattr(module, "exceptions_only", lambda _findings: [usd, jpy])
+    chosen = module._exception_for(None, uuid.uuid4(), "ORD-X", None)  # type: ignore[arg-type]
+
+    # Not the JPY one that merely has the bigger number: with no comparable
+    # basis it falls back to the engine's own emission order.
+    assert chosen is usd
+
+
+def test_same_currency_impacts_still_rank_worst_first(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The currency guard must not disable the ranking it protects."""
+    from types import SimpleNamespace
+
+    from reckonai.agent import investigate as module
+    from reckonai.money import Money
+
+    small = SimpleNamespace(
+        code="a", order_ref="ORD-X", impact=Money("3.00", "USD")
+    )
+    large = SimpleNamespace(
+        code="b", order_ref="ORD-X", impact=Money("27.00", "USD")
+    )
+
+    monkeypatch.setattr(module, "run", lambda _session, _tenant: [])
+    monkeypatch.setattr(module, "exceptions_only", lambda _findings: [small, large])
+    chosen = module._exception_for(None, uuid.uuid4(), "ORD-X", None)  # type: ignore[arg-type]
+
+    assert chosen is large
+
+
+def test_reported_citations_come_back_in_rank_order(
+    session: Session, seeded: uuid.UUID
+) -> None:
+    """Finding 12. Everything else in this block is deterministic.
+
+    The read-back had no ORDER BY, so the reported (and logged) citations came
+    back in whatever order Postgres chose, which is a quiet way for Block G's
+    cross-provider comparison to see noise that is not in the models.
+    """
+    report = InvestigationReport(
+        verdict=ModelVerdict.REPORTED,
+        summary="Two causes.",
+        causes=[
+            CandidateCause(
+                description="First.", confidence=0.8, cited_refs=[ORDER_REF]
+            ),
+            CandidateCause(
+                description="Second.",
+                confidence=0.2,
+                cited_refs=["INVENTED-A", "INVENTED-B"],
+            ),
+        ],
+    )
+
+    outcome = investigate(
+        session,
+        seeded,
+        order_ref=ORDER_REF,
+        provider=_StubProvider(report=report),
+        model="claude-haiku-5-5",
+    )
+
+    assert outcome.unresolved == ("INVENTED-A", "INVENTED-B")

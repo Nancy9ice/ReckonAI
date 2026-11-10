@@ -41,7 +41,11 @@ from anthropic.types.beta import (
     BetaToolChoiceAutoParam,
 )
 
-from reckonai.agent.providers.base import ProviderError, ProviderResult
+from reckonai.agent.providers.base import (
+    ITERATION_CEILING,
+    ProviderError,
+    ProviderResult,
+)
 from reckonai.agent.registry import ToolSpec
 from reckonai.agent.report import InvestigationReport
 
@@ -152,18 +156,45 @@ class AnthropicProvider:
                 messages=[{"role": "user", "content": user}],
                 tools=[_as_beta_tool(spec) for spec in tools],
                 thinking=thinking,
-                # Two separate parameters, which the SDK's own overloads make
-                # clear: `output_config` carries the effort, and a Pydantic
-                # report goes through `output_format`, which is what makes
-                # `until_done()` return a parsed message. Putting the model
-                # under `output_config["format"]` type-checks as a raw schema
-                # and does not parse.
+                # Two separate parameters. `output_config` carries the effort;
+                # the Pydantic report goes through `output_format`.
+                #
+                # **`output_format` is marked deprecated by the SDK's own error
+                # text, and it is still the only route to a parsed report.**
+                # Verified against the installed source rather than assumed
+                # (code review finding 14): `parsed_output` is produced by
+                # `parse_text(content.text, output_format)`, and
+                # `output_config["format"]` accepts only a raw JSON-schema
+                # dict, with no path from it to a parsed model.
+                #
+                # The alternative is to send a hand-built schema and
+                # `model_validate_json` the text, as the OpenAI adapter does.
+                # That was not done blind: Anthropic's structured outputs
+                # restrict schema features (this report's `confidence` carries
+                # `minimum`/`maximum`, which the SDK's private transform
+                # rewrites), and the default provider has had no live call.
+                # When the Anthropic account is topped up, try that migration
+                # against the real API - see validation.md section 8 debt 6.
                 output_config=output_config,
                 output_format=InvestigationReport,
                 tool_choice=tool_choice,
                 max_iterations=MAX_ITERATIONS,
                 stream=True,
             )
+            # **Iterate the runner rather than calling `until_done()` blind.**
+            # `until_done()` returns only the last message, which in a
+            # multi-turn tool loop is the turn that formats the report - so
+            # `summarized_reasoning` recorded the least informative part of the
+            # run, and every earlier turn's thinking (where the agent decided
+            # what evidence to retrieve) was dropped. Code review findings 5
+            # and 10.
+            #
+            # Safe, and checked against the SDK source rather than assumed: the
+            # streaming runner binds `stream.get_final_message` itself and calls
+            # it after each yield, so draining each turn here cannot hang it,
+            # and `until_done()` is documented as returning the last message
+            # unchanged once the runner has been consumed.
+            turn_messages = [stream.get_final_message() for stream in runner]
             message = runner.until_done()
         except Exception as error:  # noqa: BLE001
             # A transport or configuration failure: no response was observed.
@@ -177,7 +208,7 @@ class AnthropicProvider:
         # refusal as though it were a report.
         stop_reason = getattr(message, "stop_reason", None)
         model_returned = getattr(message, "model", None)
-        reasoning = _summarized_thinking(message)
+        reasoning = _reasoning_across(turn_messages) or _summarized_thinking(message)
 
         if stop_reason in {"refusal", "content_filter"}:
             return ProviderResult(
@@ -187,22 +218,37 @@ class AnthropicProvider:
                 model_returned=model_returned,
                 stop_reason=stop_reason,
                 summarized_reasoning=reasoning,
+                turns=len(turn_messages),
             )
 
+        report = _parsed_report(message)
+
+        # **The runner stops silently at its ceiling.** It returns the last
+        # message, whose own `stop_reason` is "tool_use" and whose
+        # `parsed_output` is None - so without this the identical outcome was
+        # persisted as "tool_use" here and "max_iterations" on the OpenAI
+        # path, and Block G compares that column across providers.
+        if report is None and stop_reason == "tool_use":
+            stop_reason = ITERATION_CEILING
+
         return ProviderResult(
-            report=_parsed_report(message),
+            report=report,
             provider=NAME,
             model_requested=model,
             model_returned=model_returned,
             stop_reason=stop_reason,
             summarized_reasoning=reasoning,
+            # Counted from the turns actually iterated. section 5.2 asks for a
+            # cost proxy and this is the cheapest one; it was 0 on the
+            # configured default provider, where it is most needed.
+            turns=len(turn_messages),
         )
 
 
 def _parsed_report(message: Any) -> InvestigationReport | None:
     """The structured report, or None if the response carried none.
 
-    `output_config.format` makes `until_done()` return a `ParsedBetaMessage`,
+    `output_format` makes `until_done()` return a `ParsedBetaMessage`,
     so the validated model is on `parsed_output`. A response that reached
     `max_tokens` can still arrive with nothing parsed, and that is a failed
     investigation rather than something to reconstruct from the text - a
@@ -210,6 +256,23 @@ def _parsed_report(message: Any) -> InvestigationReport | None:
     """
     parsed = getattr(message, "parsed_output", None)
     return parsed if isinstance(parsed, InvestigationReport) else None
+
+
+def _reasoning_across(turn_messages: list[Any]) -> str | None:
+    """Every turn's summarized thinking, labelled by turn, or None.
+
+    One turn is returned unlabelled, so the common single-turn case reads as it
+    always did. With several, each block is prefixed with its turn number: the
+    order in which evidence was requested is what makes the reasoning
+    auditable, and a flat concatenation would lose where one turn ended.
+    """
+    per_turn = [_summarized_thinking(message) for message in turn_messages]
+    present = [(n, text) for n, text in enumerate(per_turn, start=1) if text]
+    if not present:
+        return None
+    if len(turn_messages) == 1:
+        return present[0][1]
+    return "\n\n".join(f"[turn {n}] {text}" for n, text in present)
 
 
 def _summarized_thinking(message: Any) -> str | None:

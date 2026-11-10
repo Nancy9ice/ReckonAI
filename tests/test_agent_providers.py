@@ -114,10 +114,35 @@ class _Message:
         self.content = content or []
 
 
-class _Runner:
+class _Stream:
+    """One turn's stream, as the streaming tool runner yields it."""
+
     def __init__(self, message: _Message) -> None:
         self._message = message
+
+    def get_final_message(self) -> _Message:
+        return self._message
+
+
+class _Runner:
+    """Iterable of per-turn streams, ending with `message`.
+
+    **Shaped like the real streaming runner**, which yields one
+    `BetaMessageStream` per turn and returns the last message from
+    `until_done()`. The earlier stub implemented `until_done()` alone, so it
+    could not distinguish a provider that reads every turn from one that reads
+    only the last - which is exactly the defect code review found (finding 5).
+    """
+
+    def __init__(
+        self, message: _Message, earlier: list[_Message] | None = None
+    ) -> None:
+        self._message = message
+        self._turns = [*(earlier or []), message]
         self.compacted = False
+
+    def __iter__(self) -> Any:
+        return iter(_Stream(turn) for turn in self._turns)
 
     def until_done(self) -> _Message:
         return self._message
@@ -131,7 +156,9 @@ class _Runner:
 class _StubAnthropic:
     """Captures the request and returns a prepared message."""
 
-    def __init__(self, message: _Message) -> None:
+    def __init__(
+        self, message: _Message, earlier: list[_Message] | None = None
+    ) -> None:
         self.request: dict[str, Any] = {}
         self._message = message
         outer = self
@@ -144,12 +171,14 @@ class _StubAnthropic:
         class _Beta:
             messages = _Messages()
 
-        self.runner = _Runner(message)
+        self.runner = _Runner(message, earlier)
         self.beta = _Beta()
 
 
-def _anthropic(message: _Message) -> tuple[AnthropicProvider, _StubAnthropic]:
-    stub = _StubAnthropic(message)
+def _anthropic(
+    message: _Message, earlier: list[_Message] | None = None
+) -> tuple[AnthropicProvider, _StubAnthropic]:
+    stub = _StubAnthropic(message, earlier)
     return AnthropicProvider("unused", client=stub), stub  # type: ignore[arg-type]
 
 
@@ -814,3 +843,197 @@ def test_the_strict_schema_carries_no_refs() -> None:
     verdict = strict_report_schema()["properties"]["verdict"]
     assert "insufficient_evidence" in verdict["enum"]
     assert "never a failure" in verdict["description"]
+
+
+# ---------------------------------------------------------------------------
+# Code review findings that changed provider behaviour
+# ---------------------------------------------------------------------------
+
+
+def test_reasoning_is_collected_from_every_turn_not_just_the_last(
+    specs: tuple[ToolSpec, ...],
+) -> None:
+    """Finding 5. The last turn is the one that merely formats the report.
+
+    `until_done()` returns only the final message, so on the default provider
+    `summarized_reasoning` recorded the least informative part of the run and
+    dropped every earlier turn - where the agent decided what evidence to
+    retrieve. The stub now yields per-turn streams like the real runner, which
+    is what makes this distinguishable at all.
+    """
+    first = _Message(
+        stop_reason="tool_use",
+        content=[_Block("thinking", thinking="Start with recompute.")],
+    )
+    second = _Message(
+        stop_reason="tool_use",
+        content=[_Block("thinking", thinking="Now the ledger.")],
+    )
+    final = _Message(
+        parsed=InvestigationReport.model_validate(REPORT),
+        content=[_Block("thinking", thinking="Format the report.")],
+    )
+    provider, _ = _anthropic(final, earlier=[first, second])
+
+    result = provider.investigate(
+        system="SYSTEM", user="USER", tools=specs, model="claude-haiku-5-5"
+    )
+
+    assert result.summarized_reasoning is not None
+    assert "[turn 1] Start with recompute." in result.summarized_reasoning
+    assert "[turn 2] Now the ledger." in result.summarized_reasoning
+    assert "[turn 3] Format the report." in result.summarized_reasoning
+
+
+def test_a_single_turn_reasoning_is_not_labelled(
+    specs: tuple[ToolSpec, ...],
+) -> None:
+    """The common case reads as it always did."""
+    provider, _ = _anthropic(
+        _Message(
+            parsed=InvestigationReport.model_validate(REPORT),
+            content=[_Block("thinking", thinking="One step.")],
+        )
+    )
+
+    result = provider.investigate(
+        system="SYSTEM", user="USER", tools=specs, model="claude-haiku-5-5"
+    )
+
+    assert result.summarized_reasoning == "One step."
+
+
+def test_turns_are_counted_on_the_anthropic_path(
+    specs: tuple[ToolSpec, ...],
+) -> None:
+    """Finding 10. The cost proxy was 0 on the configured default provider.
+
+    An earlier attempt at this read a `messages` attribute that the runner
+    does not expose and so silently returned 0 - a fix that looked like one.
+    Counting the turns actually iterated is the version that cannot lie.
+    """
+    tool_turn = _Message(stop_reason="tool_use")
+    provider, _ = _anthropic(
+        _Message(parsed=InvestigationReport.model_validate(REPORT)),
+        earlier=[tool_turn, tool_turn],
+    )
+
+    result = provider.investigate(
+        system="SYSTEM", user="USER", tools=specs, model="claude-haiku-5-5"
+    )
+
+    assert result.turns == 3
+
+
+def test_the_iteration_ceiling_is_spelled_the_same_on_both_providers(
+    specs: tuple[ToolSpec, ...],
+) -> None:
+    """Finding 9. One outcome, one spelling, for Block G's comparison.
+
+    The Anthropic runner stops silently at its ceiling and returns the last
+    message, whose own stop reason is "tool_use" with nothing parsed.
+    """
+    from reckonai.agent.providers.base import ITERATION_CEILING
+
+    provider, _ = _anthropic(_Message(stop_reason="tool_use", parsed=None))
+
+    result = provider.investigate(
+        system="SYSTEM", user="USER", tools=specs, model="claude-haiku-5-5"
+    )
+
+    assert result.report is None
+    assert result.stop_reason == ITERATION_CEILING
+
+
+def test_a_tool_use_stop_with_a_report_is_not_rewritten(
+    specs: tuple[ToolSpec, ...],
+) -> None:
+    """The normalisation applies only when nothing was parsed."""
+    provider, _ = _anthropic(
+        _Message(
+            stop_reason="tool_use",
+            parsed=InvestigationReport.model_validate(REPORT),
+        )
+    )
+
+    result = provider.investigate(
+        system="SYSTEM", user="USER", tools=specs, model="claude-haiku-5-5"
+    )
+
+    assert result.report is not None
+    assert result.stop_reason == "tool_use"
+
+
+def test_openai_ceiling_uses_the_shared_spelling(
+    specs: tuple[ToolSpec, ...],
+) -> None:
+    from reckonai.agent.providers.base import ITERATION_CEILING
+    from reckonai.agent.providers.openai import MAX_ITERATIONS
+
+    looping = [
+        _Completion(
+            _Choice(
+                _ChatMessage(tool_calls=[_Call("recompute", "{}", f"call_{n}")]),
+                "tool_calls",
+            )
+        )
+        for n in range(MAX_ITERATIONS)
+    ]
+    provider, _ = _openai(looping)
+
+    result = provider.investigate(
+        system="SYSTEM", user="USER", tools=specs, model="gpt-4.1"
+    )
+
+    assert result.report is None
+    assert result.stop_reason == ITERATION_CEILING
+    assert result.turns == MAX_ITERATIONS
+
+
+def test_an_openai_structured_output_refusal_is_read_as_a_refusal(
+    specs: tuple[ToolSpec, ...],
+) -> None:
+    """Finding 3. A refusal arrives on `message.refusal`, not as a finish reason.
+
+    With a strict JSON schema the response has `finish_reason == "stop"` and
+    `content` None, and the explanation sits in `refusal`. Without reading it
+    the row was stored as a generic failure with `refused` False and the text
+    discarded - indistinguishable from an unparseable response, when section
+    5.2 requires a refusal to be read as one before any content.
+    """
+    message = _ChatMessage(content=None)
+    message.refusal = "I can't help with that."  # type: ignore[attr-defined]
+    provider, _ = _openai([_Completion(_Choice(message, "stop"))])
+
+    result = provider.investigate(
+        system="SYSTEM", user="USER", tools=specs, model="gpt-4.1"
+    )
+
+    assert result.refused is True
+    assert result.report is None
+    assert result.stop_reason == "refusal"
+    assert result.summarized_reasoning == "I can't help with that."
+
+
+def test_a_weaker_variant_extending_the_requested_id_is_a_downgrade() -> None:
+    """Finding 4. A bare prefix test missed the case the flag exists for.
+
+    `gpt-4.1` served by `gpt-4.1-mini` satisfies `startswith("gpt-4.1")`, so the
+    earlier fix to the alias false positive created a silent false negative -
+    the kind section 5.2 calls worse than a failed investigation, in the one
+    column that exists to prove it cannot happen.
+    """
+    assert _result_for("gpt-4.1", "gpt-4.1-mini").downgraded is True
+    assert _result_for("gpt-5", "gpt-5-nano").downgraded is True
+    assert _result_for("gpt-5", "gpt-5-mini").downgraded is True
+
+
+def test_only_a_dated_snapshot_extends_an_id_without_downgrading() -> None:
+    """Both providers' pinned-version spellings, and nothing looser."""
+    assert _result_for("gpt-4.1", "gpt-4.1-2025-04-14").downgraded is False
+    assert (
+        _result_for("claude-haiku-4-5", "claude-haiku-4-5-20251001").downgraded
+        is False
+    )
+    # A suffix that is date-shaped but not a date alone is still a swap.
+    assert _result_for("gpt-4.1", "gpt-4.1-2025-04-14-mini").downgraded is True

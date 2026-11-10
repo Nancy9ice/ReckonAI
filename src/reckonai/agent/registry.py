@@ -15,9 +15,10 @@ providers receive is provably the same object.
 convenience.** specs/mission.md P1 forbids the LLM from doing arithmetic that
 reaches a financial conclusion, and the structural enforcement is that no tool
 accepts a number. Because every parameter is a record reference, the JSON
-schema is generated from a single shape here and
-`tests/test_agent_registry.py` asserts no property is ever anything but a
-string.
+schema is generated from a single shape here, and
+`test_agent_providers.py::test_every_tool_schema_is_strict_and_string_only`
+asserts no property is ever anything but a string - on both providers' wire
+format, which is where it matters.
 """
 
 from __future__ import annotations
@@ -27,7 +28,11 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from reckonai.agent.tools import InvestigationTools, Withheld
+from reckonai.agent.tools import (
+    InvestigationTools,
+    OrderNotAssembled,
+    Withheld,
+)
 
 
 @dataclass(frozen=True)
@@ -83,6 +88,25 @@ class ToolSpec:
         """
         try:
             result = self.call(**arguments)
+        except OrderNotAssembled as unmatched:
+            # Same marker shape as a withheld record, for the same reason:
+            # the model must not read "never assembled" as "none exist".
+            return json.dumps(
+                {
+                    "unavailable": True,
+                    "record_kind": "order_case",
+                    "note": (
+                        f"Order {unmatched.order_ref} has no assembled "
+                        "reconciliation case: it is either not yet matched to "
+                        "a PayPal payment, or not a known order reference. "
+                        "Either way provider-side records cannot be assembled "
+                        "for it. This does NOT mean none exist. Do not "
+                        "conclude that the order has no refunds, fees or "
+                        "releases. If your explanation depends on those "
+                        "records, return insufficient_evidence."
+                    ),
+                }
+            )
         except Withheld as withheld:
             return json.dumps(
                 {

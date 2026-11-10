@@ -146,14 +146,23 @@ def failed_investigation(
     reason: str,
     withheld: tuple[str, ...] = (),
     run_id: uuid.UUID | None = None,
+    model_returned: str | None = None,
+    stop_reason: str | None = None,
 ) -> Investigation:
-    """Record an investigation that never reached the model.
+    """Record an investigation that produced no usable report.
 
-    A `ProviderError` - a reset connection, an absent credential - is not a
-    refusal: no response was observed. So `model_returned` and `stop_reason`
-    both stay NULL rather than being filled with the request's own values,
-    which would assert something that did not happen (specs/mission.md P3,
-    applied to provenance rather than to money).
+    **Two different cases reach here, and the difference is in the arguments.**
+    A `ProviderError` - a reset connection, an absent credential - means no
+    response was observed, so `model_returned` and `stop_reason` stay NULL
+    rather than being filled with the request's own values, which would assert
+    something that did not happen (specs/mission.md P3, applied to provenance
+    rather than to money).
+
+    An `InconsistentReport` is the other case: a response *did* arrive and was
+    unusable. Its caller passes the model id and stop reason it actually
+    observed, because recording NULL there would understate what is known
+    about a call that was paid for. The default stays NULL so the first case
+    needs no argument.
 
     The reason is kept in `summarized_reasoning`, which is the only free-text
     column on the row. That is a slight stretch of the column's name and the
@@ -168,9 +177,11 @@ def failed_investigation(
         code=code,
         provider=provider,
         model_requested=model_requested,
-        model_returned=None,
+        model_returned=model_returned,
+        # Not derived here: a row with no usable report is not evidence of a
+        # model swap, and `store_investigation` owns that comparison.
         downgraded=False,
-        stop_reason=None,
+        stop_reason=stop_reason,
         verdict=FAILED,
         summarized_reasoning=reason,
         withheld=list(withheld),

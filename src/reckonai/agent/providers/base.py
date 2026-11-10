@@ -23,6 +23,7 @@ would be exactly the silent-downgrade failure section 5.2 forbids.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -88,16 +89,30 @@ class ProviderResult:
         OpenAI response would make the audit trail noise rather than
         evidence, which is the same failure as it never firing.
 
-        Prefix matching is the test, and it stays strict enough to be worth
-        having: `claude-haiku-5-5` served by `claude-sonnet-5-5` is a
-        downgrade, and so is `gpt-4.1` served by `gpt-4o`. Only a returned id
-        that *extends* the requested one is treated as the same model.
+        **A bare prefix test is not enough**, and code review caught the
+        false negative it introduced: `gpt-4.1` served by `gpt-4.1-mini`
+        satisfies `startswith("gpt-4.1")` and so would not have been flagged.
+        That is a genuine downgrade - the weaker variant extends the stronger
+        id - and it is the silent kind §5.2 calls worse than a failed
+        investigation, in the one column that exists to prove it cannot
+        happen.
+
+        So the extension has to look like a **dated snapshot** rather than
+        like anything at all: a hyphen followed by an ISO date, which is how
+        both providers name a pinned version (`gpt-4.1-2025-04-14`,
+        `claude-haiku-4-5-20251001`). Any other difference is a swap.
         """
         if self.model_returned is None:
             return False
         if self.model_returned == self.model_requested:
             return False
-        return not self.model_returned.startswith(self.model_requested)
+
+        suffix = self.model_returned.removeprefix(self.model_requested)
+        if suffix == self.model_returned:
+            # Not an extension of the requested id at all.
+            return True
+
+        return _DATE_SUFFIX.fullmatch(suffix) is None
 
     @property
     def refused(self) -> bool:
@@ -109,6 +124,24 @@ class ProviderResult:
         """
         return self.stop_reason in _REFUSAL_STOP_REASONS
 
+
+#: A dated-snapshot suffix, as both providers spell one: a hyphen then an ISO
+#: date, with or without separators (`-2025-04-14`, `-20251001`).
+#:
+#: Narrow on purpose. This is the only difference between a requested model id
+#: and a returned one that is **not** a downgrade, so anything this does not
+#: match is treated as a model swap and flagged.
+_DATE_SUFFIX = re.compile(r"-\d{4}-?\d{2}-?\d{2}")
+
+#: The stop reason recorded when a tool loop hits its iteration ceiling.
+#:
+#: **One spelling for both providers.** The OpenAI loop detects this itself;
+#: the Anthropic runner simply stops and returns a message whose own
+#: `stop_reason` is "tool_use" with nothing parsed, so that path normalises to
+#: this too. Block G compares this column across providers, and one outcome
+#: spelled two ways would read as a difference between the models rather than
+#: between the adapters. Found by code review.
+ITERATION_CEILING = "max_iterations"
 
 #: Stop reasons that mean the provider declined, across both providers.
 #:

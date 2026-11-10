@@ -1,6 +1,6 @@
 # Block E — validation
 
-> 1,789 tests pass (113 of them Block E's), `uv run mypy` clean over `engine`,
+> 1,816 tests pass (135 of them Block E's), `uv run mypy` clean over `engine`,
 > `recon`, `jobs` and now `agent`, `uv run ruff check` clean, migration clean up
 > and down with no autogenerate drift.
 >
@@ -161,6 +161,29 @@ result.** See §7 finding 3: the first run returned `reported` at confidence
 tool layer rather than in the model. The same model declines once the
 distinction is made available to it.
 
+#### Re-verified after the code review
+
+Both runs above were recorded **before** the review's fixes, and the first of
+them while finding 1's bypass was still open - `fetch_raw_payload` could have
+read a ledger entry's payload under `--withhold ledger`. The result very
+probably stood (the agent held no ledger references to feed it), but
+"probably" is not what this section should claim, and the live path had
+changed materially: a shared findings snapshot, tools that raise on an
+unassembled order, per-kind payload checks, and the OpenAI refusal read.
+
+So the pair was re-run against the fixed code, on `gpt-4.1`:
+
+| Run | verdict | causes | citations | downgraded |
+|---|---|---|---|---|
+| `--fault F1` | `reported` | 1 | refund, both ledger entries, capture - none unresolved or unstable | false |
+| `--fault F1 --withhold ledger` | `insufficient_evidence` | 0 | - | false |
+
+> "...the ledger records are marked as unavailable for this order, so there is
+> no evidence accessible to confirm whether such records are present or
+> absent."
+
+Both criteria hold on the corrected instrument. Two calls, as budgeted.
+
 #### The control case, and why this criterion is weaker than it reads
 
 **`recompute`'s `detail` states the conclusion**, and `prompt.user_turn` puts
@@ -254,7 +277,7 @@ so it cannot be forgotten.
 
 ## 4. Gates
 
-- `uv run pytest` — 1,789 pass. No test makes an API call.
+- `uv run pytest` — 1,816 pass. No test makes an API call.
 - `uv run mypy` — clean over `engine`, `recon`, `jobs` and `agent`.
 - `uv run ruff check` — clean.
 - `uv run alembic upgrade head` then `downgrade -1` then `upgrade head` — clean,
@@ -266,23 +289,58 @@ so it cannot be forgotten.
   the two tables recorded in `TABLES_WITHOUT_EVIDENCE` with their reasoning.
 - No emojis. No `float` column anywhere in the schema.
 - No test randomisation and no `-n auto`.
-- `/code-review medium` — **not yet complete.** `plan.md` Group 8 requires it
-  before the PR, and this line had dropped out of an earlier rewrite of this
-  section, so the gate was required by the plan and silently absent here. A
-  first attempt on 2026-11-10 stopped on a rate limit before it fetched the
-  diff and produced no findings; it has been resumed from its own transcript
-  rather than restarted. **Findings are worked rather than triaged** — Block
-  D's review returned nine, all nine real, seven of them invisible to the
-  seeded dataset, and Block E is a larger surface.
+- `/code-review medium` — **run, 14 findings, all worked.** See §4a. It had
+  dropped silently out of an earlier rewrite of this section although
+  `plan.md` Group 8 requires it, and a first attempt stopped on a rate limit
+  before fetching the diff; it was resumed from its own transcript.
 
-  **This block must not merge until that gate has run.** Four areas carry the
-  thinnest coverage and were flagged to the reviewer: the hand-written
-  append-only tool loop in `providers/openai.py` (parallel tool calls, a
-  malformed `tool_call_id`, the `max_iterations` exit); the per-instance
-  `_cases` snapshot in `tools.py`, which is deliberate but means a tool called
-  after a long model turn returns pre-turn data; the cross-table
-  "reported needs a cause" rule enforced in `store.py`; and the withheld
-  path, which §7 finding 3 shows is load-bearing for [[mission]] P5.
+## 4a. The code review
+
+**14 findings: 2 high, 5 medium, 7 low. Every one was real.** Block D's review
+returned nine of nine real; the base rate here is the same, and the same
+reason applies — most were invisible to the seeded dataset, and **two of the
+five medium findings were the absent-versus-unavailable defect of §7 finding 3
+arriving by a different route.**
+
+| # | Sev | Finding | Disposition |
+|---|---|---|---|
+| 1 | HIGH | `fetch_raw_payload` checked only `payloads`, so `--withhold ledger` still exposed a ledger entry's full JSONB — the deliberate evidence gap evidencing criterion 3 was not a gap | **Fixed.** Each source now carries its own withhold kind and *raises* rather than returning None. Tests across ledger, captures, refunds, disbursements |
+| 2 | HIGH | `InconsistentReport` escaped uncaught, raised before the row was added: a paid model call left **no** `investigation` row, contradicting "one row per attempt" | **Fixed.** Recorded as `failed` with the observed `model_returned` and `stop_reason` — a response *was* seen here, unlike a `ProviderError` |
+| 3 | MED | OpenAI structured-output refusal arrives on `message.refusal` with `finish_reason == "stop"`; it was stored as a generic failure with the text discarded | **Fixed.** Read before content. Stub-tested only: the `.refusal` field is real per the SDK but no live call has produced one |
+| 4 | MED | The downgrade prefix test missed `gpt-4.1` served by `gpt-4.1-mini` — a silent false negative in the one column built to prove none occurs | **Fixed.** The extension must now be a dated snapshot (`-YYYY-MM-DD` / `-YYYYMMDD`); anything else is a swap |
+| 5 | MED | `until_done()` returns only the last turn, so `summarized_reasoning` recorded the turn that merely formats the report | **Fixed** by iterating the runner and collecting every turn, labelled `[turn n]` |
+| 6 | MED | `_cases` was a snapshot but `recompute` re-ran `run()`: a commit mid-investigation could make a verdict cite a record the retrieval tools could not show | **Fixed.** One shared snapshot. **Mutation-checked**: the test fails on the old behaviour |
+| 7 | MED | Four tools returned `[]` for an order with no assembled case, reading as "no refunds, no fees, no releases" | **Fixed.** Raises `OrderNotAssembled`, reaching the model through the same `unavailable` marker. The seed has no unmatched order (all 18 match), which is why nothing but review could see it |
+| 8 | LOW | "Worst first" compared bare `Decimal`s across currencies (500 JPY > 100 USD) | **Fixed.** Ranked only within one currency; otherwise engine emission order, with a logged warning |
+| 9 | LOW | The two providers stored different `stop_reason`s for the iteration ceiling | **Fixed.** One shared `ITERATION_CEILING` |
+| 10 | LOW | `turns` was never set on the Anthropic path | **Fixed** by counting iterated turns |
+| 11 | LOW | `--fault F9` was a traceback | **Fixed.** Named error, exit 2, lists the known faults |
+| 12 | LOW | Cause read-back had no `ORDER BY` | **Fixed** |
+| 13 | LOW | A docstring cited `tests/test_agent_registry.py`, which does not exist | **Fixed.** Points at the real test |
+| 14 | LOW | `output_format=` is marked deprecated by the SDK's own error text | **Not changed — see debt 6.** Verified, comment corrected |
+
+**Two things worth saying about how these were worked.**
+
+*My first fix for finding 10 was a fake.* It read a `messages` attribute that
+the runner does not expose and so silently returned 0 — a change that looked
+like a fix and moved nothing. I found that by checking what the runner
+actually exposes before committing it, reverted it, and replaced it with
+iteration, whose safety I checked against the SDK source (the runner binds
+`stream.get_final_message` itself and `until_done()` is documented idempotent
+over a consumed runner). The pattern to distrust is a defensive helper that
+returns a default when its assumption fails.
+
+*The stub could not see finding 5.* The Anthropic stub implemented only
+`until_done()`, so it could not distinguish a provider that reads every turn
+from one that reads the last. It now yields per-turn streams like the real
+runner. A stub shaped more simply than the thing it stands for hides exactly
+the class of defect review finds.
+
+**Not live-verified.** Findings 3, 5 and 10 change behaviour on a provider path
+that has had no live call (`claude-haiku-5-5`, for want of credit; the OpenAI
+refusal field for want of a refusal to provoke). They are tested against stubs
+shaped like the real contracts and checked against SDK source, which is
+evidence but not the same thing.
 
 ## 5. What this block does not prove
 
@@ -564,3 +622,17 @@ than discovered after it is spent.
    it is the fixture generator, deliberately independent evidence against the
    engine, and `seed.verify()` recomputes every stated figure, which is a
    stronger check than types.
+6. **`output_format=` is deprecated and is still the only route to a parsed
+   Anthropic report.** The SDK's own error text says to use
+   `output_config.format`, but `parsed_output` is produced solely by
+   `parse_text(content.text, output_format)`, and `output_config["format"]`
+   accepts only a raw JSON-schema dict. It works today. The migration is to
+   send a hand-built schema and `model_validate_json` the text, as the OpenAI
+   adapter does — which would also make both providers parse identically,
+   a real gain for the seam. **It was not done blind**: Anthropic's structured
+   outputs restrict schema features (this report's `confidence` carries
+   `minimum`/`maximum`, which the SDK's private transform rewrites), and the
+   default provider has had no live call. Whoever tops up the Anthropic
+   account should attempt it against the real API, with
+   `test_the_request_carries_every_section_5_1_value` as the regression
+   anchor.

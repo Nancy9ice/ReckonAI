@@ -63,8 +63,8 @@ from reckonai.models import (
     SellerLedgerEntry,
 )
 from reckonai.money import Money
-from reckonai.recon import OrderCase
-from reckonai.reconcile import exceptions, load_order_cases, run
+from reckonai.recon import Finding, OrderCase, exceptions_only
+from reckonai.reconcile import load_order_cases, run
 
 #: Any tenant-scoped record carrying an external reference.
 _RecordT = TypeVar("_RecordT", Capture, Refund, Disbursement, PlatformFee)
@@ -116,6 +116,28 @@ class Withheld(Exception):
     def __init__(self, kind: str) -> None:
         super().__init__(kind)
         self.kind = kind
+
+
+class OrderNotAssembled(Exception):
+    """The order has no assembled case, so these records cannot be answered for.
+
+    `reckonai.reconcile.load_order_cases` builds a case only for orders it
+    **matched** to a PayPal payment. For a marketplace-only order there is no
+    case, and four tools returned `[]` for that - which says "no refunds, no
+    fees, no releases" when the truth is that the order was never assembled,
+    and refund rows for it may well exist.
+
+    The agent can reach those references: `run()` emits an `awaiting_evidence`
+    finding per marketplace-only order carrying the order ref, and `recompute`
+    is never withheld. So this is the same absent-versus-unavailable
+    conflation as a withheld record, arriving by a route `Withheld` does not
+    cover - and it reaches the model through the same marker. Found by code
+    review.
+    """
+
+    def __init__(self, order_ref: str) -> None:
+        super().__init__(order_ref)
+        self.order_ref = order_ref
 
 
 class UnknownWithholdKind(ValueError):
@@ -326,9 +348,7 @@ class InvestigationTools:
         """
         self._refuse_if_withheld("refunds")
 
-        case = self._case_for(order_ref)
-        if case is None:
-            return []
+        case = self._require_case(order_ref)
 
         # The source split is the case's claim, not a column: both sources
         # write rows to `refund` and are told apart by their payload
@@ -366,8 +386,8 @@ class InvestigationTools:
         """
         self._refuse_if_withheld("disputes")
 
-        case = self._case_for(order_ref)
-        capture_ids = {c.id for c in case.captures} if case else set()
+        case = self._require_case(order_ref)
+        capture_ids = {c.id for c in case.captures}
         if not capture_ids:
             return []
 
@@ -404,9 +424,7 @@ class InvestigationTools:
         """
         self._refuse_if_withheld("fees")
 
-        case = self._case_for(order_ref)
-        if case is None:
-            return []
+        case = self._require_case(order_ref)
 
         captures_by_id = {c.id: c.external_id for c in case.captures}
         refunds_by_id = {
@@ -504,9 +522,7 @@ class InvestigationTools:
         """
         self._refuse_if_withheld("disbursements")
 
-        case = self._case_for(order_ref)
-        if case is None:
-            return []
+        case = self._require_case(order_ref)
 
         return [
             {
@@ -599,8 +615,18 @@ class InvestigationTools:
         **Never withheld.** It returns verdicts rather than evidence, and
         suppressing it would test whether the agent can work without the
         engine, which is not what the evidence gap is for.
+
+        **Cached on the same snapshot as the retrieval tools.** It used to call
+        `run()` fresh on every invocation while `_cases` was a snapshot from
+        first use, so under READ COMMITTED a commit from the connector or a
+        scheduled run mid-investigation could make `recompute` report a
+        finding citing a refund that `fetch_refunds` did not list. To the
+        agent that reads as "the refund PayPal performed does not exist" -
+        the same confabulation `Withheld` exists to prevent, arriving by a
+        different route. One investigation now sees one set of records, which
+        is also the more defensible answer for an audit. Found by code review.
         """
-        return [finding.as_dict() for finding in run(self._session, self._tenant_id)]
+        return [finding.as_dict() for finding in self._findings]
 
     def recompute_exceptions(self) -> list[dict[str, Any]]:
         """Only the findings that are genuine discrepancies.
@@ -611,10 +637,21 @@ class InvestigationTools:
         """
         return [
             finding.as_dict()
-            for finding in exceptions(self._session, self._tenant_id)
+            for finding in exceptions_only(self._findings)
         ]
 
     # ---- Internals --------------------------------------------------------
+
+    @cached_property
+    def _findings(self) -> tuple[Finding, ...]:
+        """Every finding for this tenant, computed once per investigation.
+
+        The same snapshot discipline as `_cases`, and for a sharper reason:
+        the two must agree. A verdict that cites a record the retrieval tools
+        cannot show is indistinguishable, from the model's side, from a
+        missing record.
+        """
+        return run(self._session, self._tenant_id)
 
     @cached_property
     def _cases(self) -> dict[str, OrderCase]:
@@ -641,6 +678,18 @@ class InvestigationTools:
 
     def _case_for(self, order_ref: str) -> OrderCase | None:
         return self._cases.get(order_ref)
+
+    def _require_case(self, order_ref: str) -> OrderCase:
+        """The assembled case, or `OrderNotAssembled`.
+
+        Raised rather than answered with an empty list, so "this order was
+        never matched to a PayPal payment" does not reach the model as "this
+        order has no refunds".
+        """
+        case = self._cases.get(order_ref)
+        if case is None:
+            raise OrderNotAssembled(order_ref)
+        return case
 
     def _rows_by_external(
         self,
@@ -697,18 +746,37 @@ class InvestigationTools:
         produces an honest "nothing here" instead of an error the model would
         try to work around.
         """
+        # **Each source carries the withhold kind that governs it.** Checking
+        # only "payloads" left every record-kind withhold bypassable: with
+        # `--withhold ledger`, a ledger entry's full JSONB - amount,
+        # transaction type, order - was still retrievable through this tool,
+        # and the refs are reachable because `recompute` is never withheld and
+        # `duplicate_ledger_entry` cites ledger `external_ref`s. The
+        # deliberate evidence gap that evidences exit criterion 3 was
+        # therefore not a gap. Found by code review.
         sources: tuple[
-            tuple[InstrumentedAttribute[uuid.UUID], InstrumentedAttribute[str]], ...
+            tuple[
+                str, InstrumentedAttribute[uuid.UUID], InstrumentedAttribute[str]
+            ],
+            ...,
         ] = (
-            (Capture.raw_payload_id, Capture.external_id),
-            (Refund.raw_payload_id, Refund.external_id),
-            (Payment.raw_payload_id, Payment.external_id),
-            (Disbursement.raw_payload_id, Disbursement.external_id),
-            (Dispute.raw_payload_id, Dispute.external_id),
-            (SellerLedgerEntry.raw_payload_id, SellerLedgerEntry.external_ref),
+            ("captures", Capture.raw_payload_id, Capture.external_id),
+            ("refunds", Refund.raw_payload_id, Refund.external_id),
+            ("payments", Payment.raw_payload_id, Payment.external_id),
+            (
+                "disbursements",
+                Disbursement.raw_payload_id,
+                Disbursement.external_id,
+            ),
+            ("disputes", Dispute.raw_payload_id, Dispute.external_id),
+            (
+                "ledger",
+                SellerLedgerEntry.raw_payload_id,
+                SellerLedgerEntry.external_ref,
+            ),
         )
 
-        for payload_column, reference_column in sources:
+        for kind, payload_column, reference_column in sources:
             found = self._session.scalar(
                 select(payload_column).where(
                     reference_column.class_.tenant_id == self._tenant_id,
@@ -716,6 +784,12 @@ class InvestigationTools:
                 )
             )
             if found is not None:
+                # **Raise rather than skip.** Skipping a withheld source would
+                # make this return None, which the model reads as "no such
+                # record" - the absent-versus-unavailable conflation that
+                # caused the confabulation in validation.md section 7 finding
+                # 3. The marker says the record exists and is out of reach.
+                self._refuse_if_withheld(kind)
                 return found
 
         return None

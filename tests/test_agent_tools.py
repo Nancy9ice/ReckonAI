@@ -20,7 +20,7 @@ import inspect
 import uuid
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from reckonai import demo_data, reconcile
@@ -545,3 +545,155 @@ def test_a_raw_payload_is_fetched_only_by_reference(
     assert payload["body"]
 
     assert tools.fetch_raw_payload("NOT-A-RECORD") is None
+
+
+# ---------------------------------------------------------------------------
+# The withhold set must not be bypassable (code review, finding 1)
+# ---------------------------------------------------------------------------
+
+
+def test_a_withheld_records_payload_is_not_reachable_through_the_raw_tool(
+    session: Session, seeded: uuid.UUID
+) -> None:
+    """`--withhold ledger` must not leave the ledger readable another way.
+
+    `fetch_raw_payload` checked only the `payloads` kind, while
+    `_payload_id_for` searches captures, refunds, payments, disbursements,
+    disputes **and ledger entries** by reference. So the run that evidences
+    exit criterion 3 could still retrieve a ledger entry's full JSONB -
+    amount, transaction type, order - and the deliberate evidence gap was not
+    a gap at all.
+
+    The refs are reachable without the ledger tool: `recompute` is never
+    withheld and `duplicate_ledger_entry` cites ledger `external_ref`s.
+    """
+    from reckonai.models import SellerLedgerEntry
+
+    entry_ref = session.scalar(
+        select(SellerLedgerEntry.external_ref).where(
+            SellerLedgerEntry.tenant_id == seeded
+        )
+    )
+    assert entry_ref is not None
+
+    # Reachable with nothing withheld.
+    assert InvestigationTools(session, seeded).fetch_raw_payload(entry_ref)
+
+    # And out of reach when the ledger is withheld.
+    withheld = InvestigationTools(session, seeded, withhold={"ledger"})
+    with pytest.raises(Withheld) as raised:
+        withheld.fetch_raw_payload(entry_ref)
+
+    # **Raises rather than returning None.** None reads as "no such record",
+    # which is the absent-versus-unavailable conflation that produced the
+    # confabulation in validation.md section 7 finding 3.
+    assert raised.value.kind == "ledger"
+
+
+@pytest.mark.parametrize(
+    ("kind", "model_name", "column_name"),
+    [
+        ("captures", "Capture", "external_id"),
+        ("refunds", "Refund", "external_id"),
+        ("disbursements", "Disbursement", "external_id"),
+    ],
+)
+def test_every_record_kind_governs_its_own_payload(
+    session: Session, seeded: uuid.UUID, kind: str, model_name: str, column_name: str
+) -> None:
+    """The bypass was general, not specific to the ledger.
+
+    Parametrised so a future source added to `_payload_id_for` without a
+    withhold kind is caught by extending a list rather than by someone
+    remembering the whole mechanism.
+    """
+    import reckonai.models as models
+
+    model = getattr(models, model_name)
+    reference = session.scalar(
+        select(getattr(model, column_name)).where(model.tenant_id == seeded)
+    )
+    assert reference is not None, f"no {model_name} seeded to check"
+
+    with pytest.raises(Withheld):
+        InvestigationTools(session, seeded, withhold={kind}).fetch_raw_payload(
+            reference
+        )
+
+
+# ---------------------------------------------------------------------------
+# Absent versus unavailable, by routes Withheld does not cover (code review)
+# ---------------------------------------------------------------------------
+
+_CASE_DEPENDENT_TOOLS = (
+    "fetch_refunds",
+    "fetch_disputes",
+    "fetch_platform_fees",
+    "fetch_disbursements",
+)
+
+
+@pytest.mark.parametrize("tool", _CASE_DEPENDENT_TOOLS)
+def test_an_order_with_no_case_is_unavailable_not_empty(
+    tools: InvestigationTools, tool: str
+) -> None:
+    """Finding 7. `[]` would say "no refunds, no fees, no releases".
+
+    `load_order_cases` builds a case only for orders it matched to a PayPal
+    payment. For anything else these four tools returned `[]`, which reads as
+    a fact about the records when it is a fact about the assembly - and refund
+    rows for the order may well exist. It is the same absent-versus-unavailable
+    conflation as a withheld record, by a route `Withheld` does not cover.
+
+    The seeded dataset has no unmatched order (all 18 match), which is why
+    nothing but review could find it.
+    """
+    from reckonai.agent.tools import OrderNotAssembled
+
+    with pytest.raises(OrderNotAssembled) as raised:
+        getattr(tools, tool)("ORD-NEVER-MATCHED")
+
+    assert raised.value.order_ref == "ORD-NEVER-MATCHED"
+
+
+@pytest.mark.parametrize("tool", _CASE_DEPENDENT_TOOLS)
+def test_that_reaches_the_model_as_an_unavailable_marker(
+    tools: InvestigationTools, tool: str
+) -> None:
+    """The model must receive the marker, not an exception and not `[]`."""
+    import json
+
+    from reckonai.agent.registry import tool_specs
+
+    spec = next(s for s in tool_specs(tools) if s.name == tool)
+    payload = json.loads(spec.run_as_json(order_ref="ORD-NEVER-MATCHED"))
+
+    assert payload["unavailable"] is True
+    assert payload["record_kind"] == "order_case"
+    assert "does NOT mean none exist" in payload["note"]
+
+
+def test_recompute_and_the_retrieval_tools_share_one_snapshot(
+    session: Session, seeded: uuid.UUID
+) -> None:
+    """Finding 6. A verdict must not cite a record the tools cannot show.
+
+    `recompute` used to call `run()` fresh each time while `_cases` was cached
+    from first use, so a commit from the connector or a scheduled run
+    mid-investigation could make `recompute` report a finding citing a refund
+    that `fetch_refunds` did not list. To the agent that reads as "the refund
+    PayPal performed does not exist" - the confabulation `Withheld` exists to
+    prevent, arriving another way.
+    """
+    tools = InvestigationTools(session, seeded)
+
+    first = tools.recompute()
+    # Anything that changed between calls must not change what a second call
+    # returns. Dropping the underlying rows would make a fresh `run()` differ.
+    session.execute(text("DELETE FROM seller_ledger_entry"))
+    second = tools.recompute()
+
+    assert first == second, "recompute re-read the database mid-investigation"
+    assert tools.recompute_exceptions() == [
+        finding for finding in second if finding["is_exception"]
+    ]

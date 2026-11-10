@@ -38,7 +38,11 @@ from typing import Any, cast
 
 from openai import OpenAI
 
-from reckonai.agent.providers.base import ProviderError, ProviderResult
+from reckonai.agent.providers.base import (
+    ITERATION_CEILING,
+    ProviderError,
+    ProviderResult,
+)
 from reckonai.agent.registry import ToolSpec
 from reckonai.agent.report import InvestigationReport
 
@@ -212,6 +216,25 @@ class OpenAIProvider:
                     turns=turn,
                 )
 
+            # **A structured-output refusal arrives on `message.refusal`**,
+            # not as a finish reason: `finish_reason` is "stop", `content` is
+            # None, and the explanation is in that field. Read before any
+            # content, which is what §5.2 requires - without this the row was
+            # stored as a generic failure with `refused` False and the
+            # refusal text discarded, indistinguishable from an unparseable
+            # response. Found by code review.
+            refusal = getattr(choice.message, "refusal", None)
+            if refusal:
+                return ProviderResult(
+                    report=None,
+                    provider=NAME,
+                    model_requested=model,
+                    model_returned=model_returned,
+                    stop_reason="refusal",
+                    summarized_reasoning=str(refusal),
+                    turns=turn,
+                )
+
             calls = choice.message.tool_calls or []
             if not calls:
                 return ProviderResult(
@@ -244,7 +267,11 @@ class OpenAIProvider:
             provider=NAME,
             model_requested=model,
             model_returned=model_returned,
-            stop_reason="max_iterations",
+            # The same vocabulary the Anthropic path reaches for the same
+            # outcome - see `providers/base.py` ITERATION_CEILING. Block G
+            # compares this column across providers, so the two must not
+            # spell one outcome two ways.
+            stop_reason=ITERATION_CEILING,
             summarized_reasoning=None,
             turns=MAX_ITERATIONS,
         )

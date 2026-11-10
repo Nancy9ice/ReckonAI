@@ -31,7 +31,11 @@ from reckonai.agent.prompt import SYSTEM_PROMPT, user_turn
 from reckonai.agent.providers import Provider, ProviderError, provider_for
 from reckonai.agent.registry import tool_specs
 from reckonai.agent.report import InvestigationReport
-from reckonai.agent.store import failed_investigation, store_investigation
+from reckonai.agent.store import (
+    InconsistentReport,
+    failed_investigation,
+    store_investigation,
+)
 from reckonai.agent.tools import WITHHOLDABLE, InvestigationTools
 from reckonai.config import ConfigurationError, Settings, get_settings
 from reckonai.db import create_app_engine
@@ -42,6 +46,10 @@ from reckonai.reconcile import run
 from reckonai.sim import data, manifest
 
 logger = logging.getLogger("reckonai.agent.investigate")
+
+
+class UnknownFault(LookupError):
+    """`--fault` named something the sim manifest does not carry."""
 
 
 class NoSuchException(LookupError):
@@ -121,14 +129,45 @@ def investigate(
             unstable=(),
         )
 
-    stored = store_investigation(
-        session,
-        tenant_id,
-        order_ref=order_ref,
-        code=str(finding.code),
-        result=result,
-        withheld=tools.withheld,
-    )
+    try:
+        stored = store_investigation(
+            session,
+            tenant_id,
+            order_ref=order_ref,
+            code=str(finding.code),
+            result=result,
+            withheld=tools.withheld,
+        )
+    except InconsistentReport as error:
+        # **The attempt still gets a row.** `store_investigation` raises this
+        # before it adds anything, so an uncaught `InconsistentReport` left a
+        # paid model call with no `investigation` row at all - contradicting
+        # `models/investigation.py`'s "one row per attempt, whatever the
+        # outcome" and emptying the audit trail in exactly the case where
+        # something went wrong. Both providers can produce it: nothing in
+        # either schema puts `minItems` on `causes`, so a `reported` verdict
+        # with an empty list is schema-valid. Found by code review.
+        return Outcome(
+            investigation=failed_investigation(
+                session,
+                tenant_id,
+                order_ref=order_ref,
+                code=str(finding.code),
+                provider=result.provider,
+                model_requested=result.model_requested,
+                reason=f"the report was inconsistent and was not stored: {error}",
+                withheld=tools.withheld,
+                # A response *was* observed here, unlike the ProviderError
+                # branch above. Recording what served it is the difference
+                # between "we called and got something unusable" and "we never
+                # called".
+                model_returned=result.model_returned,
+                stop_reason=result.stop_reason,
+            ),
+            report=None,
+            unresolved=(),
+            unstable=(),
+        )
 
     # Read back from the persisted rows rather than from the report, so what
     # is reported is what was actually written.
@@ -138,11 +177,16 @@ def investigate(
     resolver = CitationResolver(session, tenant_id)
     cited: list[str] = []
     unresolved: list[str] = []
+    # Ordered by rank: everything else in this block is deterministic for
+    # Block G's comparison, and without this the reported citations came back
+    # in whatever order Postgres chose. Found by code review.
     for cause in session.scalars(
-        select(InvestigationCause).where(
+        select(InvestigationCause)
+        .where(
             InvestigationCause.tenant_id == tenant_id,
             InvestigationCause.investigation_id == stored.id,
         )
+        .order_by(InvestigationCause.rank)
     ):
         cited.extend(cause.cited_refs)
         unresolved.extend(cause.unresolved_refs)
@@ -182,8 +226,30 @@ def _exception_for(
             + " - nothing to investigate"
         )
 
-    # Worst first, so an order carrying two exceptions is investigated for the
-    # one that matters most rather than for whichever the engine emitted first.
+    if len(candidates) == 1:
+        return candidates[0]
+
+    # **Worst first, but only among comparable amounts.** Keying on the bare
+    # `Decimal` compared across currencies, so a 500 JPY impact outranked a
+    # 100 USD one - which specs/mission.md P2 forbids: two amounts are not
+    # comparable merely because their numbers look alike. `mixed_currency_order`
+    # exists precisely because one order can carry both.
+    #
+    # With one currency, rank by impact. With more than one, there is no
+    # defensible ordering, so take the engine's own emission order and say so
+    # rather than inventing a comparison. Found by code review.
+    currencies = {finding.impact.currency for finding in candidates}
+    if len(currencies) > 1:
+        logger.warning(
+            event(
+                "reckonai.agent.investigate.incomparable_impacts",
+                order_ref=order_ref,
+                currencies=sorted(currencies),
+                chose=str(candidates[0].code),
+            )
+        )
+        return candidates[0]
+
     return max(candidates, key=lambda finding: finding.impact.amount)
 
 
@@ -193,7 +259,16 @@ def _order_for_fault(fault_id: str) -> str:
     `--fault F1` resolves through the manifest, which is Block G's ground
     truth, so the demo and the eval name the same thing.
     """
-    return manifest.fault(fault_id).order_ref
+    try:
+        return manifest.fault(fault_id).order_ref
+    except KeyError:
+        # A named error, like every other bad input in `main()`. The module
+        # docstring states that as the design, and `manifest.fault` raises a
+        # bare `KeyError`. Found by code review.
+        known = ", ".join(entry.id for entry in manifest.FAULTS)
+        raise UnknownFault(
+            f"no fault {fault_id!r} in the sim manifest. Known faults: {known}"
+        ) from None
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -242,7 +317,11 @@ def main(argv: list[str] | None = None) -> int:
         logger.error("%s", error)
         return 2
 
-    order_ref = args.order or _order_for_fault(args.fault)
+    try:
+        order_ref = args.order or _order_for_fault(args.fault)
+    except UnknownFault as error:
+        logger.error("%s", error)
+        return 2
 
     engine = create_app_engine(
         settings.sqlalchemy_url, pool_size=1, max_overflow=1

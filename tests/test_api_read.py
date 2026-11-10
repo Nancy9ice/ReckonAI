@@ -176,3 +176,100 @@ def test_another_tenants_exception_is_invisible(
     app.dependency_overrides[get_tenant_id] = lambda: other_tenant.id
     assert client.get("/api/exceptions").json() == []
     assert client.get(f"/api/exceptions/{seeded_exception.id}").status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Decisions: P6, symmetry, append-only
+# ---------------------------------------------------------------------------
+
+
+def _post(client: TestClient, exc: ReconciliationException, **body: object):  # type: ignore[no-untyped-def]
+    payload = {"outcome": "approved", "approver": "Nancy", **body}
+    return client.post(f"/api/exceptions/{exc.id}/decision", json=payload)
+
+
+def test_approving_records_the_decision_and_moves_no_money(
+    client: TestClient, session: Session, seeded_exception: ReconciliationException
+) -> None:
+    from sqlalchemy import func, select
+
+    from reckonai.models import Disbursement, Refund, SellerLedgerEntry
+
+    def counts() -> tuple[int, ...]:
+        return tuple(
+            session.scalar(select(func.count()).select_from(m)) or 0
+            for m in (SellerLedgerEntry, Refund, Disbursement)
+        )
+
+    before = counts()
+    response = _post(client, seeded_exception)
+    assert response.status_code == 201
+    assert response.json()["decision"]["outcome"] == "approved"
+    assert response.json()["decision"]["approver"] == "Nancy"
+    assert counts() == before
+
+
+def test_rejecting_has_equal_weight_and_the_same_shape(
+    client: TestClient, seeded_exception: ReconciliationException
+) -> None:
+    approved = _post(client, seeded_exception).json()["decision"]
+    rejected = _post(client, seeded_exception, outcome="rejected").json()["decision"]
+    assert set(approved) == set(rejected)
+    assert rejected["outcome"] == "rejected"
+
+
+def test_deciding_again_appends_and_keeps_the_first(
+    client: TestClient, session: Session, seeded_exception: ReconciliationException
+) -> None:
+    _post(client, seeded_exception, outcome="rejected")
+    _post(client, seeded_exception, outcome="approved")
+    assert session.query(ExceptionDecision).count() == 2
+
+
+def test_the_decision_names_the_investigation_the_human_saw(
+    client: TestClient, session: Session, seeded_exception: ReconciliationException
+) -> None:
+    inv = _investigation(session, seeded_exception, "reported", "0.800")
+    decision = _post(client, seeded_exception).json()["decision"]
+    assert decision["investigation_id"] == str(inv.id)
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"approver": ""},
+        {"approver": "   "},
+        {"outcome": "maybe"},
+        {"surprise": "field"},
+    ],
+)
+def test_a_malformed_decision_is_refused(
+    client: TestClient, seeded_exception: ReconciliationException, body: dict[str, str]
+) -> None:
+    assert _post(client, seeded_exception, **body).status_code == 422
+
+
+def test_a_decision_on_another_tenants_exception_is_404(
+    client: TestClient, other_tenant: Tenant, seeded_exception: ReconciliationException
+) -> None:
+    app.dependency_overrides[get_tenant_id] = lambda: other_tenant.id
+    assert _post(client, seeded_exception).status_code == 404
+
+
+def test_the_api_package_cannot_name_a_money_moving_table() -> None:
+    """P6 as a property of the code: the API never imports a table it could
+    use to move money."""
+    from pathlib import Path
+
+    forbidden = (
+        "SellerLedgerEntry",
+        "Refund",
+        "Disbursement",
+        "Capture",
+        "FxConversion",
+    )
+    root = Path(__file__).resolve().parent.parent / "src" / "reckonai" / "api"
+    for path in root.glob("*.py"):
+        text = path.read_text()
+        for name in forbidden:
+            assert name not in text, f"{path.name} names {name}"

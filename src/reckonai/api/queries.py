@@ -332,3 +332,42 @@ def exception_detail(
         investigation_detail=detail,
         decisions=[_decision_out(d) for d in history],
     )
+
+
+def record_decision(
+    session: Session,
+    tenant_id: uuid.UUID,
+    exception_id: uuid.UUID,
+    body: schemas.DecisionIn,
+) -> ExceptionDecision | None:
+    """Append one decision, or `None` if the exception is not this tenant's.
+
+    **This is the whole of what approving does.** It inserts one row and
+    touches no ledger, refund or disbursement (`mission.md` P6): a decision is
+    a human's recorded intent, and acting on it is outside the product.
+    """
+    row = session.scalar(
+        select(ReconciliationException).where(
+            ReconciliationException.tenant_id == tenant_id,
+            ReconciliationException.id == exception_id,
+        )
+    )
+    if row is None:
+        return None
+    seen = latest_investigations(session, tenant_id).get(
+        (row.order_external_ref, row.code)
+    )
+    decision = ExceptionDecision(
+        tenant_id=tenant_id,
+        exception_id=exception_id,
+        outcome=body.outcome,
+        approver=body.approver,
+        note=body.note or None,
+        investigation_id=None if seen is None else seen.id,
+        # Set here rather than by the server default: now() is constant inside
+        # a transaction, and "newest decision wins" needs distinct instants.
+        decided_at=datetime.now(UTC),
+    )
+    session.add(decision)
+    session.flush()
+    return decision

@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Annotated, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, StringConstraints
 
 from reckonai.schemas.money import MoneyOut
 
@@ -100,3 +101,19 @@ class InvestigationDetail(InvestigationSummary):
 class ExceptionDetail(ExceptionOut):
     investigation_detail: InvestigationDetail | None
     decisions: list[DecisionOut]
+
+
+class DecisionIn(BaseModel):
+    """A human's decision. Approving and rejecting are the same shape."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    outcome: Literal["approved", "rejected"]
+    #: Free text, unauthenticated: it records what was typed, not a verified
+    #: identity (requirements D5).
+    approver: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)
+    ]
+    note: (
+        Annotated[str, StringConstraints(strip_whitespace=True, max_length=2000)] | None
+    ) = None

@@ -33,6 +33,23 @@ B (Phase 10), Block C (Phase 11), Block D (Phase 8 + R9 + the exception table)
 and Block E (Phase 12, the investigation agent, kept entire) are complete.
 Block F is next** — Phases 13 and 14, and it owns the one remaining deploy.
 
+**Block F has no spec yet.** Every prior block wrote `requirements.md`,
+`plan.md` and `validation.md` into a dated `specs/` directory before
+implementing, and that is the first task rather than an optional preamble.
+**Read `specs/2026-11-10-investigation-agent/validation.md` §7b first** — five
+things that must be settled before the single deploy is spent, including that
+`render.yaml` declares **no agent credential at all**, so a deploy as it stands
+yields an agent that fails on every investigation.
+
+**Two things Block F builds that may not be obvious.** There is **no read API**
+— the deployed service exposes only `/`, `/health`, `/health/ready` and
+`/sim/marketplace/*`, the last being the simulated marketplace feeding data
+*in* rather than this product's own API — and there is **no frontend at all**,
+no `package.json` anywhere in the repo. Everything built so far is reachable
+only from Python and the CLI, so Block F builds the API and the UI, not a UI
+over an existing API. Budget accordingly: the replan already admits ~27.5 hours
+of work against ~20, and this is where that gap lands.
+
 **Read `specs/2026-11-10-investigation-agent/validation.md` before touching
 `reckonai/agent/`.** §6 lists five corrections this block made to earlier
 documents — two of them to rules stated in `CLAUDE.md` itself, corrected below

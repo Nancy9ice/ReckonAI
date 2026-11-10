@@ -460,6 +460,13 @@ replan was written.
 **Blocks D and E are complete. Block F (queue, approval, dashboard: Phases 13
 and 14) is next**, and it owns the one remaining deploy.
 
+**Block F starts by writing its own spec**, as every prior block did, and
+should read `specs/2026-11-10-investigation-agent/validation.md` §7b before
+anything else: five things that must be settled before the deploy budget is
+spent. The two largest are that `render.yaml` declares **no agent credential**,
+and that there is **neither a read API nor any frontend** - so Block F builds
+both halves rather than a UI over an existing API.
+
 Block E delivered Phase 12 entire: read-only retrieval tools plus the engine as
 a recompute tool, the structured report with ranked causes and per-cause cited
 ids, the `insufficient_evidence` branch, the `investigation` and

@@ -69,17 +69,21 @@ prefix match, so interpolating the order reference into the system prompt would
 forfeit the cache on every investigation — which is the entire saving §5.1
 claims.
 
-## 3. The two live runs
+## 3. The live runs
 
-**Not yet run.** Both need `ANTHROPIC_API_KEY` in the environment of the shell
-that runs them; the application reads the process environment only and has no
-`.env` fallback, by `reckonai/config.py`'s stated decision.
+**Run 2026-11-10, on the OpenAI path.** The key must be in the environment of
+the shell that runs them: `reckonai/config.py` reads the process environment
+only and has a stated decision against any file fallback, so a key in a
+dotenv file is not seen. For a non-interactive shell that means `~/.zshenv`
+rather than `~/.zshrc`.
 
 ```
 uv run python -m reckonai.demo_data --ensure          # commits the dataset
-uv run python -m reckonai.agent.investigate --fault F1
-uv run python -m reckonai.agent.investigate --fault F1 --withhold ledger
-uv run python -m reckonai.demo_data --reset          # REQUIRED afterwards
+uv run python -m reckonai.agent.investigate --fault F1 \
+    --provider openai --model gpt-4.1
+uv run python -m reckonai.agent.investigate --fault F1 --withhold ledger \
+    --provider openai --model gpt-4.1
+uv run python -m reckonai.demo_data --reset           # REQUIRED afterwards
 ```
 
 **The reset is not optional**, and this cost a suite-wide failure to discover.
@@ -435,6 +439,36 @@ They are the argument for §3's two hand-run calls being worth their cost.
    retrieval cost grow with the model's curiosity. One investigation also then
    sees one consistent snapshot, so two tools cannot disagree because records
    moved between them.
+
+## 7b. What Block F must know before it deploys
+
+**R2 budgets one deploy and Block F owns it**, so these are stated here rather
+than discovered after it is spent.
+
+1. **`render.yaml` declares no agent credential.** There is no
+   `ANTHROPIC_API_KEY`, no `OPENAI_API_KEY`, no `AGENT_PROVIDER` and no
+   `AGENT_MODEL` in any of the three components' `envVars`. A deploy as it
+   stands gives an agent that fails on every investigation with
+   `ConfigurationError: AGENT_PROVIDER is 'anthropic', so ANTHROPIC_API_KEY
+   must be set`. Add the key to the service that will run investigations -
+   `sync: false` so it is set in the dashboard rather than committed.
+2. **Choose the provider deliberately for the deployed environment.** The
+   Anthropic account had no credit on 2026-11-10 and the default is
+   `claude-haiku-5-5`. Either top it up, or set `AGENT_PROVIDER=openai` with
+   `AGENT_MODEL=gpt-4.1` - the OpenAI key cannot reach `gpt-5` or
+   `gpt-5-mini`, which need organization verification.
+3. **There is no read API and no frontend.** The deployed service exposes `/`,
+   `/health`, `/health/ready` and `/sim/marketplace/*` - the last being the
+   simulated marketplace feeding data *in*, not this product's own API.
+   Nothing serves exceptions, runs or investigations over HTTP, and there is
+   no `package.json` anywhere in the repo. **Block F builds both halves**, not
+   just the UI over an existing API.
+4. **The agent cannot be a synchronous button.** It takes 6-8 seconds on
+   `gpt-4.1` against 18 orders and is specified for adaptive thinking on
+   Haiku; a request-scoped route is the wrong shape. Debts 1 and 2 below are
+   the queued form and the latest-per-exception read it needs.
+5. **Phase 8's fourth criterion is still deferred to this deploy** - the Cron
+   Job is declared in `render.yaml` and has never been applied.
 
 ## 8. Debts this block hands on
 

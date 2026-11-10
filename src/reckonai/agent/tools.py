@@ -416,6 +416,55 @@ class InvestigationTools:
 
         return fees
 
+    def fetch_seller_ledger_entries(self, order_ref: str) -> list[dict[str, Any]]:
+        """The marketplace's own ledger entries for this order.
+
+        **The central evidence for Scenario 1**, and the thing whose *absence*
+        is the fault: a refund PayPal performed that the seller ledger does
+        not record. An agent has to be able to see that nothing is here.
+
+        `transaction_type` and `entry_category` are both returned because they
+        answer different questions, and Block D found that the hard way:
+        `_partition_by_ledger` decides what counts as having recorded a
+        refund, and reading only `refund` entries there made one correct
+        booking produce two findings. `dispute` is a position-moving category
+        too.
+
+        The amount is **unsigned** - direction is carried by
+        `transaction_type`, not by a minus sign. An agent reading the number
+        alone would get the sign of every adjustment wrong.
+        """
+        if self._is_withheld("ledger"):
+            return []
+
+        order = self._session.scalar(
+            select(Order).where(
+                Order.tenant_id == self._tenant_id, Order.external_ref == order_ref
+            )
+        )
+        if order is None:
+            return []
+
+        entries = self._session.scalars(
+            select(SellerLedgerEntry)
+            .where(
+                SellerLedgerEntry.tenant_id == self._tenant_id,
+                SellerLedgerEntry.order_id == order.id,
+            )
+            .order_by(SellerLedgerEntry.occurred_at, SellerLedgerEntry.external_ref)
+        )
+        return [
+            {
+                "entry_ref": entry.external_ref,
+                "seller_id": str(entry.seller_id) if entry.seller_id else None,
+                "transaction_type": entry.transaction_type,
+                "entry_category": entry.entry_category,
+                "amount_unsigned": _money(entry.amount),
+                "occurred_at": entry.occurred_at.isoformat(),
+            }
+            for entry in entries
+        ]
+
     def fetch_disbursements(self, order_ref: str) -> list[dict[str, Any]]:
         """Releases discharging this order's captures.
 

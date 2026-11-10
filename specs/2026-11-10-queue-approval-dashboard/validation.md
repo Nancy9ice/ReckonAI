@@ -79,16 +79,27 @@ Checked from outside, with `curl` and the Render CLI, 23:04 UTC.
 - [x] **Coverage is honest on an unreconciled database**: 18 orders, 0 clean, 18
   "not examined", and `/api/runs` is empty. This is the post-review wording doing
   its job: no run has looked, so nothing is called clean.
-- [ ] **The worker's model key is not verified.** It is a separate service with
-  its own variables. The only check is an investigation completing there, which
-  has not been run.
-- [ ] **No reconciliation has run on the deployed database.** The Cron Job
-  redeployed and is live but has not fired; its first tick is 01:00 UTC
-  2026-11-11 and covers 2 of 18 orders. Until a wider run is queued (the
-  dashboard's "Run reconciliation" does it), the deployed queue is empty.
-- [ ] **The nightly investigation path has not run on Render.**
-- [ ] Whether the AG Grid watermark is gone, and the wording on the deployed
-  pages, were not seen in a browser.
+- [x] **Run reconciliation on the deployed app, through the real worker**
+  (2026-11-10 23:08 UTC): queued, claimed and done in 32 seconds (the worker
+  polls every 30). The deployed database now has one run over all 18 orders: 6
+  findings, 5 exceptions, 1 parked, 12 clean, none unexamined, the manifest's own
+  figures. The queue holds ORD-0016 (duplicate ledger entry, $90.00), ORD-0018
+  (payout mismatch, EUR 15.00), ORD-0015 (FX, $32.16), ORD-0013 (missing ledger
+  adjustment, $27.00) and ORD-0014 (commission, $10.00).
+- [x] **An investigation completed on the deployed worker, so its model key
+  works**: ORD-0016 reached `reported` on `openai` / `gpt-4.1` in 32 seconds with
+  one cause, naming the two ledger entries and the 90.00 USD double credit, and
+  **0 unresolved citations**. This is the first successful investigation observed
+  on Render, and the deployed run of Phase 12's second criterion. One paid call.
+  The cause text was read, not graded against the manifest.
+- [ ] **The Anthropic provider is still unobserved** (the deployed pair is
+  OpenAI).
+- [ ] **The nightly path has not run on Render.** The Cron Job redeployed and
+  its first tick is 01:00 UTC 2026-11-11. Today's run will find the window
+  already covering 2 of 18 orders, and the exceptions already investigated or
+  not; what it queues should be read tomorrow.
+- [ ] Whether the AG Grid watermark is gone, and how the wording looks on the
+  deployed pages, were not seen in a browser.
 
 ## 4. Regression gates
 

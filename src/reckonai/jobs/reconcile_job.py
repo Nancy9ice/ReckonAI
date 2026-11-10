@@ -24,7 +24,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from reckonai import reconcile
-from reckonai.jobs import queue, window
+from reckonai.jobs import investigation_job, queue, window
 from reckonai.models import ReconciliationException, ReconciliationRun
 from reckonai.recon.classifier import Finding, exceptions_only
 
@@ -158,7 +158,13 @@ def execute(
     except IntegrityError as exc:
         raise AlreadyReconciled(key) from exc
 
-    return run_window(session, tenant_id=tenant_id, win=win)
+    run_row = run_window(session, tenant_id=tenant_id, win=win)
+
+    # Only runs the scheduler asked for. A person's "Run reconciliation" does
+    # not spend model credit on their behalf; they choose what to investigate.
+    if payload.get("auto_investigate") is True:
+        investigation_job.auto_investigate(session, tenant_id, run_row.id)
+    return run_row
 
 
 def _window_from(payload: dict[str, object]) -> window.Window:

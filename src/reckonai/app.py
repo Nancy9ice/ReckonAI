@@ -21,10 +21,12 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import SQLAlchemyError
 
-from reckonai import __version__
+from reckonai import __version__, spa
+from reckonai.api import router as api_router
 from reckonai.config import get_settings
 from reckonai.db import check_connection, create_app_engine
 from reckonai.logging import configure_logging, event
@@ -86,19 +88,44 @@ app = FastAPI(
 # would any third party, pointed at `MARKETPLACE_BASE_URL`.
 app.include_router(sim_router, prefix="/sim")
 
+# The product's own read API (Block F). Distinct from `/sim`, which feeds data in.
+app.include_router(api_router)
 
-@app.get("/")
-def index() -> dict[str, str]:
+
+# The dashboard's built assets, when there is a build. The page itself is
+# served by `/` below, which falls back to the JSON index without one.
+_dist = spa.dist_dir()
+if _dist is not None and (_dist / "assets").is_dir():
+    app.mount("/assets", StaticFiles(directory=_dist / "assets"), name="assets")
+
+
+@app.get("/", response_model=None)
+def index() -> dict[str, str] | FileResponse:
     """A service index, so the deployed URL does not answer 404 in a browser.
 
     Added after the first successful deploy, where every route worked and `/`
     returned `{"detail": "Not Found"}` - which reads as a broken deployment to
     anyone opening the URL, including a judge.
 
-    It carries no financial data and names no record. Phase 14 adds the React
-    dashboard as a separate Render static site, so this stays the API's own
-    index rather than something the UI will later displace.
+    It carries no financial data and names no record.
+
+    **With a frontend build present, `/` is the dashboard** (Block F, D1), and
+    this index moves to `/service` so it stays reachable. Without a build - CI,
+    or local API work - `/` is still this index, never a 404.
     """
+    dist = spa.dist_dir()
+    if dist is not None:
+        return FileResponse(dist / "index.html")
+    return service_index()
+
+
+@app.get("/service")
+def service() -> dict[str, str]:
+    """The service index, always, whether or not a dashboard is built."""
+    return service_index()
+
+
+def service_index() -> dict[str, str]:
     return {
         "service": "reckonai",
         "version": __version__,
@@ -109,6 +136,7 @@ def index() -> dict[str, str]:
         # somewhere rather than requiring the paths to be known in advance.
         # The index itself reads no database - see `sim.router`.
         "marketplace": "/sim/marketplace",
+        "api": "/api/exceptions",
     }
 
 

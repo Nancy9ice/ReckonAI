@@ -107,6 +107,9 @@ def enqueue_runs(session: Session, *, days: int) -> list[uuid.UUID]:
             payload={
                 "window_start": win.start.isoformat(),
                 "window_end": win.end.isoformat(),
+                # The nightly run investigates what it finds, within the cap
+                # `settings.auto_investigate_max` (see `investigation_job`).
+                "auto_investigate": True,
             },
         )
         # **Committed per tenant, and that is the point of the loop.** Code

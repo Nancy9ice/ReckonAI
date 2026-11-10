@@ -41,6 +41,7 @@ from reckonai.models.connector import (
     QuarantinedRecord,
 )
 from reckonai.models.conversions import FxConversion
+from reckonai.models.decision import DECISION_OUTCOMES, ExceptionDecision
 from reckonai.models.demo import DemoSeed
 from reckonai.models.disbursements import Disbursement
 from reckonai.models.disputes import Dispute
@@ -87,6 +88,8 @@ from reckonai.models.reconciliation import (
 )
 
 __all__ = [
+    "DECISION_OUTCOMES",
+    "ExceptionDecision",
     "AGENT_PROVIDERS",
     "DEFAULT_MAX_ATTEMPTS",
     "DISBURSEMENT_MODES",

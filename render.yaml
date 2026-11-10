@@ -38,7 +38,17 @@ services:
     # stays authoritative either way - the same resolution, a subset installed -
     # and it has a second benefit: a runtime module that accidentally imports a
     # dev-only package passes CI and fails here, loudly, rather than shipping.
-    buildCommand: pip install uv && uv sync --frozen --no-dev
+    # The dashboard build is appended and **fails soft, whatever the cause**:
+    # a missing Node (Render's Python runtime is believed to ship it, on
+    # informal sources only), a registry blip, or a type error must not take
+    # the API down. Without a build `/` serves the JSON index (`reckonai.spa`),
+    # so the failure is visible after deploy rather than fatal during it. CI
+    # builds the dashboard on every push, so a real break fails there first.
+    # specs/2026-11-10-queue-approval-dashboard/validation.md section 3.
+    buildCommand: >
+      pip install uv && uv sync --frozen --no-dev &&
+      (cd frontend && npm ci && npm run build ||
+      echo "WARNING: dashboard build failed or npm is missing, serving the API only")
 
     # Migrations run here, never in startCommand. Pre-deploy runs once per
     # deploy; a start command would have every instance race to migrate on
@@ -87,6 +97,24 @@ services:
           property: connectionString
       - key: ENVIRONMENT
         value: production
+      - key: NODE_VERSION
+        value: "22"
+      # AG Grid Enterprise licence, read by Vite at BUILD time and embedded in
+      # the shipped JavaScript (that is how AG Grid licensing works). Unset, the
+      # grid shows an evaluation watermark and nothing breaks.
+      - key: VITE_AG_GRID_LICENSE_KEY
+        sync: false
+      # The dashboard's natural-language assistant (`/api/grid-assistant`)
+      # calls the model from this service, so the same four variables the worker
+      # declares are declared here. See the worker's comment for the rules.
+      - key: AGENT_PROVIDER
+        sync: false
+      - key: AGENT_MODEL
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
       # PayPal sandbox credentials, for the demo's one live order (R15).
       # `sync: false` means Render prompts for the value rather than reading
       # it from this file, so no credential enters the repository - the same
@@ -135,6 +163,32 @@ services:
       # reasoning specs/tech-stack.md section 5.1 applies to model settings.
       - key: WORKER_TICK_SECONDS
         value: "30"
+      # After the scheduled run, the worker queues investigations for what it
+      # found, up to this many per run (each is a paid model call). 0 turns it
+      # off. Skipped, with a warning, if no model credential is set here.
+      - key: AUTO_INVESTIGATE_MAX
+        value: "25"
+
+      # The investigation agent runs here, as a queued job (Block F D2), so
+      # the credential belongs on the worker and nowhere else. `sync: false`:
+      # Render prompts for the value and it never enters the repository.
+      #
+      # **Without a key every investigation fails, legibly** - the job's
+      # `last_error` names the missing variable and the dashboard shows it.
+      # Set the pair for ONE provider; the provider choice is the operator's
+      # and there is no failover between them (investigation-agent
+      # validation.md section 8 item 7). Unset, the code defaults to
+      # `anthropic` / `claude-haiku-5-5`, whose account had no credit on
+      # 2026-11-10; `openai` / `gpt-4.1` is the provider the criteria were met
+      # on. The OpenAI key cannot reach gpt-5 or gpt-5-mini.
+      - key: AGENT_PROVIDER
+        sync: false
+      - key: AGENT_MODEL
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
 
   # ---------------------------------------------------------------------------
   # The scheduled reconciliation. Block D

@@ -329,3 +329,66 @@ def other_payload(session: Session, other_tenant: Tenant) -> RawPayload:
     session.add(row)
     session.flush()
     return row
+
+
+@pytest.fixture
+def seeded_exception(session: Session, tenant: Tenant, seller: Seller):  # type: ignore[no-untyped-def]
+    """One persisted run and one exception under it, for Block F's tables.
+
+    The order and its one item exist because every real exception names an
+    order the matcher claimed; the API reads its age and seller count there.
+    """
+    from datetime import UTC, datetime, timedelta
+    from decimal import Decimal
+
+    from reckonai.models import (
+        Order,
+        OrderItem,
+        ReconciliationException,
+        ReconciliationRun,
+    )
+    from reckonai.money import Money
+
+    now = datetime.now(UTC)
+    order = Order(
+        tenant_id=tenant.id,
+        external_ref="ORD-TEST",
+        total=Money(Decimal("100.00"), "USD"),
+        placed_at=now - timedelta(days=6),
+    )
+    session.add(order)
+    session.flush()
+    session.add(
+        OrderItem(
+            tenant_id=tenant.id,
+            order_id=order.id,
+            seller_id=seller.id,
+            external_ref="ITEM-TEST",
+            quantity=1,
+            unit_price=Money(Decimal("100.00"), "USD"),
+            line_total=Money(Decimal("100.00"), "USD"),
+        )
+    )
+    session.flush()
+    run = ReconciliationRun(
+        tenant_id=tenant.id,
+        window_start=now,
+        window_end=now + timedelta(days=1),
+        status="completed",
+    )
+    session.add(run)
+    session.flush()
+    row = ReconciliationException(
+        tenant_id=tenant.id,
+        run_id=run.id,
+        code="commission_mismatch",
+        order_external_ref="ORD-TEST",
+        detail="test",
+        is_exception=True,
+        impact=Money(Decimal("10.00"), "USD"),
+        evidence_refs=[],
+        evidence_basis="provider_reported",
+    )
+    session.add(row)
+    session.flush()
+    return row

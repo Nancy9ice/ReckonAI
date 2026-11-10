@@ -102,6 +102,10 @@ TABLES_WITHOUT_EVIDENCE = (
     # dropped. Phase 12's second exit criterion is that no citation is
     # fabricated, and that column is how it is measured rather than asserted.
     | {"investigation", "investigation_cause"}
+    # Block F's decision record holds no financial value of its own: it names a
+    # persisted exception, which carries the evidence, and records a human's
+    # outcome on it.
+    | {"exception_decision"}
 )
 
 

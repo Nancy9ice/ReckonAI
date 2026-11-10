@@ -86,7 +86,7 @@ def test_one_job_is_enqueued_per_tenant(
     assert {job.job_type for job in jobs} == {reconcile_job.JOB_TYPE}
 
 
-def test_the_job_payload_carries_the_window_and_nothing_else(
+def test_the_job_payload_carries_the_window_and_one_flag_and_no_money(
     session: Session, tenant: Tenant
 ) -> None:
     """A job carries identifiers and dates. **No monetary value**: a `Decimal`
@@ -96,7 +96,10 @@ def test_the_job_payload_carries_the_window_and_nothing_else(
 
     job = session.scalars(select(Job)).one()
 
-    assert set(job.payload) == {"window_start", "window_end"}
+    # The window, and `auto_investigate` (Block F, D17): a boolean asking the
+    # worker to queue investigations afterwards. Still nothing monetary.
+    assert set(job.payload) == {"window_start", "window_end", "auto_investigate"}
+    assert job.payload["auto_investigate"] is True
     parsed = reconcile_job._window_from(job.payload)
     assert parsed.end - parsed.start == timedelta(days=2)
 

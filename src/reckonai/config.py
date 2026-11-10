@@ -12,7 +12,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import SecretStr, ValidationError, field_validator, model_validator
+from pydantic import Field, SecretStr, ValidationError, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # SQLAlchemy selects its DBAPI from the URL. A bare "postgresql://" means
@@ -96,6 +96,13 @@ class Settings(BaseSettings):
     # available does not reverse that.
     agent_provider: Literal["anthropic", "openai"] = "anthropic"
     agent_model: str = "claude-haiku-5-5"
+
+    # How many exceptions one scheduled run may queue for investigation. Every
+    # investigation is a paid model call, so the nightly run is capped rather
+    # than unbounded; 0 turns automatic investigation off. Only runs the
+    # scheduler enqueues are affected - a person's "Run reconciliation" never
+    # investigates by itself.
+    auto_investigate_max: int = Field(default=25, ge=0)
 
     # Both optional, and the service runs without either - the same shape as
     # `marketplace_base_url`, and for the same reason: the web service and the

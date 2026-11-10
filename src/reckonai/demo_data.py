@@ -193,6 +193,7 @@ def reset(session: Session) -> None:
         CommissionRule,
         Disbursement,
         Dispute,
+        ExceptionDecision,
         FxConversion,
         Investigation,
         InvestigationCause,
@@ -224,6 +225,8 @@ def reset(session: Session) -> None:
         # outside the test suite, so it is the first to expose that this list
         # had fallen behind the schema.
         InvestigationCause, Investigation,
+        # Block F's human decisions name an exception, so they go first.
+        ExceptionDecision,
         # **Block D's four had the same gap**, and had simply never fired -
         # nothing committed a run row outside the rolled-back suite, so the
         # RESTRICT never bit. Added in the same pass rather than left for

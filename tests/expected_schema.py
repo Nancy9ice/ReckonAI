@@ -74,6 +74,10 @@ AGENT_TABLES: tuple[str, ...] = (
     "investigation_cause",
 )
 
+#: Block F's human decisions: append-only, no monetary value.
+#: specs/2026-11-10-queue-approval-dashboard/requirements.md D4.
+DECISION_TABLES: tuple[str, ...] = ("exception_decision",)
+
 #: Every table in `Base.metadata`. Excludes `alembic_version`, which Alembic
 #: owns and which never appears in the declarative metadata.
 MODEL_TABLES: tuple[str, ...] = tuple(
@@ -84,6 +88,7 @@ MODEL_TABLES: tuple[str, ...] = tuple(
         + DEMO_TABLES
         + QUEUE_TABLES
         + AGENT_TABLES
+        + DECISION_TABLES
     )
 )
 

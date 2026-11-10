@@ -29,28 +29,64 @@ Also read, and in this order:
   evidence. The root specs state rules and point here; they do not repeat it.
 
 **Phases 0, 0b, 1, 2, 3, Block A (4 + 5 + 6), the PayPal capture (R16), Block
-B (Phase 10), Block C (Phase 11), Block D (Phase 8 + R9 + the exception table)
-and Block E (Phase 12, the investigation agent, kept entire) are complete.
-Block F is next** — Phases 13 and 14. **Every merge to `main` deploys the
-API and the worker** (PRs #19-#22 each did), so there is no "one remaining
-deploy" to budget: Block E's merge deploys too, migration included.
+B (Phase 10), Block C (Phase 11), Block D (Phase 8 + R9 + the exception table),
+Block E (Phase 12) and Block F (Phases 13 + 14) are built; Block F is on branch
+`block-f-queue-approval-dashboard` and not yet merged.** Block G (eval harness,
+demo, limitations) is next. **Every merge to `main` deploys** the API and the
+worker.
 
-**Block F has no spec yet.** Every prior block wrote `requirements.md`,
-`plan.md` and `validation.md` into a dated `specs/` directory before
-implementing, and that is the first task rather than an optional preamble.
-**Read `specs/2026-11-10-investigation-agent/validation.md` §7b first** — five
-things to settle before a merge deploys, including that `render.yaml` declares
-**no agent credential at all**, so a deploy as it stands yields an agent that
-fails on every investigation.
+**Read `specs/2026-11-10-queue-approval-dashboard/validation.md` before
+touching `reckonai/api/`, `frontend/` or the decision table**; §3 lists what is
+unproven until a deploy and §4 tabulates the code review.
 
-**Two things Block F builds that may not be obvious.** There is **no read API**
-— the deployed service exposes only `/`, `/health`, `/health/ready` and
-`/sim/marketplace/*`, the last being the simulated marketplace feeding data
-*in* rather than this product's own API — and there is **no frontend at all**,
-no `package.json` anywhere in the repo. Everything built so far is reachable
-only from Python and the CLI, so Block F builds the API and the UI, not a UI
-over an existing API. Budget accordingly: the replan already admits ~27.5 hours
-of work against ~20, and this is where that gap lands.
+`reckonai/api/` is the read API plus the append-only decision route, the queued
+investigation, run-now, evidence, coverage, CSV export and the grid assistant;
+`reckonai/recon/priority.py` is the pure score; `frontend/` is React + Vite +
+AG Grid **Enterprise**, served by FastAPI at `/` when built (the JSON index
+moves to `/service`). Things not to re-derive:
+
+- **Investigations: the nightly run queues them, a person's does not.** The cron
+  job only enqueues a reconciliation carrying `auto_investigate`; the worker then
+  queues up to `AUTO_INVESTIGATE_MAX` investigations (a `failed` one is retried,
+  a concluded one is not), and skips with a warning if no model key is set. The
+  queue also has bulk "Investigate all" and checkbox "Investigate selected".
+- **All user-facing wording is in `frontend/src/copy.ts`**, written for a
+  marketplace **finance** reader. The engine's `expected` and `reported` are not
+  what those words suggest: for every type that carries them "expected" is the
+  figure that is right (PayPal's settlement, the rule's commission, what the
+  seller is owed) and "reported" is what the marketplace recorded, so the UI
+  labels them per type ("PayPal settled" / "Marketplace recorded"). Change a
+  label there, never by showing the engine's words. The exception types have a
+  plain title, a meaning and an action each.
+- **A decision is keyed by (order, code)**, not by exception id: every run writes
+  a fresh row for the same fault.
+- **The approver is free text, unauthenticated** (D5). Do not describe it as an
+  identity.
+- **"Clean" means "no newest finding"**; a run records how many orders it covered,
+  not which. A run is date-grained, so a second run-now the same day is answered,
+  not queued.
+- **The grid assistant is display-only**: no record or amount is sent, and
+  aggregation and pivot are excluded from its schema. It runs on the **web**
+  service, so the model credential is declared there as well as on the worker.
+- **`evidence.py` is the one `api/` module allowed to name money tables**, and a
+  test holds it to read-only. The P6 guard otherwise forbids them.
+- **AG Grid licence** is the build-time `VITE_AG_GRID_LICENSE_KEY` (local
+  environment file and Render's web build); do not read or print that file.
+  Master/detail cannot be combined with row grouping.
+- **Local UI work needs the worker running** for Run reconciliation and
+  Investigate (`WORKER_TICK_SECONDS=3` locally; the default is 30). **A seeded dev
+  database breaks the suite** (`test_migrations` downgrades the schema): run
+  `python -m reckonai.demo_data --reset` before `pytest`.
+
+**Starting Block G.** It has no spec yet: as every prior block did, write
+`requirements.md`, `plan.md` and `validation.md` into a dated `specs/` directory
+first. Its scope is the replan's Block G (one eval command scored against the
+sim manifest, three demo scenarios from a clean database, a rehearsal against the
+deployed app, the limitations section) and Phase 15 in `specs/roadmap.md`.
+**Check whether Block F's PR has merged before branching.** Block G needs Block
+F's code (the API, the dashboard, the decision table); if it has not merged,
+branch from `block-f-queue-approval-dashboard`, not from `main`, or the new
+branch will not contain the thing it evaluates.
 
 **Read `specs/2026-11-10-investigation-agent/validation.md` before touching
 `reckonai/agent/`.** §6 lists five corrections this block made to earlier

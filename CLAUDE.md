@@ -65,14 +65,15 @@ moves to `/service`). Things not to re-derive:
   database breaks the suite** (`test_migrations` downgrades the schema): run
   `python -m reckonai.demo_data --reset` before `pytest`.
 
-**Two things Block F builds that may not be obvious.** There is **no read API**
-— the deployed service exposes only `/`, `/health`, `/health/ready` and
-`/sim/marketplace/*`, the last being the simulated marketplace feeding data
-*in* rather than this product's own API — and there is **no frontend at all**,
-no `package.json` anywhere in the repo. Everything built so far is reachable
-only from Python and the CLI, so Block F builds the API and the UI, not a UI
-over an existing API. Budget accordingly: the replan already admits ~27.5 hours
-of work against ~20, and this is where that gap lands.
+**Starting Block G.** It has no spec yet: as every prior block did, write
+`requirements.md`, `plan.md` and `validation.md` into a dated `specs/` directory
+first. Its scope is the replan's Block G (one eval command scored against the
+sim manifest, three demo scenarios from a clean database, a rehearsal against the
+deployed app, the limitations section) and Phase 15 in `specs/roadmap.md`.
+**Check whether Block F's PR has merged before branching.** Block G needs Block
+F's code (the API, the dashboard, the decision table); if it has not merged,
+branch from `block-f-queue-approval-dashboard`, not from `main`, or the new
+branch will not contain the thing it evaluates.
 
 **Read `specs/2026-11-10-investigation-agent/validation.md` before touching
 `reckonai/agent/`.** §6 lists five corrections this block made to earlier

@@ -34,3 +34,6 @@ observed-recheck.json
 # Frontend
 frontend/node_modules/
 frontend/dist/
+
+# Eval output (the published figures live in the specs, not here)
+eval_results/

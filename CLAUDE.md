@@ -32,8 +32,9 @@ Also read, and in this order:
 B (Phase 10), Block C (Phase 11), Block D (Phase 8 + R9 + the exception table),
 Block E (Phase 12) and Block F (Phases 13 + 14) are built and merged (PR #24,
 merge commit `69a3a0c`, 2026-11-10 23:00 UTC).** **Every planned block is
-complete; Block G (eval harness, demo, limitations) was skipped on purpose** -
-see "Block G was skipped" below. **Every merge to `main` deploys** the API and the
+complete; Block G was skipped on purpose, except that its eval was built later**
+(the demo script, rehearsal and limitations audit were not) - see "Block G was
+skipped" below. **Every merge to `main` deploys** the API and the
 worker.
 
 **Read `specs/2026-11-10-queue-approval-dashboard/validation.md` before
@@ -85,13 +86,18 @@ moves to `/service`). Things not to re-derive:
 block to start. Do not begin one unprompted, and do not write a spec for it
 unless asked. What this leaves, so nothing is claimed that was not measured:
 
-- **No eval harness exists.** Detection and false positives are asserted by tests
-  (`tests/test_recon_gate.py`, `test_manifest_agrees_with_seed.py`), not printed as
-  a table. **Root-cause accuracy of the AI is not measured.** What is known is
-  hand-run: Scenario 1 (F1) and the evidence-removed case in Block E on
-  `gpt-4.1`, F4 correct on production, F3 (FX) came back "no clear cause", F2 and
-  F6 never investigated. Anthropic has never run. State it that way, never as a
-  rate.
+- **The eval was built afterwards, on its own, and only the eval**
+  (`python -m reckonai.eval [--agent]`, `specs/2026-11-11-eval-harness/`): the
+  deterministic half gates and passes; `--agent` scores the AI once and reports.
+  **Read the results in that directory's `validation.md` before quoting any
+  number**: 0 of 5 faults pass the strict citation rule; a reader judged the
+  cause clearly right on F1, F2 and F4, right-but-thinly-cited on F6, and hedged
+  on F3; both evidence-removed cases passed; and it is one draw on `gpt-4.1`.
+  **To run it:** `uv run python -m reckonai.eval` is free and exits 1 if the gate
+  fails; add `--agent` for the AI half (7 paid calls, the count is printed first)
+  and `--json PATH` to save the results (`eval_results/` is gitignored). It runs
+  in a rolled-back transaction, so it can run against your dev database, and it
+  refuses a non-local `DATABASE_URL`. It is not in CI. Anthropic has never run. Never state the AI's accuracy as a rate.
 - **No scripted demo and no `demo.md` runbook.** The deployed app was exercised by
   hand after the Block F merge (a run, then an investigation, on production;
   `specs/2026-11-10-queue-approval-dashboard/validation.md` §3a).
@@ -107,6 +113,36 @@ If it is ever revived, the lean version was: one command printing the
 deterministic table, one agent run over F1, F2, F3, F4 and F6 plus the
 evidence-removed cases with results written down as they come, a short runbook, a
 rehearsal on the deployed app, and the limitations audit.
+
+**Open items, as of 2026-11-11.** Not decided, not yet seen, or held only by the
+operator. Do not assume any of these; ask or check.
+
+1. **The nightly sweep has not been seen running on Render.** The first tick after
+   it deployed is 01:00 UTC 2026-11-11. If it worked, open exceptions without a
+   conclusion (expected: ORD-0013, ORD-0014, ORD-0015, ORD-0018; ORD-0016 was
+   already investigated) now show an AI result. Check `/api/exceptions`, the
+   worker's `reckonai.jobs.auto_investigate` log line and the cron job's logs
+   (Render CLI ids are in `specs/2026-11-07-canonical-core/notes.md`). It needs a
+   model key on the **worker**, which a completed investigation there has shown
+   it has.
+2. **How testers use their own credentials is undecided.** Discussed: (a) each
+   tester brings a model key, which works for the assistant but would put a secret
+   through the job queue for investigations; (b) named logins (about an hour),
+   which also fix the free-text approver and the unauthenticated assistant route;
+   (c) one shared key with a spending cap at the provider and a passcode. (b) plus
+   the provider cap was recommended; nothing was chosen or built.
+3. **The root-cause scoring rule is known to be too strict and was not changed**
+   (it penalises generic ids and the same refund cited under PayPal's id). A fairer
+   rule (the load-bearing record cited, any id for the same record accepted) would
+   need a new run, and the published figures are the strict rule's.
+4. **Not seen in a browser:** whether the AG Grid watermark is gone on the deployed
+   site, and how the plain-language wording looks on the deployed pages. The
+   wording has not been read by a finance user, and only the FX type was opened.
+5. **Held by the operator and never read by an agent:** the AG Grid licence key in
+   the frontend's local settings file, and the Render dashboard variables. What is
+   known: the web service has a working model key (an assistant call succeeded) and
+   so does the worker (an investigation completed); whether the AG Grid variable
+   is set on Render is unknown.
 
 **Read `specs/2026-11-10-investigation-agent/validation.md` before touching
 `reckonai/agent/`.** §6 lists five corrections this block made to earlier
@@ -184,8 +220,8 @@ calling every tool and asserting the session holds nothing pending.
 database with no committed marketplace rows — skipping the `--reset` afterwards
 fails six tests and errors 43 more, none of them about the agent. **The
 `insufficient_evidence` branch is still the criterion most at risk on a cheaper
-model; no eval scores that branch (Block G was skipped)**, so it is known only
-from hand-run investigations.
+model; the eval's two evidence-removed cases passed once on `gpt-4.1`**, so it is
+observed on one draw and not established.
 
 **Read `specs/2026-11-09-queue-scheduled-run/validation.md` §9 and §8 first**
 (three debts handed forward, three corrections to earlier documents), then

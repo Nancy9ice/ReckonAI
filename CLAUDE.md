@@ -86,7 +86,9 @@ gate and inside strict mypy**, after `jobs/`, and `tests/test_money_purity.py`
 records why.
 
 **Two providers, one report.** `settings.agent_provider` selects `anthropic`
-(default, `claude-haiku-5-5`) or `openai`; the structured report is the seam.
+(default, `claude-haiku-5-5`) or `openai`; the structured report is the seam. **There is no failover between them on any failure, outages included, and
+that is an open decision** (`validation.md` §8 debt 7): the no-fallback
+reasoning was written for refusals and carried over to outages unexamined.
 `tech-stack.md` §1 and §5 carry the dated 2026-11-10 amendment, and **§5.1's
 request table is Anthropic-specific** — every row was derived from real Claude
 API behaviour and several are 400s there. The OpenAI path's configuration is

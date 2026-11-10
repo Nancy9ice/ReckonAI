@@ -36,7 +36,23 @@ Block F is next** — Phases 13 and 14, and it owns the one remaining deploy.
 **Read `specs/2026-11-10-investigation-agent/validation.md` before touching
 `reckonai/agent/`.** §6 lists five corrections this block made to earlier
 documents — two of them to rules stated in `CLAUDE.md` itself, corrected below
-— §7 lists four things found only by running it, and §8 the four debts.
+— **§7 lists five things found by running it, three of which only a live call
+could find**, §7a four more from building it, and §8 the five debts.
+
+**The two model-dependent criteria are met on `gpt-4.1`, not on the Anthropic
+default**, whose account had no credit on the day. `claude-haiku-5-5` is
+unexercised and §5 records it as unproven rather than assumed. Whoever tops up
+re-runs §3's two invocations without `--provider`.
+
+**A withheld record is `unavailable`, never empty, and this is the block's
+sharpest lesson.** Returning `[]` for a withheld kind made "you may not see
+the ledger" identical to "the ledger has no entries", and the agent reported
+the stronger claim at confidence 1.00. That is [[mission]] P3's distinction —
+an absent value and a measured zero are different claims — applied to
+evidence. A withheld kind raises `Withheld` and reaches the model as an
+explicit marker. **Any new tool must preserve that distinction**; returning an
+empty collection for something you are declining to show is how the agent
+fabricates a finding about the marketplace's books.
 
 The agent lives in `reckonai/agent/`: `tools.py` (the read-only surface),
 `citations.py`, `registry.py` (one tool description, adapted to both

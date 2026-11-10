@@ -1,19 +1,23 @@
 # Block E — validation
 
-> 1,783 tests pass (104 of them Block E's), `uv run mypy` clean over `engine`,
+> 1,789 tests pass (113 of them Block E's), `uv run mypy` clean over `engine`,
 > `recon`, `jobs` and now `agent`, `uv run ruff check` clean, migration clean up
 > and down with no autogenerate drift.
 >
-> **No test makes an API call**, to either provider. Section 3's two live runs
-> are the only model calls in the block, and they are run by hand.
+> **No test makes an API call**, to either provider. Section 3's live runs are
+> the only model calls in the block, and they are run by hand.
+>
+> **Both model-dependent criteria are met on `gpt-4.1`, not on the Anthropic
+> default** - that account has no credit balance. `claude-haiku-5-5` is
+> unexercised, and §5 records it as unproven rather than assumed.
 
 ## 1. Phase 12's exit criteria
 
 | # | Criterion | How it is proven | State |
 |---|---|---|---|
-| 1 | Scenario 1 is investigated end to end and names the missing ledger adjustment, citing the refund and ledger record ids | Wiring: `test_agent_investigate.py::test_scenario_1_is_investigated_end_to_end` plus `test_agent_tools.py::test_scenario_1_is_reachable_through_the_tools`. The model's own answer: §3 | **pending the live run** |
+| 1 | Scenario 1 is investigated end to end and names the missing ledger adjustment, citing the refund and ledger record ids | Wiring: `test_agent_investigate.py::test_scenario_1_is_investigated_end_to_end`. The model's own answer: §3, run on `gpt-4.1` | **met, on the OpenAI path** |
 | 2 | Every cited id resolves to a real record — no fabricated references | `test_agent_tools.py::test_every_evidence_ref_on_the_whole_dataset_resolves` over every finding on the seeded dataset; `unresolved_refs` persisted per cause; a fabricated id surfaced by `test_a_fabricated_citation_is_surfaced` | **met** |
-| 3 | An exception with evidence deliberately removed returns `insufficient_evidence` rather than a guess | Instrument: `test_withholding_reaches_the_tools_and_the_row`, plus `test_withholding_does_not_change_what_the_classifier_finds`. The model's own answer: §3 | **pending the live run** |
+| 3 | An exception with evidence deliberately removed returns `insufficient_evidence` rather than a guess | Instrument: `test_withholding_reaches_the_tools_and_the_row`. The model's own answer: §3, run on `gpt-4.1` | **met, after a real defect was fixed** - see §7 finding 3 |
 | 4 | No tool can mutate financial state | `test_agent_tools.py::test_no_tool_writes_to_the_session` calls **every** tool and asserts the session holds nothing new, dirty or deleted; `test_the_tools_do_not_import_the_job_queue` | **met** |
 | 5 | `stop_reason` is checked before response content is read | `test_agent_providers.py::test_a_refusal_discards_a_report_the_response_still_carried`, on both providers | **met** |
 | 6 | The summarized reasoning is persisted, and the model id is stored and compared — a fallback produces a report flagged as downgraded | `test_agent_store.py::test_a_report_round_trips_losing_no_field` and `test_a_mismatched_model_is_stored_as_downgraded` | **met** |
@@ -89,9 +93,69 @@ database"; the warning is easy to read past while setting up a demo.
 causes and prints the `--reset` command, so the failure explains itself rather
 than pointing at a collection-order bug. See §8 debt 3.
 
-To be filled in from the runs: the invocation, the verdict, the ranked causes
-with their confidences and cited ids, the citation resolution outcome, and the
-token counts and wall time.
+**Run 2026-11-10 on `gpt-4.1`, not on the Anthropic default.** The Anthropic
+account has no credit balance (`400 invalid_request_error: Your credit balance
+is too low`), so the measured default could not run; the operator chose to
+evidence these two criteria on the OpenAI path instead. `gpt-5` and
+`gpt-5-mini` both returned `404: Your organization must be verified`, so
+`gpt-4.1` is what the key can reach. **`claude-haiku-5-5` remains
+unexercised** — see §5.
+
+#### Criterion 1 — Scenario 1 end to end
+
+```
+uv run python -m reckonai.agent.investigate --fault F1 \
+    --provider openai --model gpt-4.1
+```
+
+| Field | Value |
+|---|---|
+| verdict | `reported` |
+| model requested / returned | `gpt-4.1` / `gpt-4.1-2025-04-14` |
+| `downgraded` | false |
+| `stop_reason` | `stop` |
+| causes | 1, confidence 1.00 |
+| cited refs | `0CE88977WM977540P` (refund), `LED-ORD-0013-vendor-bellweather-comm`, `LED-ORD-0013-vendor-bellweather-sale` (ledger), `6AP63246WF1540214` (capture) |
+| unresolved citations | **none** |
+| unstable citations | **none** |
+| wall time | ~7 s |
+
+> Cause 1: "Neither the refund debit nor the commission reversal relating to
+> PayPal refund 0CE88977WM977540P are present in the seller's ledger. The
+> platform fee refund reversal (3.00 USD) is confirmed in PayPal records but
+> absent in the ledger, resulting in an overstated seller position."
+
+**Met.** It names the missing ledger adjustment, cites the refund and the
+ledger records as the criterion requires, and every citation resolves. It also
+cited the capture rather than the fee id, unprompted, and correctly described
+the fee as a *reversal* — the distinction §6.2 records.
+
+#### Criterion 3 — evidence deliberately removed
+
+```
+uv run python -m reckonai.agent.investigate --fault F1 --withhold ledger \
+    --provider openai --model gpt-4.1
+```
+
+| Field | Value |
+|---|---|
+| verdict | **`insufficient_evidence`** |
+| `withheld` | `["ledger"]` |
+| causes | **0** |
+| wall time | ~6 s |
+
+> "The PayPal refund (0CE88977WM977540P) of 30.00 USD was found and platform
+> fees show both the original commission and a reversal upon refund. However,
+> the ledger entries required to determine if a refund debit or commission
+> reversal was actually posted in the seller's ledger are **unavailable**, so
+> it is not possible to definitively establish why the seller's position is
+> overstated."
+
+**Met — on the second attempt, and the first attempt is the more important
+result.** See §7 finding 3: the first run returned `reported` at confidence
+1.00 asserting "No seller ledger entries exist", which was a defect in the
+tool layer rather than in the model. The same model declines once the
+distinction is made available to it.
 
 **Why these are hand-run and not in CI.** A paid call per test run is not
 acceptable and CI has no key. A live test skipped on a missing key would make a
@@ -128,7 +192,7 @@ so it cannot be forgotten.
 
 ## 4. Gates
 
-- `uv run pytest` — 1,783 pass. No test makes an API call.
+- `uv run pytest` — 1,789 pass. No test makes an API call.
 - `uv run mypy` — clean over `engine`, `recon`, `jobs` and `agent`.
 - `uv run ruff check` — clean.
 - `uv run alembic upgrade head` then `downgrade -1` then `upgrade head` — clean,
@@ -145,20 +209,31 @@ so it cannot be forgotten.
 
 1. **That the model takes the `insufficient_evidence` branch reliably.** §3
    proves the branch is reachable and correct on one withheld case. One
-   observation is not a rate, and a cheaper model is likelier to confabulate a
-   cause that reads well. **Block G scores that branch specifically, on both
-   models and now both providers.**
+   observation is not a rate.
+
+   **And §7 finding 3 raises the stakes on this considerably.** The first
+   attempt at that case confabulated at confidence 1.00, and the cause was a
+   tool returning `[]` where it meant "denied". The branch is reachable when
+   the tool layer tells the truth about what it is withholding; how often a
+   model takes it when evidence is merely *thin* rather than explicitly marked
+   unavailable is still unmeasured, and is the harder question. **Block G
+   should score the branch against thin evidence as well as withheld
+   evidence**, because only the second is now signposted.
 2. **That `medium` effort retrieves enough evidence.** The signal to watch is a
    report whose cited ids thin out while its conclusions stay confident. §3's
    token counts are the baseline; Block G re-measures and may raise effort.
-3. **That the OpenAI path works against the live API.** Implemented and
-   unit-tested against a stub; the operator's budget was two live calls and
-   both went to the measured Anthropic default.
+3. **That the Anthropic default works against the live API.** This inverted
+   on the day: the Anthropic account had no credit, so `claude-haiku-5-5` was
+   never called and **the OpenAI path is the one with live evidence.** Four of
+   its five §5.1 request settings are therefore asserted only against a stub.
+   Whoever tops up the account should re-run §3's two invocations without
+   `--provider` and append the results; the code path is unchanged.
 4. **That the agent handles an exception shape the seeded dataset lacks.** Six
    faults are investigable. The engine's named raises — mixed currency, an
    unresolvable commission rule — classify correctly and have never been handed
    to the agent.
-5. **Anything about cost at volume.** Two investigations is not a cost model.
+5. **Anything about cost at volume.** Four investigations is not a cost model.
+   For what it is worth, each completed run took 6-8 seconds on `gpt-4.1`.
 6. **That a real downgrade is flagged.** Nothing can downgrade, so the flag is
    exercised only by a stub. See §1's note on criterion 6.
 
@@ -198,7 +273,85 @@ so it cannot be forgotten.
    the natural reading was that `output_config` and adaptive thinking applied
    to both providers.
 
-## 7. Four things found by running it
+## 7. Seven things found by running it
+
+**Three of these came from the live calls and could not have come from
+anywhere else.** Findings 1, 2 and 3 below were each invisible to a stub,
+because a stub accepts whatever schema it is handed, returns whatever model id
+it is told to, and cannot tell the agent anything the tool layer does not say.
+They are the argument for §3's two hand-run calls being worth their cost.
+
+1. **OpenAI's strict mode rejects a `$ref` carrying sibling keywords**, and
+   Pydantic emits exactly that for an enum field with a docstring:
+
+       Invalid schema for response_format 'investigation_report':
+       context=('properties', 'verdict'), $ref cannot have keywords
+       {'description'}
+
+   Fixed by inlining `$defs` in the OpenAI adapter rather than by changing
+   `agent/report.py`. The report model is the seam between the providers, and
+   bending it to one provider's schema dialect is how the two stop being
+   comparable - the adaptation belongs in the adapter.
+   `test_the_strict_schema_carries_no_refs` pins it.
+
+2. **The downgrade flag fired on every OpenAI response, as a false positive.**
+   A request for `gpt-4.1` is served by `gpt-4.1-2025-04-14`, and a plain
+   inequality called that a model swap. It is the same model named more
+   precisely. [[tech-stack]] §5.2's flag exists to tell a finance team their
+   reasoning came from a weaker model, and **a flag that fires every time is
+   noise rather than evidence - the same failure as never firing.** Now
+   prefix-matched, with `claude-haiku-5-5` served by `claude-sonnet-5-5` still
+   a downgrade. Invisible to the Anthropic path, which returns the requested
+   id exactly.
+
+3. **A withheld record returned `[]`, which the agent read as "none exist".**
+   The most serious finding in the block. On the first run of criterion 3 the
+   agent returned `reported` at **confidence 1.00**, asserting "No seller
+   ledger entries exist to debit the seller for refund ... The refund and
+   commission reversal occurred at PayPal but are missing from the
+   marketplace's books." It had been denied those records, not shown their
+   absence.
+
+   **The defect was mine, not the model's.** `[]` made "you may not see the
+   ledger" identical to "the ledger has no entries", so the only reading
+   available was the confabulated one. This is precisely the distinction
+   [[mission]] P3 protects for money - an absent value and a measured zero are
+   different claims - applied to evidence, and I collapsed it in the tool
+   layer while quoting P3 elsewhere in the same file.
+
+   A withheld kind now raises `Withheld`, which `registry.run_as_json` turns
+   into an explicit `{"unavailable": true, "record_kind": ...}` marker telling
+   the model it cannot conclude anything about existence. Prompt rule 5 says
+   the same. **The same model then returned `insufficient_evidence` with zero
+   causes**, naming the unavailable records.
+
+   Two things follow. **The stub test encoded the bug**: it asserted
+   `fetch_seller_ledger_entries() == []`, which is why nothing failed. It now
+   asserts the marker, and the stub provider calls `run_as_json` rather than
+   `call` so it takes the path the real providers take. And **this is evidence
+   about tool design, not about model capability** - Block G should not read
+   the first attempt as a `claude-haiku-5-5`-versus-`gpt-4.1` result, because
+   any model given an empty list would have had the same two readings and the
+   confabulated one reads better.
+
+4. **`demo_data.reset`'s delete list had fallen behind the schema by six
+   tables.** A real `--reset` failed on `fk_investigation_tenant_id_tenant`.
+   Block E's two tables were missing and so were **Block D's four**, which had
+   never fired because nothing committed a run row outside the rolled-back
+   suite. Fixed, and
+   `test_demo_data.py::test_reset_empties_every_tenant_scoped_table` now
+   derives the expected set from `Base.metadata`, so a table added later is
+   covered whether or not anyone remembers that function.
+
+5. **Two of my own test modules read ambient environment state.** The settings
+   tests passed only while no agent key was configured and failed the moment
+   one was exported - three failures, none about anything that had changed in
+   the code. One store test asserted `investigation` was globally empty after
+   a rollback, which is only true on a database no live run has touched. Both
+   are now hermetic. A test whose result depends on the developer's shell is a
+   test that will fail in CI for reasons nobody can reproduce locally.
+
+## 7a. Four things found by building it
 
 1. **Structured outputs and the Tool Runner compose, through `output_format`
    rather than `output_config["format"]`.** `plan.md` Group 4 left this open

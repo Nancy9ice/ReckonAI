@@ -70,13 +70,17 @@ whole reason the counts are taken separately.
 - The two clauses are disjoint sets, so an order matching both is counted once.
 - An empty window is a successful run with zero findings, not an error.
 
-**A dataset fact worth recording.** The seeded `placed_at` values run from
-2026-11-02 to 2026-11-19 - they straddle today - so a *trailing* window of the
-shape `schedule.py` builds covers only part of the dataset. That is correct
-behaviour and not a defect, but it means a scheduled run on the demo data shows
-a subset unless the window is widened. **Block F needs to know this**: its
-dashboard will show whatever the last run covered, and the demo wants the six
-faults.
+**A dataset fact worth recording.** The seeded `placed_at` values are fixed in
+November 2026 - `_at(day)` is `datetime(2026, 11, day, 12:00 UTC)` - and run
+from the 2nd to the 19th, with all six faults late in that range (ORD-0013 on
+the 14th through ORD-0018 on the 19th). So a *trailing* two-day window covers
+only part of the dataset, and run on 2026-11-10 it selected nine clean orders
+and no faults at all.
+
+That is correct behaviour rather than a defect, and it needs **no reseed and no
+widened window** - see §9 debt 2. The exception queue reads the latest verdict
+per fault across runs rather than one run's rows, so a single wide initial run
+populates every order and trailing runs keep it current.
 
 ## 4. What is deferred, and why it is not debt
 
@@ -185,10 +189,34 @@ expected-versus-ledger comparison in the product.
    orders and discarding them. At eighteen orders this is not worth a second
    code path that could disagree with the first. It would be at eighteen
    thousand.
-2. **A trailing window does not cover the seeded dataset** (§3). Block F's
-   dashboard shows what the last run covered, so the demo needs a widened
-   window or a re-dated seed. Flagged rather than decided, because it is a
-   demo-staging choice.
+2. **The queue must read the latest verdict per fault, not a run's rows.**
+   This entry replaces one that said Block F's dashboard "shows what the last
+   run covered" and that the demo therefore needed a widened window or a
+   re-dated seed. **That was wrong about Phase 14**, which requires the
+   exception queue to group, sort and filter *over the seeded dataset* and
+   ranks it by `readme.md` §9.3's factors - impact, affected sellers, age,
+   deadlines, confidence. Only R13's lean **run summary** is run-scoped, and
+   only through its click-through to that run's exceptions.
+
+   The real consequence of D1's append-only table: one fault gets a row per
+   run, so six faults over ten runs are sixty rows. A queue selecting all of
+   them repeats each fault ten times; one selecting only the newest run shows
+   only what that window covered. The queue therefore reads **the latest row
+   per `(order_external_ref, code)` across runs**, which is also what makes
+   the history useful rather than awkward - the superseded rows stay as the
+   audit trail of when a verdict changed, which is how R10 is observable.
+
+   This dissolves the windowing worry rather than needing a reseed: one wide
+   initial run populates all eighteen orders, trailing two-day runs update
+   whatever they cover, and the queue reads the latest verdict for each. **No
+   reseed and no widened cron window are required.**
+
+   Block D deliberately does not build that query - it is a dashboard read,
+   and `reconciliation_exception` carries the index for it
+   (`tenant_id, run_id, impact_amount`) plus indexes on `code`, `order_
+   external_ref` and `is_exception`. A latest-per-key read may want an index
+   on `(tenant_id, order_external_ref, code)`; Block F should add it when it
+   writes the query rather than guessing the shape now.
 3. **`job.payload` is untyped JSONB.** The handler reads two ISO dates out of
    it and `_window_from` is the only parser, so a malformed payload fails at
    dispatch with a legible error rather than silently. A per-job-type schema

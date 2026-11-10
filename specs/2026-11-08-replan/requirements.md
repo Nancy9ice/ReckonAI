@@ -472,6 +472,16 @@ provider's retained response, a Coverage view (clean, parked, with exceptions)
 and CSV export of the queue and the decision log. Its `validation.md` tabulates
 a `/code-review medium` (10 findings, 9 fixed) and what is unproven.
 
+**Later in Block F, at the operator's request:** "Investigate all" and checkbox
+"Investigate selected" on the queue (inline confirm, because each is a paid
+model call); the **scheduled run now queues investigations for what it finds**,
+capped by `AUTO_INVESTIGATE_MAX` (default 25) and skipped with a warning when no
+model key is set, while a person's "Run reconciliation" never investigates by
+itself; and a plain-language wording pass for a finance audience, all in
+`frontend/src/copy.ts` (requirements D17 and D18). That pass fixed a real
+mislabel: the drawer showed the engine's "Expected" and "Reported" the wrong way
+round for a reader.
+
 **Four things from Block F worth carrying.** A decision is keyed by (order,
 code), not by exception id, because every run writes a fresh row for the same
 fault. Approver identity is free text with no authentication (D5), the weakest

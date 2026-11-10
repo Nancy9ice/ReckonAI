@@ -77,6 +77,8 @@ decision rather than an omission (`specs/tech-stack.md` §5, amended
 | **A reconciliation run is date-grained** | Its window and its dedupe key are dates, so a second "Run reconciliation" on the same day is answered rather than queued |
 | **Priority ranks impact within a currency, never across** | Comparing USD with EUR would need an exchange rate, which the product does not invent |
 | **The queue cannot retract an exception a later run stops emitting** | Same cause as above: runs do not record which orders they covered |
+| **The nightly run investigates at most 25 exceptions** (`AUTO_INVESTIGATE_MAX`), chosen by order reference, not by priority | Each investigation is a paid model call. A person's own "Run reconciliation" never investigates; the queue has "Investigate all" and "Investigate selected" for that |
+| **The wording is untested with a finance user** | It was written for a marketplace finance reader from the engine's behaviour, and checked on screen for only some of the exception types |
 | **The grid assistant changes how the queue is displayed and nothing else** | It is sent no record or amount, and aggregation is excluded from what it can ask for |
 
 ---

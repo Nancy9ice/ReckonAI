@@ -50,6 +50,14 @@ moves to `/service`). Things not to re-derive:
   queues up to `AUTO_INVESTIGATE_MAX` investigations (a `failed` one is retried,
   a concluded one is not), and skips with a warning if no model key is set. The
   queue also has bulk "Investigate all" and checkbox "Investigate selected".
+- **All user-facing wording is in `frontend/src/copy.ts`**, written for a
+  marketplace **finance** reader. The engine's `expected` and `reported` are not
+  what those words suggest: for every type that carries them "expected" is the
+  figure that is right (PayPal's settlement, the rule's commission, what the
+  seller is owed) and "reported" is what the marketplace recorded, so the UI
+  labels them per type ("PayPal settled" / "Marketplace recorded"). Change a
+  label there, never by showing the engine's words. The exception types have a
+  plain title, a meaning and an action each.
 - **A decision is keyed by (order, code)**, not by exception id: every run writes
   a fresh row for the same fault.
 - **The approver is free text, unauthenticated** (D5). Do not describe it as an

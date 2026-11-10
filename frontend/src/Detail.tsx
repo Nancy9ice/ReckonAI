@@ -166,7 +166,10 @@ export default function Detail({ id, onChanged }: Props) {
             {inv.downgraded && " (downgraded)"}
           </p>
           {inv.verdict === "failed" && (
-            <p className="error">The investigation failed and produced no report.</p>
+            <p className="error">
+              The investigation failed and produced no report.
+              {inv.summarized_reasoning ? ` ${inv.summarized_reasoning}` : ""}
+            </p>
           )}
           {inv.verdict === "insufficient_evidence" && (
             <p>
@@ -204,7 +207,7 @@ export default function Detail({ id, onChanged }: Props) {
               </li>
             ))}
           </ol>
-          {inv.summarized_reasoning && (
+          {inv.summarized_reasoning && inv.verdict !== "failed" && (
             <details>
               <summary>Summarised reasoning</summary>
               <p>{inv.summarized_reasoning}</p>

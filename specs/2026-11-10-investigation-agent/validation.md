@@ -627,28 +627,35 @@ here rather than discovered after a merge has already deployed them.
    it is the fixture generator, deliberately independent evidence against the
    engine, and `seed.verify()` recomputes every stated figure, which is a
    stronger check than types.
-7. **No failover on a provider outage - an open decision, not a settled one.**
-   Nothing falls back to the other provider on *any* failure. A refusal ends
-   the investigation as `failed`, which is [[tech-stack]] §5's decision and is
-   right for refusals (rerouting a refusal is shopping for a model that says
-   yes). But a transport or account error - a reset connection, a 5xx, an
-   exhausted credit balance - also raises `ProviderError` and is recorded as
-   `failed`, and **that case was never decided**: the no-fallback reasoning was
-   carried over from refusals without being re-examined for outages. It matters
-   now because the Anthropic default cannot run at all (no credit), so with
-   `AGENT_PROVIDER=anthropic` every investigation fails although an OpenAI key
-   may be set.
+7. ~~**No failover on a provider outage.**~~ **Decided 2026-11-10, not a debt.**
+   The operator's decision: *the user names the provider they want*, and
+   nothing reroutes for them. There is no failover between providers on any
+   failure - a refusal, a connection error, a 5xx, or an exhausted credit
+   balance - and none is planned.
 
-   The option on the table is failover on `ProviderError` only, with refusals
-   still terminal. The report would be stored with the provider that actually
-   served it, so the audit trail stays honest: `provider` and `model_returned`
-   would show it, and `downgraded` would need a deliberate answer for a
-   cross-provider serve. It is small (under an hour) and unbuilt. Until it is
-   decided, **choose the provider per environment**: `AGENT_PROVIDER`,
-   `AGENT_MODEL` and the matching key, in the environment or via
-   `--provider` / `--model` for one run. The provider and model must agree or
-   construction is refused. On the OpenAI key available so far, `gpt-4.1` and
-   `gpt-4o` work and the `gpt-5` family needs organization verification.
+   *The question that was open.* The no-fallback decision in [[tech-stack]] §5
+   was written for refusals, where it is plainly right: rerouting a refusal is
+   shopping for a model that says yes. It was then carried over to outages
+   without being re-examined, and an outage is a different case - failing over
+   on a dead connection changes no one's judgment. Failover on `ProviderError`
+   alone was scoped (opt-in `AGENT_FALLBACK_PROVIDER` / `AGENT_FALLBACK_MODEL`,
+   one audit row per attempt, a nullable `fallback_of_id`) and **declined** in
+   favour of explicit selection.
+
+   *Why that is a sound answer rather than a gap.* A report's provenance is the
+   thing a finance team is entitled to rely on, and "the provider you asked
+   for, or a visible failure" is simpler to reason about than "the provider you
+   asked for, or whichever was up". The cost is that an outage is a failed
+   investigation, recorded as such with its reason, and the remedy is to change
+   the setting - which is one variable.
+
+   *How to choose.* `AGENT_PROVIDER` (`anthropic`, the default, or `openai`),
+   `AGENT_MODEL` and the matching key, in the environment; or `--provider` /
+   `--model` for one run. The provider and model must agree or construction is
+   refused. With the keys available so far, `gpt-4.1` and `gpt-4o` work on
+   OpenAI and the `gpt-5` family needs organization verification, and the
+   Anthropic default cannot run until that account has credit - so a deployment
+   that wants working investigations today must set `AGENT_PROVIDER=openai`.
 6. **`output_format=` is deprecated and is still the only route to a parsed
    Anthropic report.** The SDK's own error text says to use
    `output_config.format`, but `parsed_output` is produced solely by

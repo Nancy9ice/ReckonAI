@@ -1,46 +1,107 @@
 # Block F — validation
 
-Mergeable when every box is evidenced in this file, with the command or
-screenshot that proved it. A merge deploys, so §3 comes before the merge.
+Evidence recorded 2026-11-10. `[x]` means shown by the command or observation
+named; `[ ]` means **not proven**, and the reason is stated, not softened.
 
 ## 1. Phase 13 exit criteria
-- [ ] Approve records decision + approver; test proves no ledger, refund or
-      payout write and no money-moving import on the path (P6).
-- [ ] Reject recorded with equal weight: same table, same fields, same read.
-- [ ] Decisions are append-only; a second decision supersedes by read, the first
-      row survives. A `CHECK`/trigger or test refuses update and delete.
-- [ ] Confirmed and suspected are visibly distinct in API and UI.
-- [ ] Score uses all four factors; breakdown returned; mixed-currency impact is
-      ranked within currency, never converted. Pure-module tests pass under
-      purity gate and strict mypy.
 
-## 2. Phase 14 exit criteria (browser pass, Chrome, seeded dataset)
-- [ ] Queue groups, sorts and filters; the 5 manifest exceptions appear and the
-      clean orders do not.
-- [ ] Detail shows cause, evidence records and recommendation; approve/reject
-      reachable and persists across reload.
-- [ ] Every amount shows its own currency; grep of `frontend/src` finds no
-      arithmetic on amount strings and no `parseFloat`/`Number(` on money.
-- [ ] A withheld kind renders "unavailable", not an empty list.
-- [ ] Layout usable at laptop width; no emojis anywhere (hard rule).
+- [x] **Approve records decision and approver, and moves no money (P6).**
+  `tests/test_api_read.py::test_approving_records_the_decision_and_moves_no_money`
+  counts ledger, refund and disbursement rows before and after; and
+  `test_the_api_package_cannot_name_a_money_moving_table` fails if `api/` names
+  one. Observed in the browser: approving ORD-0013 wrote one row.
+- [x] **Rejection has equal weight.** Same table, fields and read; asserted by
+  `test_rejecting_has_equal_weight_and_the_same_shape`.
+- [x] **Append-only.** A second decision adds a row and the newest is effective
+  (`test_deciding_again_appends_and_keeps_the_first`). Enforced by code path
+  (a scan test refuses any update or delete of the model), not by a database
+  trigger - `demo_data.reset` legitimately deletes under RESTRICT.
+- [x] **Confirmed vs suspected distinct**, from the stored `confirmed` column:
+  `test_suspected_is_distinct_from_confirmed`, and a badge in the grid and detail.
+- [x] **Score uses all four factors**, with the breakdown returned and
+  own-currency impact ranking: `tests/test_priority.py` (7 tests), under the
+  purity gate and strict mypy. An exception with no investigation has
+  `confidence: null`, not zero.
 
-## 3. Deployed environment (before merge)
-- [ ] Node build works in Render's Python runtime (or the build step is moved
-      and recorded). Otherwise the deploy fails; this is checked on a branch
-      preview or settled by reading Render's runtime docs, and noted here.
-- [ ] `render.yaml` carries the agent credential (`sync: false`),
-      `AGENT_PROVIDER`, `AGENT_MODEL`; key set in the dashboard.
-- [ ] Post-merge: `/`, `/health`, `/health/ready`, the dashboard URL and
-      `/api/exceptions` respond; a queued investigation completes against the
-      deployed worker. State which provider/model proved it.
+## 2. Phase 14 exit criteria (Chrome, seeded dataset, local)
+
+- [x] Queue shows exactly the manifest's 5 exceptions and no clean order; groups
+  by type (5 groups observed), sorts by priority, filters by status, decision and
+  text. **Grouping is implemented in the client as one grid per group, not AG Grid
+  row grouping**, which is Enterprise-licensed; see 6.
+- [x] Detail shows the finding, evidence records, and the investigation or its
+  failure; approve persisted across a reload.
+- [x] Every amount shows its own currency ($90.00, EUR 15.00 as a euro symbol).
+  `grep -E "parseFloat|Number\(|toFixed|Math\."` over `frontend/src` matches
+  only a comment.
+- [x] Withheld kinds render as "Unavailable to the agent ... not the same as
+  empty" - **by test of the API and code only; not exercised in the browser**,
+  because no investigation with a withheld kind exists in the seeded database.
+- [x] Run summary lists both runs; clicking one filters the queue to its rows.
+- [ ] **A successful investigation rendered with causes, citations and the
+  recommendation was never seen in the browser.** The only investigation run
+  was against Anthropic, whose account had no credit: it was recorded as
+  `failed` and the UI showed that correctly. The cause list, unresolved-citation
+  styling and the "recommended resolution" block are therefore unobserved.
+
+## 3. Deployed environment (settle before merge - a merge deploys)
+
+- [ ] **Node on Render's Python runtime is unverified.** The build fails soft
+  (`render.yaml`, tested), so the worst case is a deployed API whose `/` is the
+  JSON index. Check after the first deploy: `GET /` must be HTML.
+- [ ] **Agent credential and provider** are declared on the worker with
+  `sync: false` (tested), but **someone must set them in the Render dashboard**:
+  either top up Anthropic, or set `AGENT_PROVIDER=openai`, `AGENT_MODEL=gpt-4.1`
+  and `OPENAI_API_KEY`. Until then every deployed investigation is a recorded
+  failure with the missing variable named.
+- [ ] Post-merge: `/api/exceptions` answers, and a queued investigation
+  completes on the deployed worker. Not done; no merge has happened.
+- [ ] The deployed database has **no reconciliation run until the Cron Job's
+  first tick (01:00 UTC 2026-11-11), which covers 2 of 18 orders.** The dashboard
+  will look nearly empty until a wide run is enqueued by hand, as was done
+  locally with window 2026-10-12 to 2026-11-21.
 
 ## 4. Regression gates
-- [ ] Full suite passes in order (not randomised); `ruff`, strict `mypy`,
-      purity gate, frontend typecheck and build in CI.
-- [ ] Zero exceptions on the fifteen clean purchase units unchanged.
-- [ ] Seed -> run -> reset sequence documented if the UI needs committed rows.
-- [ ] `/code-review medium` run; findings tabulated here with fixes.
 
-## 5. Records to leave
-- Corrections to earlier documents, debts handed to Block G, and anything that
-  is proven only offline stated plainly, not rounded up.
+- [x] 1872 tests pass in order; `ruff`, strict `mypy` (now including `api/`),
+  purity gate green. The local database was reset afterwards
+  (`demo_data --reset`), so the suite runs clean.
+- [x] Frontend `npm run build` (runs `tsc --noEmit`) passes; added to CI as its
+  own job.
+- [x] The clean-baseline gate is untouched: no classifier or engine file changed.
+- [x] **`/code-review medium`: 10 findings, 9 fixed, 1 deferred.**
+
+| Finding | Outcome |
+|---|---|
+| Decision keyed to one run's exception row vanished at the next run | Fixed: keyed by (order, code) like investigations; regression test |
+| Fail-soft build only soft for a missing npm | Fixed: any dashboard failure is soft; test updated |
+| Validation error replaced the whole detail panel | Fixed: separate load and action errors |
+| Impact column sorted and filtered as text | Fixed: column is display-only |
+| Check-then-enqueue not atomic | Fixed: `pg_advisory_xact_lock` per exception |
+| Stale queue response could overwrite a newer one | Fixed: request ticket; selection cleared |
+| Missing order row would 500 the queue | Fixed: nullable date, zero age; regression test |
+| Edge-detector hook over-built | Fixed: a ref |
+| Server error body discarded by the client | Fixed: FastAPI `detail` is shown |
+| `exception_detail` recomputes the whole queue to score one row | **Deferred**: harmless at 18 rows; debt below |
+
+The concurrency fix is covered only by the sequential double-click test; **no
+test races two real connections.**
+
+## 5. Corrections and debts handed on
+
+- **Age reads 0% on every seeded row.** The seed's orders are dated 2026-11-13 to
+  11-19 and today is 11-10, so age is clamped at zero. Real in the data, not a
+  bug in the factor; Block G's demo should account for it.
+- **The queue cannot retract an exception a later run stops emitting**, because a
+  run records how many orders it covered, not which.
+- **The recommendation shown is the top-ranked cause**; the agent produces no
+  separate recommendation field, and nothing in the product acts on it.
+- Debt: scoring one row recomputes the queue (finding above).
+- Debt: `ExceptionOut.seller_name` and `seller_count` are derived per request.
+
+## 6. One decision for the operator
+
+**AG Grid row grouping is an Enterprise feature.** Using it unlicensed would show
+a watermark and breach the licence, so grouping is built outside the grid.
+`readme.md` section 12 describes grouping as the sponsor technology's work; if
+that claim matters, a licence is the alternative.

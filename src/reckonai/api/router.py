@@ -7,8 +7,10 @@ import uuid
 
 from fastapi import APIRouter, HTTPException
 
+from reckonai.agent import grid_assistant
 from reckonai.api import queries, schemas
 from reckonai.api.deps import SessionDep, TenantDep
+from reckonai.config import ConfigurationError, get_settings
 
 router = APIRouter(prefix="/api", tags=["api"])
 
@@ -84,3 +86,21 @@ def investigate(
         raise HTTPException(status_code=404, detail="no such exception")
     session.commit()
     return queries.job_out(job)
+
+
+@router.post("/grid-assistant", response_model=schemas.GridAssistantOut)
+def grid_assistant_route(body: schemas.GridAssistantIn) -> schemas.GridAssistantOut:
+    """Turn a sentence into a grid state. Display only; reads no records.
+
+    The browser sends the grid's own schema and state (AG Grid's AI Toolkit);
+    nothing from the database is involved, so this route takes no session.
+    """
+    try:
+        result = grid_assistant.ask(
+            get_settings(), body.request, body.state, body.grid_schema
+        )
+    except ConfigurationError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    except grid_assistant.GridAssistantError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+    return schemas.GridAssistantOut(**result)

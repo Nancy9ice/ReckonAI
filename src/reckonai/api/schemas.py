@@ -9,9 +9,9 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from reckonai.schemas.money import MoneyOut
 
@@ -130,3 +130,22 @@ class DecisionIn(BaseModel):
     note: (
         Annotated[str, StringConstraints(strip_whitespace=True, max_length=2000)] | None
     ) = None
+
+
+class GridAssistantIn(BaseModel):
+    """A sentence plus the grid's own schema and state, from AG Grid's toolkit."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    request: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)
+    ]
+    state: dict[str, Any]
+    #: Named `grid_schema` because `schema` shadows a pydantic attribute.
+    grid_schema: dict[str, Any] = Field(alias="schema")
+
+
+class GridAssistantOut(BaseModel):
+    gridState: dict[str, Any]  # noqa: N815 - the toolkit's own key names
+    propertiesToIgnore: list[str]  # noqa: N815
+    explanation: str

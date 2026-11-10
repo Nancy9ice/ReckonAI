@@ -62,7 +62,9 @@ export default function QueueGrid({ title, rows, selectedId, onSelect }: Props) 
         valueGetter: (p) => p.data?.priority.score,
         valueFormatter: (p) => formatFraction(p.value),
         sort: "desc",
-        comparator: (a: string, b: string) => Number(a) - Number(b),
+        // Fixed four-place decimal strings, so a numeric collation orders them.
+        comparator: (a: string, b: string) =>
+          a.localeCompare(b, "en", { numeric: true }),
         width: 110,
         tooltipValueGetter: (p) =>
           p.data

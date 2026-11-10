@@ -271,6 +271,12 @@ right call is Block C's D7 precedent: encode the rule, seed nothing.
 - **Block E's agent may enqueue nothing.** It calls `reconcile.run` for a
   recompute, as Block C's handoff states. The queue is not an agent tool, since
   P6 keeps the agent read-only.
+- **Block E is not limited to what a run covered.** `reconcile.run` returns
+  every finding for a tenant and takes no window, so the agent sees all six
+  seeded faults whatever the last scheduled run selected. It may read
+  `reconciliation_exception` for a persisted verdict, but it does not need to
+  and should not reconstruct one: the stored `evidence_refs` are the ids a
+  finding rested on, and recomputing is how the agent checks them.
 - **Job types are a registry entry** (D7), so Block F adds one without touching
   the loop.
 

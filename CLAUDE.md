@@ -33,6 +33,25 @@ B (Phase 10), Block C (Phase 11) and Block D (Phase 8 + R9 + the exception
 table) are complete. Block E is next** — the investigation agent, Phase 12,
 kept **entire**.
 
+**Block E reads these, in this order, and little else.** [[roadmap]] Phase 12
+for the exit criteria; `specs/tech-stack.md` §5 for the model and §5.1 for the
+request configuration, which is unusually specific and was derived from real
+API behaviour — `claude-opus-5-5`, adaptive thinking with `display` set
+explicitly, no sampling parameters at all, forced `tool_choice` returns 400;
+and §5.2 for the four audit constraints, which are as binding as the money
+rules. Then R11 in the replan, which states plainly what was cut (a Haiku
+field-*name*-guessing pass) and what was not (this entire block), and
+distinguishes the three different things these specs call "confidence". Load
+the `claude-api` skill before writing agent code.
+
+Three things Block E inherits rather than builds. `reconcile.run(session,
+tenant_id)` is its recompute tool and returns **every** finding regardless of
+any window, so the agent is not limited to what a scheduled run covered.
+**Cite the capture, never `platform_fee.external_id`** — the latter is rebuilt
+from a payload UUID on every seed, and Block E's exit criterion is that every
+cited id resolves to a real record. And the agent is **read-only**: it may
+enqueue nothing and move nothing (P6).
+
 **Read `specs/2026-11-09-queue-scheduled-run/validation.md` §9 and §8 first**
 (three debts handed forward, three corrections to earlier documents), then
 `specs/2026-11-09-matching-classification/requirements.md` §4, which is Block

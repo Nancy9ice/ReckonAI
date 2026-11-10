@@ -30,8 +30,8 @@ Also read, and in this order:
 
 **Phases 0, 0b, 1, 2, 3, Block A (4 + 5 + 6), the PayPal capture (R16), Block
 B (Phase 10), Block C (Phase 11), Block D (Phase 8 + R9 + the exception table),
-Block E (Phase 12) and Block F (Phases 13 + 14) are built; Block F is on branch
-`block-f-queue-approval-dashboard` and not yet merged.** Block G (eval harness,
+Block E (Phase 12) and Block F (Phases 13 + 14) are built and merged (PR #24,
+merge commit `69a3a0c`, 2026-11-10 23:00 UTC).** Block G (eval harness,
 demo, limitations) is next. **Every merge to `main` deploys** the API and the
 worker.
 
@@ -83,10 +83,10 @@ moves to `/service`). Things not to re-derive:
 first. Its scope is the replan's Block G (one eval command scored against the
 sim manifest, three demo scenarios from a clean database, a rehearsal against the
 deployed app, the limitations section) and Phase 15 in `specs/roadmap.md`.
-**Check whether Block F's PR has merged before branching.** Block G needs Block
-F's code (the API, the dashboard, the decision table); if it has not merged,
-branch from `block-f-queue-approval-dashboard`, not from `main`, or the new
-branch will not contain the thing it evaluates.
+**Block F has merged, so branch from `main`.** Block F's own deploy was
+verified in `specs/2026-11-10-queue-approval-dashboard/validation.md` §3a; read
+it before Block G, because the deployed environment is what Block G rehearses
+against.
 
 **Read `specs/2026-11-10-investigation-agent/validation.md` before touching
 `reckonai/agent/`.** §6 lists five corrections this block made to earlier

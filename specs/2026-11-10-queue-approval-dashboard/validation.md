@@ -61,6 +61,46 @@ named; `[ ]` means **not proven**, and the reason is stated, not softened.
   will look nearly empty until a wide run is enqueued by hand, as was done
   locally with window 2026-10-12 to 2026-11-21.
 
+## 3a. What the deploy showed (PR #24, merged 2026-11-10 23:00 UTC)
+
+Checked from outside, with `curl` and the Render CLI, 23:04 UTC.
+
+- [x] **Both services went live** in about three minutes from the merge (the
+  `blueprint_sync` deploys of `69a3a0c`; the plain commit deploys were superseded
+  by them). The pre-deploy step ran, so **the migration and the demo seed
+  succeeded**: the deployed database holds the 18 seeded orders.
+- [x] **Node is available in Render's Python runtime.** `GET /` returns the
+  dashboard (`text/html`), its 3 MB script loads (200), and `/service` returns the
+  JSON index. This was the largest unverified risk; it is closed.
+- [x] `/health`, `/health/ready` and `/api/coverage` answer 200.
+- [x] **The model credential is set on the web service**: one tiny request to
+  `/api/grid-assistant` returned a valid grid state (HTTP 200). One cheap model
+  call was spent. Which provider it used was not read.
+- [x] **Coverage is honest on an unreconciled database**: 18 orders, 0 clean, 18
+  "not examined", and `/api/runs` is empty. This is the post-review wording doing
+  its job: no run has looked, so nothing is called clean.
+- [x] **Run reconciliation on the deployed app, through the real worker**
+  (2026-11-10 23:08 UTC): queued, claimed and done in 32 seconds (the worker
+  polls every 30). The deployed database now has one run over all 18 orders: 6
+  findings, 5 exceptions, 1 parked, 12 clean, none unexamined, the manifest's own
+  figures. The queue holds ORD-0016 (duplicate ledger entry, $90.00), ORD-0018
+  (payout mismatch, EUR 15.00), ORD-0015 (FX, $32.16), ORD-0013 (missing ledger
+  adjustment, $27.00) and ORD-0014 (commission, $10.00).
+- [x] **An investigation completed on the deployed worker, so its model key
+  works**: ORD-0016 reached `reported` on `openai` / `gpt-4.1` in 32 seconds with
+  one cause, naming the two ledger entries and the 90.00 USD double credit, and
+  **0 unresolved citations**. This is the first successful investigation observed
+  on Render, and the deployed run of Phase 12's second criterion. One paid call.
+  The cause text was read, not graded against the manifest.
+- [ ] **The Anthropic provider is still unobserved** (the deployed pair is
+  OpenAI).
+- [ ] **The nightly path has not run on Render.** The Cron Job redeployed and
+  its first tick is 01:00 UTC 2026-11-11. Today's run will find the window
+  already covering 2 of 18 orders, and the exceptions already investigated or
+  not; what it queues should be read tomorrow.
+- [ ] Whether the AG Grid watermark is gone, and how the wording looks on the
+  deployed pages, were not seen in a browser.
+
 ## 4. Regression gates
 
 - [x] 1872 tests pass in order; `ruff`, strict `mypy` (now including `api/`),

@@ -37,9 +37,9 @@ from reckonai.models.lifecycle import state_check
 #: handler claims, which sits in the queue looking like a backlog rather than
 #: like a bug. The `CHECK` refuses it at the insert instead.
 #:
-#: One member today. Block F registers its own handler and adds its type here
-#: (requirements.md D7), which is a one-line change by design.
-JOB_TYPES: tuple[str, ...] = ("reconciliation_run",)
+#: Two members: Block F registered `investigation` here (requirements.md D7),
+#: a one-line change by design plus the migration that widens the `CHECK`.
+JOB_TYPES: tuple[str, ...] = ("reconciliation_run", "investigation")
 
 #: Where a job is in its life.
 #:

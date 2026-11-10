@@ -98,9 +98,21 @@ class InvestigationDetail(InvestigationSummary):
     causes: list[CauseOut]
 
 
+class JobOut(BaseModel):
+    id: uuid.UUID
+    status: str
+    attempts: int
+    #: Why it failed, where it did: a missing agent credential reads here.
+    last_error: str | None
+    created_at: datetime
+
+
 class ExceptionDetail(ExceptionOut):
     investigation_detail: InvestigationDetail | None
     decisions: list[DecisionOut]
+    #: The newest investigation job for this exception, so the page can show
+    #: "queued" or "failed: <why>" while no investigation row exists yet.
+    investigation_job: JobOut | None
 
 
 class DecisionIn(BaseModel):

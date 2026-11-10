@@ -15,7 +15,7 @@ from collections.abc import Callable
 
 from sqlalchemy.orm import Session
 
-from reckonai.jobs import queue, reconcile_job
+from reckonai.jobs import investigation_job, queue, reconcile_job
 from reckonai.jobs.reconcile_job import AlreadyReconciled
 from reckonai.logging import event
 from reckonai.models import Job
@@ -34,8 +34,15 @@ def _handle_reconciliation_run(
     reconcile_job.execute(session, tenant_id=tenant_id, payload=payload)
 
 
+def _handle_investigation(
+    session: Session, tenant_id: uuid.UUID, payload: dict[str, object]
+) -> None:
+    investigation_job.execute(session, tenant_id=tenant_id, payload=payload)
+
+
 HANDLERS: dict[str, Handler] = {
     reconcile_job.JOB_TYPE: _handle_reconciliation_run,
+    investigation_job.JOB_TYPE: _handle_investigation,
 }
 
 

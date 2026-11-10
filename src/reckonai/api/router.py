@@ -64,3 +64,23 @@ def decide(
     found = queries.exception_detail(session, tenant_id, exception_id)
     assert found is not None
     return found
+
+
+@router.post(
+    "/exceptions/{exception_id}/investigate",
+    response_model=schemas.JobOut,
+    status_code=202,
+)
+def investigate(
+    exception_id: uuid.UUID, session: SessionDep, tenant_id: TenantDep
+) -> schemas.JobOut:
+    """Queue an investigation. Returns at once; the worker runs it.
+
+    The agent is read-only (`mission.md` P6), so this changes nothing about the
+    books; it adds an investigation row when the job completes.
+    """
+    job = queries.request_investigation(session, tenant_id, exception_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="no such exception")
+    session.commit()
+    return queries.job_out(job)

@@ -19,10 +19,12 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from reckonai.api import schemas
+from reckonai.jobs import investigation_job, queue
 from reckonai.models import (
     ExceptionDecision,
     Investigation,
     InvestigationCause,
+    Job,
     Order,
     OrderItem,
     ReconciliationException,
@@ -327,10 +329,12 @@ def exception_detail(
         )
         .order_by(ExceptionDecision.decided_at.desc())
     ).all()
+    job = latest_investigation_job(session, tenant_id, row.id)
     return schemas.ExceptionDetail(
         **base.model_dump(),
         investigation_detail=detail,
         decisions=[_decision_out(d) for d in history],
+        investigation_job=None if job is None else job_out(job),
     )
 
 
@@ -371,3 +375,56 @@ def record_decision(
     session.add(decision)
     session.flush()
     return decision
+
+
+def job_out(job: Job) -> schemas.JobOut:
+    return schemas.JobOut(
+        id=job.id,
+        status=job.status,
+        attempts=job.attempts,
+        last_error=job.last_error,
+        created_at=job.created_at,
+    )
+
+
+def latest_investigation_job(
+    session: Session, tenant_id: uuid.UUID, exception_id: uuid.UUID
+) -> Job | None:
+    return session.scalar(
+        select(Job)
+        .where(
+            Job.tenant_id == tenant_id,
+            Job.job_type == investigation_job.JOB_TYPE,
+            Job.payload["exception_id"].astext == str(exception_id),
+        )
+        .order_by(Job.created_at.desc(), Job.run_after.desc())
+        .limit(1)
+    )
+
+
+def request_investigation(
+    session: Session, tenant_id: uuid.UUID, exception_id: uuid.UUID
+) -> Job | None:
+    """Enqueue an investigation, or return the one already in flight.
+
+    A double click is one job: while a `queued` or `claimed` job exists for the
+    exception, that job is returned rather than a second enqueued. `None` if
+    the exception is not this tenant's.
+    """
+    exists = session.scalar(
+        select(ReconciliationException.id).where(
+            ReconciliationException.tenant_id == tenant_id,
+            ReconciliationException.id == exception_id,
+        )
+    )
+    if exists is None:
+        return None
+    current = latest_investigation_job(session, tenant_id, exception_id)
+    if current is not None and current.status in ("queued", "claimed"):
+        return current
+    return queue.enqueue(
+        session,
+        tenant_id=tenant_id,
+        job_type=investigation_job.JOB_TYPE,
+        payload=investigation_job.payload_for(exception_id),
+    )

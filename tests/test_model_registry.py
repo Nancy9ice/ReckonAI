@@ -83,6 +83,25 @@ TABLES_WITHOUT_EVIDENCE = (
     # `test_an_exception_cannot_exist_without_its_evidence` below is the
     # compensating gate, so this exclusion costs no coverage.
     | {"job", "processed_event", "reconciliation_run", "reconciliation_exception"}
+    # Block E's two, excluded on exactly the `reconciliation_exception`
+    # reasoning above and with less tension, because **neither holds a
+    # monetary value at all**. specs/mission.md P1 keeps every figure in an
+    # investigation coming from `reckonai.reconcile`, so a report cites
+    # records and explains amounts it never computed; there is no amount here
+    # to demand evidence for.
+    #
+    # An investigation is a conclusion drawn over many records, so a single
+    # `raw_payload_id` would assert that one payload is the evidence for a
+    # conclusion several records support - the same narrower-than-the-truth
+    # claim P7 is protected from in the finding's case.
+    #
+    # What carries the evidence is `investigation_cause.cited_refs`, NOT NULL,
+    # and the chain is *stronger* here than for a finding: every cited id is
+    # resolved against a real record when the row is written, and the ones
+    # that did not resolve are persisted in `unresolved_refs` rather than
+    # dropped. Phase 12's second exit criterion is that no citation is
+    # fabricated, and that column is how it is measured rather than asserted.
+    | {"investigation", "investigation_cause"}
 )
 
 

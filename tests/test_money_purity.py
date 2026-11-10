@@ -67,6 +67,11 @@ FORBIDDEN_IMPORTS = ("sqlalchemy", "psycopg", "httpx", "requests", "reckonai.db"
 #: package is a cause's `confidence`, which is not money - and adding `agent`
 #: here would flag exactly that field while proving nothing about the money
 #: rules it has no way to break.
+#:
+#: Its *column* is `NUMERIC(4, 3)` even so, because
+#: `tests/test_models_schema.py::test_no_column_is_a_binary_float` refuses a
+#: binary float anywhere in the schema and that gate was left absolute rather
+#: than given its first exception.
 PURE_PACKAGES = ("money", "engine", "recon")
 
 

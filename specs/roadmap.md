@@ -1,7 +1,9 @@
 # ReckonAI — Roadmap
 
 > **Status:** Constitution. Implementation order and phase boundaries.
-> **Next: Block D** — the `jobs` table, `FOR UPDATE SKIP LOCKED`,
+> **Updated 2026-11-10: Phases 12, 13 and 14 are built (Blocks E and F; F is
+> unmerged). Next is Block G (Phase 15: eval, demo, limitations).** The rest of
+> this note is the earlier handoff to Block D, kept as history. **Block D** — the `jobs` table, `FOR UPDATE SKIP LOCKED`,
 > `processed_events`, the Cron Job, the date-windowed run, **and the exception
 > table Phase 11 assigned to it** (that block's `requirements.md` D8). Phases
 > 0, 0b, 1, 2, 3, 4, 5, 6, 10 and 11 are complete; Phase 7 is partially
@@ -1026,7 +1028,9 @@ model.
 
 ---
 
-## Phase 13 — Investigation queue and approval gate · 0.5 day
+## Phase 13 — Investigation queue and approval gate · 0.5 day · **BUILT 2026-11-10, not yet merged**
+
+> Evidence: `specs/2026-11-10-queue-approval-dashboard/validation.md` §1.
 
 > **Kept as its own block, 2026-11-08 (R5).** The cutline below names this as
 > the first thing to drop, folding a minimal approve/reject into Phase 14. That
@@ -1054,7 +1058,11 @@ recorded.
 
 ---
 
-## Phase 14 — Operations dashboard · 1 day
+## Phase 14 — Operations dashboard · 1 day · **BUILT 2026-11-10, not yet merged**
+
+> Evidence: `validation.md` §2, §4a, §4b in the same directory. Unproven until a
+> deploy: Node on Render, the agent credential, a successful investigation
+> rendered in a browser.
 
 > **Replanned 2026-11-08 (R13):** kept, with two changes. The **seller financial
 > position view is dropped** — the least load-bearing of the four views for the

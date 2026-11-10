@@ -37,18 +37,33 @@ worker.
 
 **Read `specs/2026-11-10-queue-approval-dashboard/validation.md` before
 touching `reckonai/api/`, `frontend/` or the decision table**; §3 lists what is
-unproven until a deploy (Node on Render, the agent credential, which only a
-person can set in the dashboard) and §4 tabulates the code review. In short:
-`reckonai/api/` is the read API plus the append-only decision route and the
-queued-investigation route; `reckonai/recon/priority.py` is the pure score;
-`frontend/` is React + Vite + AG Grid Community, served by FastAPI at `/` when
-built (the JSON index moves to `/service`). **A decision is keyed by (order,
-code), not by exception id**, because every run writes a fresh row for the same
-fault. AG Grid grouping is Enterprise, so grouping is built outside the grid.
+unproven until a deploy and §4 tabulates the code review.
 
-The notes below on Block F describe it as it was before it was built; the facts
-(no read API, no frontend, no agent credential in `render.yaml`) are now
-addressed except the credential value, which is set in the Render dashboard.
+`reckonai/api/` is the read API plus the append-only decision route, the queued
+investigation, run-now, evidence, coverage, CSV export and the grid assistant;
+`reckonai/recon/priority.py` is the pure score; `frontend/` is React + Vite +
+AG Grid **Enterprise**, served by FastAPI at `/` when built (the JSON index
+moves to `/service`). Things not to re-derive:
+
+- **A decision is keyed by (order, code)**, not by exception id: every run writes
+  a fresh row for the same fault.
+- **The approver is free text, unauthenticated** (D5). Do not describe it as an
+  identity.
+- **"Clean" means "no newest finding"**; a run records how many orders it covered,
+  not which. A run is date-grained, so a second run-now the same day is answered,
+  not queued.
+- **The grid assistant is display-only**: no record or amount is sent, and
+  aggregation and pivot are excluded from its schema. It runs on the **web**
+  service, so the model credential is declared there as well as on the worker.
+- **`evidence.py` is the one `api/` module allowed to name money tables**, and a
+  test holds it to read-only. The P6 guard otherwise forbids them.
+- **AG Grid licence** is the build-time `VITE_AG_GRID_LICENSE_KEY` (local
+  environment file and Render's web build); do not read or print that file.
+  Master/detail cannot be combined with row grouping.
+- **Local UI work needs the worker running** for Run reconciliation and
+  Investigate (`WORKER_TICK_SECONDS=3` locally; the default is 30). **A seeded dev
+  database breaks the suite** (`test_migrations` downgrades the schema): run
+  `python -m reckonai.demo_data --reset` before `pytest`.
 
 **Two things Block F builds that may not be obvious.** There is **no read API**
 — the deployed service exposes only `/`, `/health`, `/health/ready` and

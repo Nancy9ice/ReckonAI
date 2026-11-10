@@ -151,9 +151,16 @@ test races two real connections.**
 - Debt: scoring one row recomputes the queue (finding above).
 - Debt: `ExceptionOut.seller_name` and `seller_count` are derived per request.
 
+- **Approver is free text** (D5): confirmed in conversation, accepted for the
+  MVP. A named-user login (about an hour) or SSO (about a day) is the fix.
+- **Block G's handoff:** seeded orders are dated 2026-11-13 to 11-19, so age is
+  0%; the Anthropic provider and a successful investigation rendered in a browser
+  are unproven; the deploy values (licence key, provider, API keys on web and
+  worker) need a person; the worker's 30-second poll makes a deployed
+  "Run reconciliation" feel slow.
+
 ## 6. One decision for the operator
 
-**AG Grid row grouping is an Enterprise feature.** Using it unlicensed would show
-a watermark and breach the licence, so grouping is built outside the grid.
-`readme.md` section 12 describes grouping as the sponsor technology's work; if
-that claim matters, a licence is the alternative.
+**Resolved 2026-11-10.** The operator has an AG Grid Enterprise licence, so
+grouping is native (D12). Whether the watermark is gone was not confirmed in
+this session.

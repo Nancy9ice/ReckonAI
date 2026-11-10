@@ -453,19 +453,36 @@ record of completed phases and record what was true when written.
 
 ## State
 
-**Updated 2026-11-10 after Block E.** This section is the first thing a new
+**Updated 2026-11-10 after Block F.** This section is the first thing a new
 session reads, so it is kept current rather than left as a record of when the
 replan was written.
 
-**Blocks D and E are complete. Block F (queue, approval, dashboard: Phases 13
-and 14) is next**. *Corrected 2026-11-10:* this used to add "and it owns the
-one remaining deploy", which was wrong - every merge to `main` deploys.
+**Blocks D, E and F are built. Block G (eval harness, demo script, rehearsal,
+limitations) is next.** Block F is on branch `block-f-queue-approval-dashboard`
+and **not yet merged**; a merge deploys, and its prerequisites are in
+`specs/2026-11-10-queue-approval-dashboard/validation.md` §3.
 
-**Block F starts by writing its own spec**, as every prior block did, and
-should read `specs/2026-11-10-investigation-agent/validation.md` §7b before
-anything else: five things to settle before a merge deploys. The two largest are that `render.yaml` declares **no agent credential**,
-and that there is **neither a read API nor any frontend** - so Block F builds
-both halves rather than a UI over an existing API.
+**Block F delivered Phases 13 and 14**, and built the read API and the frontend
+that did not exist: the append-only approve/reject record, the pure priority
+score over the four factors, a queued investigation job, and a React + AG Grid
+Enterprise dashboard. Beyond the roadmap's list it added, at the operator's
+request: a natural-language grid assistant (AG Grid's AI Toolkit, display-only),
+a "Run reconciliation" action, cited references that open as records with the
+provider's retained response, a Coverage view (clean, parked, with exceptions)
+and CSV export of the queue and the decision log. Its `validation.md` tabulates
+a `/code-review medium` (10 findings, 9 fixed) and what is unproven.
+
+**Four things from Block F worth carrying.** A decision is keyed by (order,
+code), not by exception id, because every run writes a fresh row for the same
+fault. Approver identity is free text with no authentication (D5), the weakest
+part of an accountability product and a recorded limitation. "Clean" means "no
+newest finding": a run records how many orders it covered, not which. And a run
+is date-grained, so "Run reconciliation" a second time in one day is answered,
+not queued.
+
+**Block G inherits** the seeded orders being dated after today (so every age
+factor reads 0%), the unproven Anthropic path and successful-investigation
+rendering, and the deploy values only a person can set.
 
 Block E delivered Phase 12 entire: read-only retrieval tools plus the engine as
 a recompute tool, the structured report with ranked causes and per-cause cited

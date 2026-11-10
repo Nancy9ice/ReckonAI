@@ -68,6 +68,17 @@ decision rather than an omission (`specs/tech-stack.md` §5, amended
 | **The model is a setting, and the default is the cheaper one.** `settings.agent_model` defaults to `claude-haiku-5-5` | The argument that the strongest model pays for itself on multi-step evidence reasoning still stands, but it is asserted rather than measured. The eval harness is the instrument that settles it, and the model is configuration so it can be scored either way with no code change. Every response's model id is stored and compared against the one requested, so the audit trail always states which model produced a report |
 | **A second provider is selectable and is not the measured default.** `settings.agent_provider` chooses Anthropic or OpenAI | Both return the same structured report, so the eval can score across providers as well as across models. The OpenAI path is implemented and unit-tested but has not been run against the live API. It also returns no reasoning summary, so investigations served that way carry no recorded reasoning — a real difference, and one the eval has to account for |
 
+**Limitations the dashboard carries** (`specs/2026-11-10-queue-approval-dashboard/`):
+
+| Limitation | Reason |
+|---|---|
+| **No authentication; the approver is a free-text name** | Decisions record what was typed, not a verified identity. Real sign-in is the first thing to add before this handles real approvals |
+| **"Reconciled clean" means no newest finding** | A run records how many orders it covered, not which, so an order no run has reached reads as clean. The Coverage page states this |
+| **A reconciliation run is date-grained** | Its window and its dedupe key are dates, so a second "Run reconciliation" on the same day is answered rather than queued |
+| **Priority ranks impact within a currency, never across** | Comparing USD with EUR would need an exchange rate, which the product does not invent |
+| **The queue cannot retract an exception a later run stops emitting** | Same cause as above: runs do not record which orders they covered |
+| **The grid assistant changes how the queue is displayed and nothing else** | It is sent no record or amount, and aggregation is excluded from what it can ask for |
+
 ---
 
 # 0. Running it

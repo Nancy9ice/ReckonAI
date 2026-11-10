@@ -266,6 +266,23 @@ so it cannot be forgotten.
   the two tables recorded in `TABLES_WITHOUT_EVIDENCE` with their reasoning.
 - No emojis. No `float` column anywhere in the schema.
 - No test randomisation and no `-n auto`.
+- `/code-review medium` — **not yet complete.** `plan.md` Group 8 requires it
+  before the PR, and this line had dropped out of an earlier rewrite of this
+  section, so the gate was required by the plan and silently absent here. A
+  first attempt on 2026-11-10 stopped on a rate limit before it fetched the
+  diff and produced no findings; it has been resumed from its own transcript
+  rather than restarted. **Findings are worked rather than triaged** — Block
+  D's review returned nine, all nine real, seven of them invisible to the
+  seeded dataset, and Block E is a larger surface.
+
+  **This block must not merge until that gate has run.** Four areas carry the
+  thinnest coverage and were flagged to the reviewer: the hand-written
+  append-only tool loop in `providers/openai.py` (parallel tool calls, a
+  malformed `tool_call_id`, the `max_iterations` exit); the per-instance
+  `_cases` snapshot in `tools.py`, which is deliberate but means a tool called
+  after a long model turn returns pre-turn data; the cross-table
+  "reported needs a cause" rule enforced in `store.py`; and the withheld
+  path, which §7 finding 3 shows is load-bearing for [[mission]] P5.
 
 ## 5. What this block does not prove
 

@@ -261,11 +261,22 @@ def main(argv: list[str] | None = None) -> int:
             return 2
 
         try:
+            # `provider_for` is what asserts the credential, so it belongs
+            # inside this handler. Found by running the CLI with no key set:
+            # it raised a `ConfigurationError` through `main` as a traceback,
+            # when the whole point of the named error is that a missing
+            # variable reads as one line.
+            provider = provider_for(settings)
+        except ConfigurationError as error:
+            logger.error("%s", error)
+            return 2
+
+        try:
             outcome = investigate(
                 session,
                 tenant_id,
                 order_ref=order_ref,
-                provider=provider_for(settings),
+                provider=provider,
                 model=settings.agent_model,
                 withhold=tuple(args.withhold),
                 code=args.code,

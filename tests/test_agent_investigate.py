@@ -428,6 +428,27 @@ def test_the_cli_refuses_an_unknown_withhold_kind() -> None:
         main(["--fault", "F1", "--withhold", "ledgers"])
 
 
+def test_the_cli_reports_a_missing_key_as_one_line(
+    monkeypatch: pytest.MonkeyPatch, seeded: uuid.UUID
+) -> None:
+    """A missing credential is the likeliest failure, so it must read well.
+
+    Regression test: `provider_for` sat outside the `ConfigurationError`
+    handler, so running the CLI with no key printed a traceback instead of
+    the named error. Found by running it for real.
+    """
+    from reckonai.config import get_settings
+
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    get_settings.cache_clear()
+
+    try:
+        assert main(["--fault", "F1"]) == 2
+    finally:
+        get_settings.cache_clear()
+
+
 def test_the_cli_refuses_a_provider_paired_with_the_wrong_model() -> None:
     """`--provider openai` while the model is still a Claude id.
 

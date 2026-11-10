@@ -17,6 +17,26 @@ from reckonai.config import ConfigurationError, Settings
 DATABASE_URL = "postgresql+psycopg://user:secret@db.example:5432/reckonai"
 
 
+@pytest.fixture(autouse=True)
+def _no_ambient_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Build every `Settings` in this module from a known-empty environment.
+
+    **These tests are about the defaults and the pairing rule**, so a real
+    credential in the developer's shell must not reach them. Without this they
+    pass on a machine with no agent keys configured and fail on one with them -
+    which is what happened the moment a key was exported: three failures, none
+    of them about anything that had changed in the code.
+
+    `pydantic-settings` reads the process environment for any field the
+    constructor does not supply, so clearing these here is the only way a
+    `Settings(...)` built in a test is actually the object the test describes.
+    """
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("AGENT_PROVIDER", raising=False)
+    monkeypatch.delenv("AGENT_MODEL", raising=False)
+
+
 def _settings(**overrides: object) -> Settings:
     return Settings(database_url=DATABASE_URL, **overrides)  # type: ignore[arg-type]
 

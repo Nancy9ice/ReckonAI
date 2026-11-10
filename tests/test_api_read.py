@@ -273,3 +273,66 @@ def test_the_api_package_cannot_name_a_money_moving_table() -> None:
         text = path.read_text()
         for name in forbidden:
             assert name not in text, f"{path.name} names {name}"
+
+
+# ---------------------------------------------------------------------------
+# Found by code review
+# ---------------------------------------------------------------------------
+
+
+def _next_run_conclusion(
+    session: Session, first: ReconciliationException
+) -> ReconciliationException:
+    """The same fault concluded again by a later run: a new row, a new id."""
+    from datetime import UTC, datetime, timedelta
+
+    from reckonai.models import ReconciliationRun
+
+    later = ReconciliationRun(
+        tenant_id=first.tenant_id,
+        window_start=datetime.now(UTC),
+        window_end=datetime.now(UTC) + timedelta(days=1),
+        started_at=datetime.now(UTC) + timedelta(hours=1),
+        status="completed",
+    )
+    session.add(later)
+    session.flush()
+    again = ReconciliationException(
+        tenant_id=first.tenant_id,
+        run_id=later.id,
+        code=first.code,
+        order_external_ref=first.order_external_ref,
+        detail=first.detail,
+        is_exception=True,
+        impact=first.impact,
+        evidence_refs=[],
+        evidence_basis=first.evidence_basis,
+    )
+    session.add(again)
+    session.flush()
+    return again
+
+
+def test_a_decision_survives_the_next_run_concluding_the_same_fault(
+    client: TestClient, session: Session, seeded_exception: ReconciliationException
+) -> None:
+    _post(client, seeded_exception, outcome="rejected")
+    again = _next_run_conclusion(session, seeded_exception)
+
+    queue_rows = client.get("/api/exceptions").json()
+    assert [r["id"] for r in queue_rows] == [str(again.id)]
+    assert queue_rows[0]["decision"]["outcome"] == "rejected"
+
+    detail = client.get(f"/api/exceptions/{again.id}").json()
+    assert [d["outcome"] for d in detail["decisions"]] == ["rejected"]
+
+
+def test_an_exception_whose_order_row_is_absent_does_not_break_the_queue(
+    client: TestClient, session: Session, seeded_exception: ReconciliationException
+) -> None:
+    seeded_exception.order_external_ref = "ORD-NO-SUCH-ORDER"
+    session.flush()
+    rows = client.get("/api/exceptions").json()
+    assert len(rows) == 1
+    assert rows[0]["order_placed_at"] is None
+    assert rows[0]["priority"]["factors"]["age"] == "0.0000"

@@ -100,16 +100,20 @@ export default function QueueGrid({ title, rows, selectedId, onSelect }: Props) 
       },
       {
         headerName: "Impact",
-        // Sorted by the unscored string value only within one currency; the
-        // priority column is the cross-row ordering.
+        // Display only. The value is a formatted string, which sorts and
+        // filters lexicographically ("$9.00" after "$10.00"), and the client
+        // does no arithmetic on amounts - so this column offers neither. The
+        // priority column carries the ordering by impact, within a currency.
         valueGetter: (p) => (p.data ? formatMoney(p.data.impact) : ""),
+        sortable: false,
+        filter: false,
         width: 130,
         type: "rightAligned",
       },
       {
         headerName: "Order date",
         valueGetter: (p) => p.data?.order_placed_at,
-        valueFormatter: (p) => (p.value ? formatDate(p.value) : ""),
+        valueFormatter: (p) => (p.value ? formatDate(p.value) : "unknown"),
         width: 130,
       },
       {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ExceptionDetail } from "./api";
 import { api } from "./api";
 import { formatDateTime, label } from "./labels";
@@ -21,7 +21,10 @@ function readApprover(): string {
 
 export default function Detail({ id, onChanged }: Props) {
   const [detail, setDetail] = useState<ExceptionDetail | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // A failed load replaces the panel; a failed action is shown beside the
+  // form, so the form stays usable and the loaded detail is not lost.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [approver, setApprover] = useState(readApprover);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -29,9 +32,9 @@ export default function Detail({ id, onChanged }: Props) {
   const load = useCallback(async () => {
     try {
       setDetail(await api.exception(id));
-      setError(null);
+      setLoadError(null);
     } catch (e) {
-      setError(String(e));
+      setLoadError(String(e));
     }
   }, [id]);
 
@@ -51,13 +54,20 @@ export default function Detail({ id, onChanged }: Props) {
     return () => clearInterval(timer);
   }, [inFlight, load]);
 
-  const wasInFlight = useInFlightEdge(inFlight);
+  // Refresh the queue exactly once when a job settles, not on every poll.
+  const wasInFlight = useRef(false);
   useEffect(() => {
-    if (wasInFlight) onChanged();
-  }, [wasInFlight, onChanged]);
+    if (wasInFlight.current && !inFlight) onChanged();
+    wasInFlight.current = inFlight;
+  }, [inFlight, onChanged]);
 
-  if (error) return <div className="panel error">{error}</div>;
-  if (!detail) return <div className="panel muted">Loading...</div>;
+  if (!detail) {
+    return loadError ? (
+      <div className="panel error">{loadError}</div>
+    ) : (
+      <div className="panel muted">Loading...</div>
+    );
+  }
 
   const inv = detail.investigation_detail;
   const top = inv?.causes.find((c) => c.rank === 1);
@@ -66,9 +76,10 @@ export default function Detail({ id, onChanged }: Props) {
     setBusy(true);
     try {
       await api.investigate(id);
+      setActionError(null);
       await load();
     } catch (e) {
-      setError(String(e));
+      setActionError(String(e));
     } finally {
       setBusy(false);
     }
@@ -76,7 +87,7 @@ export default function Detail({ id, onChanged }: Props) {
 
   const decide = async (outcome: "approved" | "rejected") => {
     if (!approver.trim()) {
-      setError("Enter your name before deciding.");
+      setActionError("Enter your name before deciding.");
       return;
     }
     setBusy(true);
@@ -88,10 +99,10 @@ export default function Detail({ id, onChanged }: Props) {
       }
       setDetail(await api.decide(id, { outcome, approver, note: note || undefined }));
       setNote("");
-      setError(null);
+      setActionError(null);
       onChanged();
     } catch (e) {
-      setError(String(e));
+      setActionError(String(e));
     } finally {
       setBusy(false);
     }
@@ -241,6 +252,9 @@ export default function Detail({ id, onChanged }: Props) {
           Reject
         </button>
       </div>
+      {(actionError || loadError) && (
+        <p className="error">{actionError ?? loadError}</p>
+      )}
       {detail.decisions.length > 0 && (
         <ul className="history">
           {detail.decisions.map((d, i) => (
@@ -255,16 +269,4 @@ export default function Detail({ id, onChanged }: Props) {
       )}
     </div>
   );
-}
-
-// True for exactly one render after an in-flight job settles, so the parent
-// refreshes the queue once rather than on every poll.
-function useInFlightEdge(inFlight: boolean): boolean {
-  const [prev, setPrev] = useState(inFlight);
-  const [edge, setEdge] = useState(false);
-  useEffect(() => {
-    setEdge(prev && !inFlight);
-    setPrev(inFlight);
-  }, [inFlight, prev]);
-  return edge;
 }

@@ -38,17 +38,17 @@ services:
     # stays authoritative either way - the same resolution, a subset installed -
     # and it has a second benefit: a runtime module that accidentally imports a
     # dev-only package passes CI and fails here, loudly, rather than shipping.
-    # The dashboard build is appended and **allowed to fail soft**: Render's
-    # Python runtime is believed to ship Node (informal sources only; it is not
-    # in Render's runtime docs), and a missing Node must not take the API down.
-    # Without a build `/` serves the JSON index (`reckonai.spa`), so the failure
-    # is visible after deploy rather than fatal during it.
+    # The dashboard build is appended and **fails soft, whatever the cause**:
+    # a missing Node (Render's Python runtime is believed to ship it, on
+    # informal sources only), a registry blip, or a type error must not take
+    # the API down. Without a build `/` serves the JSON index (`reckonai.spa`),
+    # so the failure is visible after deploy rather than fatal during it. CI
+    # builds the dashboard on every push, so a real break fails there first.
     # specs/2026-11-10-queue-approval-dashboard/validation.md section 3.
     buildCommand: >
       pip install uv && uv sync --frozen --no-dev &&
-      (if command -v npm >/dev/null 2>&1;
-      then cd frontend && npm ci && npm run build;
-      else echo "WARNING: npm not found, dashboard not built"; fi)
+      (cd frontend && npm ci && npm run build ||
+      echo "WARNING: dashboard build failed or npm is missing, serving the API only")
 
     # Migrations run here, never in startCommand. Pre-deploy runs once per
     # deploy; a start command would have every instance race to migrate on

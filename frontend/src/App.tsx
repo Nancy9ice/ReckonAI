@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ExceptionRow, Run } from "./api";
 import { api } from "./api";
 import Detail from "./Detail";
@@ -22,12 +22,19 @@ export default function App() {
   const [certainty, setCertainty] = useState("all");
   const [decision, setDecision] = useState("all");
 
+  // Only the newest request may set the rows: switching run and back fires two
+  // fetches, and the slower, older one must not overwrite the newer answer.
+  const latest = useRef(0);
   const refresh = useCallback(async () => {
+    const ticket = ++latest.current;
     try {
-      setRows(await api.exceptions(runId));
-      setError(null);
+      const fetched = await api.exceptions(runId);
+      if (ticket === latest.current) {
+        setRows(fetched);
+        setError(null);
+      }
     } catch (e) {
-      setError(String(e));
+      if (ticket === latest.current) setError(String(e));
     }
   }, [runId]);
 
@@ -121,7 +128,14 @@ export default function App() {
               </select>
             </label>
             {runId && (
-              <button onClick={() => setRunId(undefined)}>Showing one run - show all</button>
+              <button
+                onClick={() => {
+                  setRunId(undefined);
+                  setSelected(null);
+                }}
+              >
+                Showing one run - show all
+              </button>
             )}
           </div>
 

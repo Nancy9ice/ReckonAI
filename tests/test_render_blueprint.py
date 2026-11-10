@@ -288,7 +288,8 @@ def test_the_agent_credential_is_on_the_worker_and_never_in_the_file(
 def test_the_web_build_attempts_the_dashboard_without_depending_on_it(
     web: dict[str, Any],
 ) -> None:
-    """A missing Node must not fail the deploy: `/` falls back to the index."""
+    """No dashboard failure may fail the deploy: `/` falls back to the index."""
     command = " ".join(web["buildCommand"].split())
     assert "npm run build" in command
-    assert "command -v npm" in command
+    # Any failure of the dashboard step, not only a missing npm, is soft.
+    assert "npm run build ||" in command

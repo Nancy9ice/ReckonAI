@@ -43,7 +43,7 @@ export interface ExceptionRow {
   seller_id: string | null;
   seller_name: string | null;
   seller_count: number;
-  order_placed_at: string;
+  order_placed_at: string | null;
   evidence_refs: string[];
   evidence_basis: string;
   priority: { score: string; factors: Record<string, string | null> };
@@ -83,13 +83,34 @@ export interface ExceptionDetail extends ExceptionRow {
   investigation_job: Job | null;
 }
 
+// FastAPI puts the reason in `detail`: a string for an HTTPException, a list of
+// field errors for a 422. Showing it beats a bare status line.
+async function describe(response: Response, path: string): Promise<string> {
+  let reason = response.statusText;
+  try {
+    const body = (await response.json()) as { detail?: unknown };
+    if (typeof body.detail === "string") {
+      reason = body.detail;
+    } else if (Array.isArray(body.detail)) {
+      reason = body.detail
+        .map((d: { loc?: unknown[]; msg?: string }) =>
+          `${(d.loc ?? []).slice(1).join(".")}: ${d.msg ?? "invalid"}`,
+        )
+        .join("; ");
+    }
+  } catch {
+    /* a non-JSON error body keeps the status text */
+  }
+  return `${response.status} ${reason} (${path})`;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     headers: { "Content-Type": "application/json" },
     ...init,
   });
   if (!response.ok) {
-    throw new Error(`${response.status} ${response.statusText}: ${path}`);
+    throw new Error(await describe(response, path));
   }
   return (await response.json()) as T;
 }

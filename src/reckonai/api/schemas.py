@@ -69,7 +69,8 @@ class ExceptionOut(BaseModel):
     seller_id: uuid.UUID | None
     seller_name: str | None
     seller_count: int
-    order_placed_at: datetime
+    #: `None` if the order row is absent, never a guessed date.
+    order_placed_at: datetime | None
     evidence_refs: list[str]
     evidence_basis: str
     priority: PriorityOut

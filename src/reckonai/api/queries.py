@@ -15,7 +15,7 @@ import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from reckonai.api import schemas
@@ -96,14 +96,33 @@ def latest_investigations(
 
 def latest_decisions(
     session: Session, tenant_id: uuid.UUID
-) -> dict[uuid.UUID, ExceptionDecision]:
-    rows = session.scalars(
-        select(ExceptionDecision)
+) -> dict[tuple[str, str], ExceptionDecision]:
+    """Newest decision per `(order, code)`, not per exception row.
+
+    **Keyed like investigations, on purpose.** Every run writes a fresh
+    `reconciliation_exception` row for the same fault, and the queue shows the
+    newest. A decision keyed to one row's id would vanish from the queue when
+    the next daily run re-concluded the same finding, and the same fault could
+    be approved again. Found by code review.
+    """
+    rows = session.execute(
+        select(ExceptionDecision, ReconciliationException)
+        .join(
+            ReconciliationException,
+            (ReconciliationException.tenant_id == ExceptionDecision.tenant_id)
+            & (ReconciliationException.id == ExceptionDecision.exception_id),
+        )
         .where(ExceptionDecision.tenant_id == tenant_id)
-        .distinct(ExceptionDecision.exception_id)
-        .order_by(ExceptionDecision.exception_id, ExceptionDecision.decided_at.desc())
+        .distinct(
+            ReconciliationException.order_external_ref, ReconciliationException.code
+        )
+        .order_by(
+            ReconciliationException.order_external_ref,
+            ReconciliationException.code,
+            ExceptionDecision.decided_at.desc(),
+        )
     )
-    return {r.exception_id: r for r in rows}
+    return {(exc.order_external_ref, exc.code): dec for dec, exc in rows}
 
 
 def _top_confidence(
@@ -121,6 +140,18 @@ def _top_confidence(
         )
     )
     return {inv_id: conf for inv_id, conf in rows}
+
+
+def _seller_count(
+    row: ReconciliationException,
+    order: Order | None,
+    counts: dict[uuid.UUID, int],
+) -> int:
+    """An exception naming one seller affects that seller; one about the order
+    as a whole affects every seller on it."""
+    if row.seller_id is not None or order is None:
+        return 1
+    return counts.get(order.id, 1)
 
 
 def _decision_out(row: ExceptionDecision) -> schemas.DecisionOut:
@@ -195,7 +226,7 @@ def exceptions(
     now = datetime.now(UTC)
     inputs: list[PriorityInput] = []
     for r in rows:
-        order = orders[r.order_external_ref]
+        order = orders.get(r.order_external_ref)
         inv = investigations.get((r.order_external_ref, r.code))
         inputs.append(
             PriorityInput(
@@ -203,10 +234,12 @@ def exceptions(
                 impact=r.impact,
                 # An exception naming one seller affects that seller; one about
                 # the order as a whole affects every seller on it.
-                seller_count=1
-                if r.seller_id is not None
-                else seller_counts.get(order.id, 1),
-                age_days=max(
+                seller_count=_seller_count(r, order, seller_counts),
+                # No order row means no placed date to age from; zero rather
+                # than a guess, and the field is null in the response.
+                age_days=Decimal(0)
+                if order is None
+                else max(
                     Decimal(0),
                     Decimal(str((now - order.placed_at).total_seconds()))
                     / SECONDS_PER_DAY,
@@ -218,9 +251,9 @@ def exceptions(
 
     out: list[schemas.ExceptionOut] = []
     for r in rows:
-        order = orders[r.order_external_ref]
+        order = orders.get(r.order_external_ref)
         inv = investigations.get((r.order_external_ref, r.code))
-        decision = decisions.get(r.id)
+        decision = decisions.get((r.order_external_ref, r.code))
         out.append(
             schemas.ExceptionOut(
                 id=r.id,
@@ -234,10 +267,8 @@ def exceptions(
                 reported=_money(r.reported),
                 seller_id=r.seller_id,
                 seller_name=sellers.get(r.seller_id) if r.seller_id else None,
-                seller_count=1
-                if r.seller_id is not None
-                else seller_counts.get(order.id, 1),
-                order_placed_at=order.placed_at,
+                seller_count=_seller_count(r, order, seller_counts),
+                order_placed_at=None if order is None else order.placed_at,
                 evidence_refs=list(r.evidence_refs),
                 evidence_basis=r.evidence_basis,
                 priority=_priority_out(priorities[str(r.id)]),
@@ -323,9 +354,15 @@ def exception_detail(
 
     history = session.scalars(
         select(ExceptionDecision)
+        .join(
+            ReconciliationException,
+            (ReconciliationException.tenant_id == ExceptionDecision.tenant_id)
+            & (ReconciliationException.id == ExceptionDecision.exception_id),
+        )
         .where(
             ExceptionDecision.tenant_id == tenant_id,
-            ExceptionDecision.exception_id == row.id,
+            ReconciliationException.order_external_ref == row.order_external_ref,
+            ReconciliationException.code == row.code,
         )
         .order_by(ExceptionDecision.decided_at.desc())
     ).all()
@@ -411,6 +448,14 @@ def request_investigation(
     exception, that job is returned rather than a second enqueued. `None` if
     the exception is not this tenant's.
     """
+    # Serialises concurrent requests for the same exception for the rest of
+    # this transaction, so the check below and the enqueue are one step. Without
+    # it two simultaneous clicks both see "no job in flight" and both enqueue,
+    # and a paid investigation runs twice. Found by code review.
+    session.execute(
+        text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+        {"key": f"investigate:{exception_id}"},
+    )
     exists = session.scalar(
         select(ReconciliationException.id).where(
             ReconciliationException.tenant_id == tenant_id,

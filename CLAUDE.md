@@ -32,8 +32,9 @@ Also read, and in this order:
 B (Phase 10), Block C (Phase 11), Block D (Phase 8 + R9 + the exception table),
 Block E (Phase 12) and Block F (Phases 13 + 14) are built and merged (PR #24,
 merge commit `69a3a0c`, 2026-11-10 23:00 UTC).** **Every planned block is
-complete; Block G (eval harness, demo, limitations) was skipped on purpose** -
-see "Block G was skipped" below. **Every merge to `main` deploys** the API and the
+complete; Block G was skipped on purpose, except that its eval was built later**
+(the demo script, rehearsal and limitations audit were not) - see "Block G was
+skipped" below. **Every merge to `main` deploys** the API and the
 worker.
 
 **Read `specs/2026-11-10-queue-approval-dashboard/validation.md` before
@@ -89,9 +90,14 @@ unless asked. What this leaves, so nothing is claimed that was not measured:
   (`python -m reckonai.eval [--agent]`, `specs/2026-11-11-eval-harness/`): the
   deterministic half gates and passes; `--agent` scores the AI once and reports.
   **Read the results in that directory's `validation.md` before quoting any
-  number**: 0 of 5 faults pass the strict citation rule, a reader judged 4 of 5
-  causes right, both evidence-removed cases passed, and it is one draw on
-  `gpt-4.1`. Anthropic has never run. Never state the AI's accuracy as a rate.
+  number**: 0 of 5 faults pass the strict citation rule; a reader judged the
+  cause clearly right on F1, F2 and F4, right-but-thinly-cited on F6, and hedged
+  on F3; both evidence-removed cases passed; and it is one draw on `gpt-4.1`.
+  **To run it:** `uv run python -m reckonai.eval` is free and exits 1 if the gate
+  fails; add `--agent` for the AI half (7 paid calls, the count is printed first)
+  and `--json PATH` to save the results (`eval_results/` is gitignored). It runs
+  in a rolled-back transaction, so it can run against your dev database, and it
+  refuses a non-local `DATABASE_URL`. It is not in CI. Anthropic has never run. Never state the AI's accuracy as a rate.
 - **No scripted demo and no `demo.md` runbook.** The deployed app was exercised by
   hand after the Block F merge (a run, then an investigation, on production;
   `specs/2026-11-10-queue-approval-dashboard/validation.md` §3a).

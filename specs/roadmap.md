@@ -1,8 +1,9 @@
 # ReckonAI — Roadmap
 
 > **Status:** Constitution. Implementation order and phase boundaries.
-> **Updated 2026-11-10: Phases 12, 13 and 14 are built and merged (Blocks E and F). Phase 15 (eval, demo, limitations) was skipped by the operator on
-> 2026-11-11, so every phase that will be built is built.** The rest of
+> **Updated 2026-11-10: Phases 12, 13 and 14 are built and merged (Blocks E and F). Phase 15 was skipped by the operator on 2026-11-11 except for
+> its eval, which was built afterwards (`python -m reckonai.eval`); the demo script,
+> rehearsal and limitations audit were not. Every phase that will be built is built.** The rest of
 > this note is the earlier handoff to Block D, kept as history. **Block D** — the `jobs` table, `FOR UPDATE SKIP LOCKED`,
 > `processed_events`, the Cron Job, the date-windowed run, **and the exception
 > table Phase 11 assigned to it** (that block's `requirements.md` D8). Phases

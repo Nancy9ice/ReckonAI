@@ -458,8 +458,8 @@ session reads, so it is kept current rather than left as a record of when the
 replan was written.
 
 **Blocks D, E and F are built. Block G (eval harness, demo script, rehearsal,
-limitations) was skipped by the operator on 2026-11-11, so every block that will
-be built is built.** Block F **merged** as PR #24 (`69a3a0c`, 2026-11-10 23:00 UTC), which
+limitations) was skipped by the operator on 2026-11-11, except that its eval was
+built afterwards, so every block that will be built is built.** Block F **merged** as PR #24 (`69a3a0c`, 2026-11-10 23:00 UTC), which
 deployed it; what the deploy showed, and what still needs a person's hands,
 is in `specs/2026-11-10-queue-approval-dashboard/validation.md` §3 and §3a.
 

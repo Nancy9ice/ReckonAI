@@ -114,6 +114,36 @@ deterministic table, one agent run over F1, F2, F3, F4 and F6 plus the
 evidence-removed cases with results written down as they come, a short runbook, a
 rehearsal on the deployed app, and the limitations audit.
 
+**Open items, as of 2026-11-11.** Not decided, not yet seen, or held only by the
+operator. Do not assume any of these; ask or check.
+
+1. **The nightly sweep has not been seen running on Render.** The first tick after
+   it deployed is 01:00 UTC 2026-11-11. If it worked, open exceptions without a
+   conclusion (expected: ORD-0013, ORD-0014, ORD-0015, ORD-0018; ORD-0016 was
+   already investigated) now show an AI result. Check `/api/exceptions`, the
+   worker's `reckonai.jobs.auto_investigate` log line and the cron job's logs
+   (Render CLI ids are in `specs/2026-11-07-canonical-core/notes.md`). It needs a
+   model key on the **worker**, which a completed investigation there has shown
+   it has.
+2. **How testers use their own credentials is undecided.** Discussed: (a) each
+   tester brings a model key, which works for the assistant but would put a secret
+   through the job queue for investigations; (b) named logins (about an hour),
+   which also fix the free-text approver and the unauthenticated assistant route;
+   (c) one shared key with a spending cap at the provider and a passcode. (b) plus
+   the provider cap was recommended; nothing was chosen or built.
+3. **The root-cause scoring rule is known to be too strict and was not changed**
+   (it penalises generic ids and the same refund cited under PayPal's id). A fairer
+   rule (the load-bearing record cited, any id for the same record accepted) would
+   need a new run, and the published figures are the strict rule's.
+4. **Not seen in a browser:** whether the AG Grid watermark is gone on the deployed
+   site, and how the plain-language wording looks on the deployed pages. The
+   wording has not been read by a finance user, and only the FX type was opened.
+5. **Held by the operator and never read by an agent:** the AG Grid licence key in
+   the frontend's local settings file, and the Render dashboard variables. What is
+   known: the web service has a working model key (an assistant call succeeded) and
+   so does the worker (an investigation completed); whether the AG Grid variable
+   is set on Render is unknown.
+
 **Read `specs/2026-11-10-investigation-agent/validation.md` before touching
 `reckonai/agent/`.** §6 lists five corrections this block made to earlier
 documents — two of them to rules stated in `CLAUDE.md` itself, corrected below

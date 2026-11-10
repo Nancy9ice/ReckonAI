@@ -82,7 +82,15 @@ So selection is the union of two clauses:
 
 1. orders with `placed_at` in the window — the primary clause, unchanged; and
 2. orders, **of any age**, holding a `raw_payload` whose `retrieved_at` is
-   newer than the `finished_at` of the last completed run for this tenant.
+   newer than the `started_at` of the last completed run for this tenant.
+
+   *Corrected after code review: this said `finished_at`, which lost
+   evidence.* The payload times are read near the beginning of a run and
+   `finished_at` is stamped at the end, so a payload inserted in between was
+   invisible to that run **and** behind the next run's watermark — never read
+   at all, which is the failure this clause exists to prevent. `started_at`
+   makes that window empty, at the cost of re-covering ground.
+   `validation.md` §7b finding 4.
 
 Clause 2 is bounded by construction: an order enters it only when evidence
 actually arrived, so a steady state selects nothing. With no completed run it is
@@ -120,15 +128,27 @@ The marker is inserted **in the same transaction** as the run and exception
 rows. A second enqueue of the same key fails on the constraint and rolls back,
 so the rows are written exactly once.
 
-### D6. Retry is attempts, `run_after`, and a terminal failure
+### D6. Retry is attempts, `run_after`, a stale-claim reclaim, and a terminal failure
 
 R7's narrowing, stated as columns: `attempts`, `max_attempts`, `run_after`,
 `last_error`, and a status reaching `failed` when attempts are exhausted. A
 fixed delay, not a tuned backoff. A job that fails records the exception type
 and message in `last_error` — never a traceback, which can carry row contents.
 
-A claimed job whose process dies is handled by `run_after` and the claim
-timestamp, not by a heartbeat: the simplest correct form.
+**Corrected after code review.** This said a claimed job whose process dies is
+handled by `run_after` and the claim timestamp, "not by a heartbeat: the
+simplest correct form". It was not handled at all: nothing moved a row out of
+`claimed`, so `run_after` — which is filtered on `queued` — could never see it,
+and the job was lost silently with no error recorded.
+
+The no-heartbeat decision stands, but it needs a reclaim to be sound.
+`queue.claim` also takes a `claimed` job whose `claimed_at` is older than
+`STALE_CLAIM_SECONDS` (300), capped by `attempts < max_attempts` so a reclaim
+cannot increment past the `CHECK`; `queue.reap_stale_claims` terminates a stale
+job already at its cap, with the reason recorded; and the worker reaps before
+claiming. It cannot tell a dead worker from a very slow one, which is
+survivable only because the dedupe marker makes a second run of the same window
+write nothing. `validation.md` §7b finding 1.
 
 ### D7. The worker claims; it no longer only ticks
 
@@ -142,7 +162,12 @@ later job types are a registration rather than a change to the loop.
 
 ### D8. The Cron Job is declared, not applied
 
-`render.yaml` gains a `cron` service invoking the scheduled run hourly. The
+`render.yaml` gains a `cron` service invoking the scheduled run **daily**, at
+01:00 UTC. *Corrected after code review: this was hourly, with a comment
+claiming that picked a late record up within the hour.* Both window bounds snap
+to midnight UTC and the idempotency key uses only their dates, so every tick in
+a UTC day is one piece of work: the first did it and the other 23 logged a
+skip. `validation.md` §7b finding 3. The
 Blueprint is **not** synced in this block: R2 budgeted one deploy, Block A's
 merge spent it, and a sync redeploys the web service and worker too, re-running
 migrations and the demo seed. Phase 8's fourth exit criterion — the cron job
@@ -185,7 +210,7 @@ Block C's handoff names.** A marketplace may book the loss once or twice:
 
 | Marketplace books | Expected behaviour |
 |---|---|
-| a `dispute` debit only | position moves once; no finding |
+| a `dispute` debit only | **`awaiting_evidence`** — see the amendment below |
 | a `refund` debit only | unchanged from today; no finding |
 | both, for the same refund | **one** debit counted, no finding |
 | a `dispute` debit with no provider refund | a finding — the loss is unevidenced |
@@ -196,6 +221,24 @@ that duplicates a `refund` entry already counted for the same refund is **held
 out**, which is the first of the two mechanisms Block C's handoff permits — a
 defect's own row held out of every later comparison — rather than crediting
 `explained`.
+
+**Amended after code review: the first row's answer is `awaiting_evidence`, not
+silence.** The table above is the behaviour as designed, and it was wrong in one
+place. A `dispute` debit of 30.00 vouching for a 30.00 provider refund with no
+`refund` row is indistinguishable, on the only key available, from an unrecorded
+refund sitting beside an unrelated chargeback loss of the same amount — two
+losses booked once, netting to zero and reporting nothing. The old code guessed
+a false positive; this block guessed a false negative; the records cannot
+separate them, because `dispute.capture_id` is `NULL` and the join is
+unestablished.
+
+So `_partition_by_ledger` returns a **third** group, and a dispute-backed refund
+is reported `awaiting_evidence` naming both records — P4's first-class non-error
+state and P5's escalate-rather-than-guess, the same move `matcher.match_refunds`
+makes for two refunds of equal value. It is treated as reflected for the
+arithmetic, so no phantom residual appears, and carries `confirmed=False`. A
+`refund` debit is consumed before a `dispute` debit, so an ordinary booking is
+never made ambiguous. `validation.md` §7b finding 5.
 
 The dispute-to-capture join stays unestablished, and the rule does not need it:
 the entries are matched on the order and the refunded amount, not through

@@ -63,7 +63,8 @@
 
 - `reckonai/jobs/window.py`: select order refs by the union of D3's two
   clauses — `placed_at` in the window, plus any order holding a
-  `raw_payload.retrieved_at` newer than the last completed run's `finished_at`.
+  `raw_payload.retrieved_at` newer than the last completed run's `started_at`
+  (`finished_at` as first written; corrected by review, `validation.md` §7b).
 - Clause 2 is empty with no completed run, so the first run needs no special
   case. Both the window and the resolved `evidence_since` are stored on the run.
 - Test: a narrow window over the seeded orders selects the known subset — the
@@ -76,20 +77,31 @@
 
 - `reckonai/jobs/schedule.py`, a `python -m` entry point taking
   `--window-days`. It **enqueues only**; the worker executes.
-- Declare the `cron` service in `render.yaml` — hourly, `--no-sync`, with the
+- Declare the `cron` service in `render.yaml` — daily at 01:00 UTC (hourly as
+  first written; corrected by review), `--no-sync`, with the
   reasoning already in that file. **Do not sync the Blueprint** (D8).
 - Test: the module enqueues one job with the expected idempotency key and
   writes no financial row.
 
 ## 8. The dispute rule (D11)
 
-- Add `dispute` to `POSITION_CATEGORIES` in `recon/classifier.py`.
+- Add `dispute` to `POSITION_CATEGORIES` in `recon/classifier.py`, **and let a
+  `dispute` debit count as having recorded a refund in
+  `_partition_by_ledger`** — the categories decide what moves a position, that
+  decides what counts as recorded, and only changing one left the commission
+  expectation unreduced.
+- **A refund whose only counterpart is a `dispute` debit is
+  `awaiting_evidence`, not silence** (added by code review): the shape is
+  undecidable from the records, so neither verdict is honest. Third group out
+  of `_partition_by_ledger`, reflected for the arithmetic, `confirmed=False`.
 - Hold out a `dispute` entry that duplicates a `refund` entry already counted
   for the same refund, matched on the order and the refunded amount — not
   through `dispute.capture_id`, which stays `NULL`.
 - Hand-authored fixture covering D11's four rows: dispute only, refund only,
   both for one refund, and a dispute debit with no provider refund. Labelled
-  hand-authored.
+  hand-authored. Plus the symmetric input review found — an unrecorded refund
+  beside a dispute debit of the same amount, which must not be netted to
+  silence.
 - **Re-run the false-positive gate.** Widening the categories touches every
   expected-versus-ledger comparison, so a clean fifteen before and after is the
   check, not an assumption.

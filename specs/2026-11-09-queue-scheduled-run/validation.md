@@ -1,6 +1,7 @@
 # Block D — validation
 
-> How each criterion was proven. 1,651 tests pass, `uv run mypy` clean over
+> How each criterion was proven. 1,659 tests pass (1,651 before the code
+> review's nine fixes added eight), `uv run mypy` clean over
 > `engine`, `recon` and now `jobs`, `uv run ruff check` clean, migration clean
 > up and down with no autogenerate drift.
 
@@ -129,7 +130,7 @@ expected-versus-ledger comparison in the product.
 
 ## 6. Gates that stayed green
 
-- `uv run pytest`: **1,651 passed**, in collection order. Two new modules
+- `uv run pytest`: **1,659 passed**, in collection order. Two new modules
   commit rows (`test_jobs_queue.py`, `test_jobs_dispatch.py`) and delete them
   at module teardown; both sort before `test_migrations` alphabetically, so the
   downgrade to `base` meets none of them. **Neither may be renamed to sort

@@ -277,3 +277,28 @@ so it cannot be forgotten.
    reads `case.captures` for ids and the ORM rows separately. Harmless at
    eighteen orders and one query either way; worth folding together if the
    tool surface grows.
+5. **The mypy gate is not widened, and that is a decision rather than an
+   omission.** Block B's `validation.md` §8 recorded "five mypy errors outside
+   `engine/`"; the true figure was 25 when checked during this block, and that
+   section is now corrected with the reasoning.
+
+   **None of them is a bug**, which is the part worth carrying: 17 are bare
+   `dict`/`list` annotations and 5 are missing annotations, neither of which
+   can change behaviour, and the four substantive ones were each assessed as
+   correct code — a `Decimal.as_tuple().exponent` union the caller has already
+   narrowed, a nullable composite factory Phase 2 established by test, and the
+   `Mapped[X]`-versus-Protocol conflict D9 documents.
+
+   So the case for widening the gate to `money/`, `connector/` and `paypal/`
+   is **preventative**: those are money paths, and a genuinely wrong
+   annotation there would not be caught because nothing looks. It is ~16
+   mechanical fixes, mostly `paypal/replay.py`'s bare generics. Deliberately
+   not done here — the hours went to the live investigations, which are an
+   exit criterion where this is hygiene.
+
+   **Fixing the errors is not what resolves it; the gate is.** Block B fixed
+   32 of 39 and recorded five, and it returned to 25 because nothing failed.
+   Whoever widens it should also decide `sim/` explicitly — out, in my view:
+   it is the fixture generator, deliberately independent evidence against the
+   engine, and `seed.verify()` recomputes every stated figure, which is a
+   stronger check than types.

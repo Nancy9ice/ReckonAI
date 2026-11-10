@@ -739,3 +739,78 @@ def test_the_provider_is_selected_from_settings() -> None:
         openai_api_key=SecretStr("sk-openai-test"),
     )
     assert provider_for(openai_settings).name == "openai"
+
+
+# ---------------------------------------------------------------------------
+# The downgrade flag, and what must not trip it
+# ---------------------------------------------------------------------------
+
+
+def _result_for(requested: str, returned: str | None) -> ProviderResult:
+    return ProviderResult(
+        report=None,
+        provider="openai",
+        model_requested=requested,
+        model_returned=returned,
+        stop_reason="stop",
+        summarized_reasoning=None,
+    )
+
+
+def test_an_alias_resolving_to_its_snapshot_is_not_a_downgrade() -> None:
+    """Found on the first live run, where it was a false positive.
+
+    OpenAI serves a request for `gpt-4.1` with `gpt-4.1-2025-04-14`, and a
+    plain inequality stored that report flagged as downgraded. It is the same
+    model named more precisely. specs/tech-stack.md section 5.2's flag exists
+    to tell a finance team their reasoning came from a weaker model, and one
+    that fires on every response is noise rather than evidence - the same
+    failure as never firing at all.
+    """
+    assert _result_for("gpt-4.1", "gpt-4.1-2025-04-14").downgraded is False
+    assert _result_for("gpt-5", "gpt-5-2025-08-07").downgraded is False
+    assert (
+        _result_for("claude-haiku-5-5", "claude-haiku-5-5").downgraded is False
+    )
+
+
+def test_a_genuinely_different_model_is_still_a_downgrade() -> None:
+    """The flag has to stay worth having.
+
+    Prefix matching must not become "anything vaguely similar passes": a
+    different model in the same family is exactly what the flag is for.
+    """
+    assert _result_for("claude-haiku-5-5", "claude-sonnet-5-5").downgraded is True
+    assert _result_for("gpt-4.1", "gpt-4o").downgraded is True
+    assert _result_for("gpt-5", "gpt-4.1").downgraded is True
+
+
+def test_no_response_is_not_a_downgrade() -> None:
+    """A call that never happened observed no model to compare."""
+    assert _result_for("gpt-4.1", None).downgraded is False
+
+
+def test_the_strict_schema_carries_no_refs() -> None:
+    """OpenAI's strict mode rejects a `$ref` with sibling keywords.
+
+    Pydantic emits an enum field with a docstring as exactly that, and the
+    live call returned:
+
+        $ref cannot have keywords {'description'}
+
+    The stub accepts any schema, so nothing but the real API or this test
+    would catch a dialect violation. Asserted on the absence of refs rather
+    than on the error, because that is the property the API requires.
+    """
+    from reckonai.agent.providers.openai import strict_report_schema
+
+    rendered = json.dumps(strict_report_schema())
+
+    assert "$ref" not in rendered
+    assert "$defs" not in rendered
+
+    # The field's own description survives, rather than being replaced by the
+    # enum definition it was merged with.
+    verdict = strict_report_schema()["properties"]["verdict"]
+    assert "insufficient_evidence" in verdict["enum"]
+    assert "never a failure" in verdict["description"]

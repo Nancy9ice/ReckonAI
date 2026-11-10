@@ -33,6 +33,7 @@ from reckonai.agent.citations import (
 from reckonai.agent.tools import (
     InvestigationTools,
     UnknownWithholdKind,
+    Withheld,
 )
 from reckonai.models import Tenant
 from reckonai.recon import ExceptionCode
@@ -308,9 +309,16 @@ def test_withholding_the_ledger_empties_that_tool_only(
     full = InvestigationTools(session, seeded)
     withheld = InvestigationTools(session, seeded, withhold={"ledger"})
 
+    assert full.fetch_seller_ledger_entries(SCENARIO_1_ORDER) is not None
     assert full.fetch_order(SCENARIO_1_ORDER) is not None
-    assert withheld.fetch_order(SCENARIO_1_ORDER) is not None
+    # A withheld kind **raises** rather than returning empty. The earlier
+    # version of this test asserted `== []`, which encoded the bug the live
+    # run then found: an empty list is indistinguishable from "none exist".
+    with pytest.raises(Withheld):
+        withheld.fetch_seller_ledger_entries(SCENARIO_1_ORDER)
 
+    # Only the named kind is out of reach.
+    assert withheld.fetch_order(SCENARIO_1_ORDER) is not None
     assert withheld.withheld == ("ledger",)
 
 

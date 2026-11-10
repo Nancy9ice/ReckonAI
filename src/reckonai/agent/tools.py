@@ -92,6 +92,32 @@ WITHHOLDABLE: frozenset[str] = frozenset(
 )
 
 
+class Withheld(Exception):
+    """A tool was called whose record kind is withheld for this investigation.
+
+    **Raised rather than returning an empty result**, and the live run that
+    proved exit criterion 3 is what forced the distinction. Returning `[]`
+    made "you may not see the ledger" identical to "the ledger has no
+    entries", and the agent read it the second way: it reported, at confidence
+    1.00, that "no seller ledger entries exist" for a refund whose entries it
+    had simply been denied.
+
+    That is the confabulation specs/mission.md P5 forbids, and the cause was
+    this layer, not the model. It is the same principle P3 states for money -
+    an absent value and a measured zero are different claims - applied to
+    evidence: an unavailable record and an absent record are different claims,
+    and a tool that returns the same thing for both has fabricated the
+    stronger one.
+
+    `reckonai.agent.registry` turns this into an explicit marker the model
+    reads, so "withheld" arrives as a fact rather than as silence.
+    """
+
+    def __init__(self, kind: str) -> None:
+        super().__init__(kind)
+        self.kind = kind
+
+
 class UnknownWithholdKind(ValueError):
     """A withhold set naming something that is not a record kind.
 
@@ -144,8 +170,15 @@ class InvestigationTools:
         """What is out of reach, for the audit row."""
         return tuple(sorted(self._withhold))
 
-    def _is_withheld(self, kind: str) -> bool:
-        return kind in self._withhold
+    def _refuse_if_withheld(self, kind: str) -> None:
+        """Raise `Withheld` where this record kind is out of reach.
+
+        Named for what it does to the caller rather than as a predicate,
+        because the old predicate form invited `if withheld: return []` at
+        every call site - which is exactly the bug it caused.
+        """
+        if kind in self._withhold:
+            raise Withheld(kind)
 
     # ---- Orders, items, sellers -----------------------------------------
 
@@ -156,8 +189,7 @@ class InvestigationTools:
         is a fact the model can act on instead of an error it has to recover
         from.
         """
-        if self._is_withheld("order"):
-            return None
+        self._refuse_if_withheld("order")
 
         order = self._session.scalar(
             select(Order).where(
@@ -176,8 +208,7 @@ class InvestigationTools:
 
     def fetch_order_items(self, order_ref: str) -> list[dict[str, Any]]:
         """The lines on an order, each with its seller and its own amount."""
-        if self._is_withheld("items"):
-            return []
+        self._refuse_if_withheld("items")
 
         order = self._session.scalar(
             select(Order).where(
@@ -207,8 +238,7 @@ class InvestigationTools:
 
     def fetch_sellers(self) -> list[dict[str, Any]]:
         """Every seller for this tenant, so an id in a finding has a name."""
-        if self._is_withheld("sellers"):
-            return []
+        self._refuse_if_withheld("sellers")
 
         sellers = self._session.scalars(
             select(Seller)
@@ -235,8 +265,7 @@ class InvestigationTools:
         so this reads the match `reckonai.reconcile` makes rather than a
         column, and says so in the result.
         """
-        if self._is_withheld("payments"):
-            return []
+        self._refuse_if_withheld("payments")
 
         payment_ids = self._payment_ids_for(order_ref)
         if not payment_ids:
@@ -267,8 +296,7 @@ class InvestigationTools:
         units from two orders, and handing an order all of a payment's
         captures would attribute the other order's money to it.
         """
-        if self._is_withheld("captures"):
-            return []
+        self._refuse_if_withheld("captures")
 
         return [
             {
@@ -296,8 +324,7 @@ class InvestigationTools:
         `derived_linkage` - which a report must not present as a
         provider-reported fact.
         """
-        if self._is_withheld("refunds"):
-            return []
+        self._refuse_if_withheld("refunds")
 
         case = self._case_for(order_ref)
         if case is None:
@@ -337,8 +364,7 @@ class InvestigationTools:
         `awaiting_evidence` rather than a guess in either direction. An agent
         explaining that state needs to see the dispute.
         """
-        if self._is_withheld("disputes"):
-            return []
+        self._refuse_if_withheld("disputes")
 
         case = self._case_for(order_ref)
         capture_ids = {c.id for c in case.captures} if case else set()
@@ -376,8 +402,7 @@ class InvestigationTools:
         fee PayPal took, the **refund** for one it reversed. `fee_kind` says
         which, because the two must not be added together.
         """
-        if self._is_withheld("fees"):
-            return []
+        self._refuse_if_withheld("fees")
 
         case = self._case_for(order_ref)
         if case is None:
@@ -434,8 +459,7 @@ class InvestigationTools:
         `transaction_type`, not by a minus sign. An agent reading the number
         alone would get the sign of every adjustment wrong.
         """
-        if self._is_withheld("ledger"):
-            return []
+        self._refuse_if_withheld("ledger")
 
         order = self._session.scalar(
             select(Order).where(
@@ -478,8 +502,7 @@ class InvestigationTools:
         record has no usable timestamp, and writing our own clock there would
         present an ingestion time as a provider timestamp (P3).
         """
-        if self._is_withheld("disbursements"):
-            return []
+        self._refuse_if_withheld("disbursements")
 
         case = self._case_for(order_ref)
         if case is None:
@@ -512,8 +535,7 @@ class InvestigationTools:
         a string for the same reason amounts are: it is an exact decimal and a
         JSON float would not be.
         """
-        if self._is_withheld("rules"):
-            return []
+        self._refuse_if_withheld("rules")
 
         rules = self._session.scalars(
             select(CommissionRule)
@@ -542,8 +564,7 @@ class InvestigationTools:
         context - and section 5.2 names repeated payload loading as the real
         cost risk rather than the model.
         """
-        if self._is_withheld("payloads"):
-            return None
+        self._refuse_if_withheld("payloads")
 
         payload_id = self._payload_id_for(record_ref)
         if payload_id is None:

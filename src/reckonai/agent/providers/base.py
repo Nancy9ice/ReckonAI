@@ -72,18 +72,32 @@ class ProviderResult:
 
     @property
     def downgraded(self) -> bool:
-        """Whether a different model served this than was requested.
+        """Whether a **different** model served this than was requested.
 
-        **Nothing in the MVP can make this true**, because nothing downgrades:
-        Haiku 5.5 has no server-side refusal fallback and there is no
-        cross-provider fallback either. It is computed rather than assumed so
-        that the claim is *proved* by the stored comparison instead of being
-        asserted by this comment.
+        Nothing in the MVP should make this true: neither provider has a
+        refusal fallback and there is none between them. It is computed rather
+        than assumed so that the claim is *proved* by the stored comparison
+        instead of being asserted by this comment.
+
+        **An alias resolving to its own dated snapshot is not a downgrade**,
+        and a plain inequality said it was. Found on the first live run: a
+        request for `gpt-4.1` is served by `gpt-4.1-2025-04-14`, and the
+        report was stored flagged as downgraded. That is the same model named
+        more precisely, and §5.2's flag exists to tell a finance team their
+        reasoning came from a weaker model - a flag that fires on every
+        OpenAI response would make the audit trail noise rather than
+        evidence, which is the same failure as it never firing.
+
+        Prefix matching is the test, and it stays strict enough to be worth
+        having: `claude-haiku-5-5` served by `claude-sonnet-5-5` is a
+        downgrade, and so is `gpt-4.1` served by `gpt-4o`. Only a returned id
+        that *extends* the requested one is treated as the same model.
         """
-        return (
-            self.model_returned is not None
-            and self.model_returned != self.model_requested
-        )
+        if self.model_returned is None:
+            return False
+        if self.model_returned == self.model_requested:
+            return False
+        return not self.model_returned.startswith(self.model_requested)
 
     @property
     def refused(self) -> bool:

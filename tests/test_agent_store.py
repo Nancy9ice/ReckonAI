@@ -288,8 +288,20 @@ def test_that_refusal_is_not_quietly_rewritten_as_insufficient_evidence(
     with pytest.raises(InconsistentReport):
         _store(session, seeded, _result(report=report))
 
+    # **Scoped to this tenant, and that matters after a rollback.** The
+    # rollback discards this session's work, so what it then reads is
+    # *committed* state - which on a developer machine includes any
+    # investigation left by running the agent CLI for real. Asserting the
+    # table is globally empty passes only on a clean database, which is the
+    # same ambient-state fragility that made the settings tests fail the
+    # moment a key was exported.
     session.rollback()
-    assert session.scalars(select(Investigation)).all() == []
+    assert (
+        session.scalars(
+            select(Investigation).where(Investigation.tenant_id == seeded)
+        ).all()
+        == []
+    )
 
 
 def test_insufficient_evidence_may_carry_no_causes(

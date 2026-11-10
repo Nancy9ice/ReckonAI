@@ -13,6 +13,7 @@ wiring, not the model. What they pin:
 
 from __future__ import annotations
 
+import json
 import uuid
 
 import pytest
@@ -90,11 +91,19 @@ class _StubProvider:
         self.user = user
 
         if self._call_tools:
+            # **Through `run_as_json`, not `call`.** That is the path both
+            # real providers take, and it is where a withheld record kind
+            # becomes an explicit `unavailable` marker. A stub calling `call`
+            # directly would miss the translation entirely - which is how the
+            # earlier version of these tests asserted an empty list and
+            # encoded the bug the live run found.
             for spec in tools:
                 if not spec.parameters:
-                    self.tool_results[spec.name] = spec.call()
+                    self.tool_results[spec.name] = spec.run_as_json()
                 elif "order_ref" in spec.parameters:
-                    self.tool_results[spec.name] = spec.call(order_ref=ORDER_REF)
+                    self.tool_results[spec.name] = spec.run_as_json(
+                        order_ref=ORDER_REF
+                    )
 
         if self._error is not None:
             raise ProviderError(self._error)
@@ -289,7 +298,14 @@ def test_withholding_reaches_the_tools_and_the_row(
         withhold=("ledger",),
     )
 
-    assert provider.tool_results["fetch_seller_ledger_entries"] == []
+    # The marker, not an empty list. "You may not see the ledger" and "the
+    # ledger has no entries" are different claims, and the agent reported the
+    # stronger one when they looked identical.
+    ledger = json.loads(str(provider.tool_results["fetch_seller_ledger_entries"]))
+    assert ledger["unavailable"] is True
+    assert ledger["record_kind"] == "ledger"
+    assert "NOT mean none exist" in ledger["note"]
+
     assert outcome.investigation.withheld == ["ledger"]
     assert outcome.investigation.verdict == "insufficient_evidence"
 

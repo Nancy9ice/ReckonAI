@@ -27,7 +27,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from reckonai.agent.tools import InvestigationTools
+from reckonai.agent.tools import InvestigationTools, Withheld
 
 
 @dataclass(frozen=True)
@@ -71,8 +71,34 @@ class ToolSpec:
         that is not natively JSON - it should never fire, since the tools
         already stringify amounts and identifiers, and a `Decimal` reaching
         here would be a tool returning a bare number.
+
+        **A withheld record kind becomes an explicit marker**, never an empty
+        result. Returning `[]` made "you may not see this" identical to "this
+        does not exist", and the live run proving exit criterion 3 showed the
+        agent reading it the second way - asserting at full confidence that no
+        ledger entries existed for a refund whose entries it had been denied.
+        The marker says plainly that the records are unavailable, so the model
+        can reach `insufficient_evidence` rather than inventing the stronger
+        claim.
         """
-        return json.dumps(self.call(**arguments), default=str)
+        try:
+            result = self.call(**arguments)
+        except Withheld as withheld:
+            return json.dumps(
+                {
+                    "unavailable": True,
+                    "record_kind": withheld.kind,
+                    "note": (
+                        f"The {withheld.kind} records are NOT AVAILABLE for "
+                        "this investigation. This does NOT mean none exist - "
+                        "it means you cannot see them. You must not conclude "
+                        "anything about whether such records exist. If your "
+                        "explanation depends on them, return the verdict "
+                        "insufficient_evidence."
+                    ),
+                }
+            )
+        return json.dumps(result, default=str)
 
 
 def tool_specs(tools: InvestigationTools) -> tuple[ToolSpec, ...]:

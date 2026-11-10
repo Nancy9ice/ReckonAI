@@ -32,6 +32,7 @@ hidden, and it is one of the things Block G's comparison has to account for.
 
 from __future__ import annotations
 
+import copy
 import json
 from typing import Any, cast
 
@@ -70,6 +71,60 @@ def _as_function_tool(spec: ToolSpec) -> dict[str, Any]:
     }
 
 
+def _inlined(node: Any, definitions: dict[str, Any]) -> Any:
+    """One JSON Schema node with every `$ref` resolved in place.
+
+    **This exists because of a real 400 from this API**, not defensively:
+
+        Invalid schema for response_format 'investigation_report':
+        context=('properties', 'verdict'), $ref cannot have keywords
+        {'description'}
+
+    Pydantic emits an enum field with a docstring as a `$ref` carrying a
+    sibling `description`, which is valid JSON Schema and which OpenAI's
+    strict mode rejects. Inlining the definition and merging the siblings over
+    it produces the same contract in a shape this API accepts.
+
+    The alternative was changing `reckonai.agent.report` - flattening the
+    enum to a `Literal`, or dropping the field descriptions. Both were
+    rejected: the report model is the seam between the two providers, and
+    bending it to one provider's schema dialect is how the two stop being
+    comparable. The adaptation belongs in the adapter.
+
+    Siblings win over the definition, so a field's own `description` survives
+    rather than being replaced by the enum's. Not recursion-safe for a
+    self-referential model; this one is a fixed three levels deep, and a
+    recursive report would need a different approach anyway since strict mode
+    forbids unbounded nesting.
+    """
+    if isinstance(node, dict):
+        if "$ref" in node:
+            name = str(node["$ref"]).rsplit("/", 1)[-1]
+            resolved = _inlined(copy.deepcopy(definitions[name]), definitions)
+            resolved.update({k: v for k, v in node.items() if k != "$ref"})
+            return resolved
+        return {
+            key: _inlined(value, definitions)
+            for key, value in node.items()
+            if key != "$defs"
+        }
+    if isinstance(node, list):
+        return [_inlined(item, definitions) for item in node]
+    return node
+
+
+def strict_report_schema() -> dict[str, Any]:
+    """The shared report as a schema this API's strict mode accepts.
+
+    Exported rather than private so `tests/test_agent_providers.py` can assert
+    the shape directly - the stub accepts any schema, so nothing but the live
+    call or this test would catch a dialect violation.
+    """
+    schema = InvestigationReport.model_json_schema()
+    inlined: dict[str, Any] = _inlined(schema, schema.get("$defs", {}))
+    return inlined
+
+
 def _response_format() -> dict[str, Any]:
     """The shared report as a strict JSON schema.
 
@@ -77,12 +132,11 @@ def _response_format() -> dict[str, Any]:
     providers are provably asked for the same shape - which is the whole
     premise of comparing them.
     """
-    schema = InvestigationReport.model_json_schema()
     return {
         "type": "json_schema",
         "json_schema": {
             "name": "investigation_report",
-            "schema": schema,
+            "schema": strict_report_schema(),
             "strict": True,
         },
     }

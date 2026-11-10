@@ -80,12 +80,14 @@ uv run python -m reckonai.demo_data --reset          # REQUIRED afterwards
 
 **The reset is not optional**, and this cost a suite-wide failure to discover.
 `--ensure` commits, and the test suite requires a database with no committed
-marketplace rows: `tests/conftest.py::assert_no_committed_marketplace_rows`
-fails, `test_migrations.py`'s downgrade to `base` cannot run against committed
-tenant rows, and `test_order_dependence_guard.py` fails. Six failures and 43
-errors, none of them about the agent. `demo_data`'s own docstring warns that
-`--ensure` "is not for a developer's test database"; the warning is easy to
-read past while setting up a demo.
+marketplace rows: `test_migrations.py`'s downgrade to `base` cannot run against
+committed tenant rows. Six failures and 43 errors, none of them about the agent.
+`demo_data`'s own docstring warns that `--ensure` "is not for a developer's test
+database"; the warning is easy to read past while setting up a demo.
+
+`assert_no_committed_marketplace_rows` now names this as the first of its two
+causes and prints the `--reset` command, so the failure explains itself rather
+than pointing at a collection-order bug. See §8 debt 3.
 
 To be filled in from the runs: the invocation, the verdict, the ranked causes
 with their confidences and cited ids, the citation resolution outcome, and the
@@ -232,11 +234,45 @@ so it cannot be forgotten.
    Block F's investigation detail wants the newest row per
    `(order_external_ref, code)` — the same shape as Block D's debt 2. The index
    `ix_investigation_latest_per_exception` is in place for it.
-3. **The live demo needs seed, run, reset in that order.** §3's note. If Block
-   F wants investigations visible in the deployed dashboard, the deployed
-   database is seeded and never reset, so this tension is local only — but a
-   developer running the agent locally must reset afterwards or the suite
-   fails in six places that say nothing about the agent.
+3. ~~**The live demo needs seed, run, reset in that order.**~~
+   **Discharged in this block, not handed on.** Kept here with its reasoning
+   because the hazard still exists; what changed is that it now explains
+   itself.
+
+   *The collision.* Three reasonable choices are mutually incompatible. The
+   agent CLI is a separate process and can only see **committed** rows, so
+   running it by hand needs `demo_data --ensure`, which commits. The test
+   suite **never** commits — the `session` fixture rolls everything back.
+   And `tests/test_migrations.py` downgrades the schema to `base`, which
+   committed rows break against `ondelete=RESTRICT`. **Block E is the first
+   block that needed committed rows to be exercised at all**; every prior one
+   could be validated entirely inside the rolled-back suite.
+
+   *Why it was worth more than a note.* `assert_no_committed_marketplace_rows`
+   already caught it — correctly, and before Postgres produced an error naming
+   nothing. But its message offered only the collection-order cause, because
+   that was the only cause when Block B wrote it. So the diagnosis sent a
+   reader hunting a pytest ordering bug that was not there, while the fix was
+   one unrelated command. It also does not fail as one clean assertion: 6
+   failures and 43 errors, among them
+   `test_order_dependence_guard.py::test_the_guard_passes_when_nothing_is_committed`
+   — the guard's own self-test inverting, which is the least useful thing
+   available to also be broken.
+
+   *The fix.* The guard's message now names both causes, seeding first because
+   it is the one with a one-command undo, and prints that command. Both causes
+   and the fix are asserted by
+   `test_order_dependence_guard.py::test_the_guard_fails_when_rows_exist`, and
+   the message was verified against the **real** failure rather than only
+   against the faked count. The explanation now lives where the failure
+   happens, which is the only mechanism in this project with a track record —
+   prose in a `validation.md` is how Block B's five mypy errors became 32.
+
+   *What remains.* The hazard itself: seed, run, reset is still the local
+   procedure. **Block G owns the rehearsal** and is the next thing to run the
+   full demo locally; if that proves awkward, the fix is a separate database
+   for live runs rather than a louder message. The deployed database is seeded
+   once and never reset, so none of this reaches the demo.
 4. **`fetch_disputes` resolves captures through the order case twice.** It
    reads `case.captures` for ids and the ORM rows separately. Harmless at
    eighteen orders and one query either way; worth folding together if the

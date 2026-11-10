@@ -46,6 +46,19 @@ def test_the_guard_fails_when_rows_exist(
     assert "ondelete=RESTRICT" in message
     assert "debt 4" in message, "the message must name where the reasoning lives"
 
+    # **Both causes, and the fix for the one that has a one-command fix.**
+    # The message offered only the collection-order cause until Block E, whose
+    # agent is the first component that needs committed rows to be run by hand
+    # at all. A developer who seeds and forgets to reset gets 49 failures and
+    # a diagnosis pointing at a pytest ordering bug that is not there.
+    #
+    # Asserted here rather than left to review, because the whole value of
+    # that message is that it appears at the moment of failure - and a
+    # diagnosis nothing checks is how it drifted out of date the first time.
+    assert "demo_data --reset" in message, "the message must name the fix"
+    assert "demo_data --ensure" in message, "the message must name the cause"
+    assert "debt 3" in message, "and where that reasoning lives too"
+
 
 def test_the_count_answers_zero_when_the_schema_is_at_base(
     engine: Engine, monkeypatch: pytest.MonkeyPatch

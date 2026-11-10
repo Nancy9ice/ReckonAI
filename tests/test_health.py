@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -15,7 +17,11 @@ _UNREACHABLE_URL = "postgresql+psycopg://nobody:nobody@127.0.0.1:1/absent"
 
 
 @pytest.fixture
-def client(database_url: str) -> TestClient:
+def client(
+    database_url: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> TestClient:
+    # A local `npm run build` must not change what these tests see at `/`.
+    monkeypatch.setenv("FRONTEND_DIST", str(tmp_path / "no-build"))
     # Used as a context manager so the lifespan handler runs and the engine is
     # built the way it is in a deployed process.
     with TestClient(app) as test_client:
@@ -120,3 +126,18 @@ def test_readiness_failure_leaks_no_credential(
     logged = caplog.text
     assert "reckonai.health.not_ready" in logged
     assert "nobody" not in logged
+
+
+def test_a_dashboard_build_is_served_at_root_and_the_index_moves(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With a frontend build, `/` is the page; without, it is the JSON index."""
+    (tmp_path / "index.html").write_text("<html>dashboard</html>")
+    monkeypatch.setenv("FRONTEND_DIST", str(tmp_path))
+    root = client.get("/")
+    assert root.headers["content-type"].startswith("text/html")
+    assert "dashboard" in root.text
+    assert client.get("/service").json()["service"] == "reckonai"
+
+    monkeypatch.setenv("FRONTEND_DIST", str(tmp_path / "absent"))
+    assert client.get("/").json()["service"] == "reckonai"

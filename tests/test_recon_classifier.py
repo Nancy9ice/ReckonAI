@@ -1031,3 +1031,190 @@ def test_a_mixed_currency_ledger_does_not_abort_the_run() -> None:
 
     assert findings, "a mixed-currency ledger must produce something"
     assert all(isinstance(f.impact, Money) for f in findings)
+
+
+# ---------------------------------------------------------------------------
+# D11 - a dispute settled by a refund
+#
+# `specs/2026-11-09-queue-scheduled-run/requirements.md` D11, and Block C's
+# D7 precedent: **encode the rule, seed nothing.** The clean baseline stays at
+# 15 purchase units and two non-faults, so the false-positive gate keeps
+# measuring the same thing.
+#
+# Hand-authored, and labelled as such: the sandbox cannot produce this shape.
+# Its one dispute is an open inquiry that moves no money, there is no PayPal
+# dispute fixture at all, and no refund anywhere settles a dispute. The four
+# tests below are the four ways a marketplace can book the loss.
+# ---------------------------------------------------------------------------
+
+
+def _disputed_order(*bookings: Entry, with_provider_refund: bool = True) -> OrderCase:
+    """ORD-0011's clean shape, with the refund recast as a dispute settlement.
+
+    The refund is PayPal's: a lost dispute is settled by money going back to
+    the buyer, and PayPal reverses the platform fee pro rata on a lost dispute
+    exactly as it does on a refund - which is what
+    `LEDGER_ENTRY_CATEGORIES`'s own comment records. So the expected
+    entitlement absorbs the loss through the refund, and what varies here is
+    only how the marketplace wrote it down.
+    """
+    case = clean_case(
+        gross="70.00", commission="7.00", entitlement="63.00", order_ref="ORD-D11"
+    )
+    refund = Refund(
+        Money("20.00", "USD"),
+        seller_id=SELLER_B,
+        capture_id=case.captures[0].id,
+        external_id="RFND-D11-A",
+    )
+
+    fees = case.platform_fees
+    if with_provider_refund:
+        fees = (
+            *fees,
+            Fee(
+                Money("2.00", "USD"),
+                seller_id=SELLER_B,
+                refund_id=refund.id,
+                external_id="FEE-REV-D11",
+            ),
+        )
+
+    return replace(
+        case,
+        provider_refunds=(refund,) if with_provider_refund else (),
+        platform_fees=fees,
+        ledger_entries=(
+            *case.ledger_entries,
+            Entry(
+                "commission_reversal",
+                "credit",
+                Money("2.00", "USD"),
+                case.order.id,
+                SELLER_B,
+                "LED-D11-rev",
+            ),
+            *bookings,
+        ),
+    )
+
+
+def _booking(category: str, ref: str, amount: str = "20.00") -> Entry:
+    return Entry(
+        category,
+        "debit",
+        Money(amount, "USD"),
+        None,
+        SELLER_B,
+        ref,
+    )
+
+
+def _with_order(case: OrderCase, entry: Entry) -> Entry:
+    """Ledger entries are grouped by `order_id`, which `_booking` cannot know."""
+    entry.order_id = case.order.id
+    return entry
+
+
+def test_a_dispute_loss_booked_as_a_dispute_debit_produces_nothing() -> None:
+    """D11's first row, and the false positive the exclusion used to cause.
+
+    Before `dispute` joined `POSITION_CATEGORIES` this debit was invisible to
+    the ledger sum while the expected entitlement had already absorbed the
+    loss through the refund, so a correct marketplace was reported as not
+    having reflected its refund.
+    """
+    booking = _booking("dispute", "LED-D11-dispute")
+    case = _disputed_order()
+    booking.order_id = case.order.id
+    case = replace(case, ledger_entries=(*case.ledger_entries, booking))
+
+    assert classify_order(case) == ()
+
+
+def test_a_dispute_loss_booked_as_a_refund_debit_produces_nothing() -> None:
+    """D11's second row: unchanged behaviour, asserted so it stays unchanged.
+
+    Widening the categories must not disturb the marketplace that books the
+    ordinary way.
+    """
+    booking = _booking("refund", "LED-D11-refund")
+    case = _disputed_order()
+    booking.order_id = case.order.id
+    case = replace(case, ledger_entries=(*case.ledger_entries, booking))
+
+    assert classify_order(case) == ()
+
+
+def test_booking_the_loss_twice_counts_it_once() -> None:
+    """D11's third row, and the hazard a naive inclusion creates.
+
+    A marketplace that records the same loss under both categories has not
+    lost twice as much money. Summing both halves debits the seller 40.00
+    against a 20.00 refund and reports a 20.00 shortfall that does not exist -
+    a false positive invented by the fix for a false positive.
+    """
+    case = _disputed_order()
+    refund_entry = _booking("refund", "LED-D11-refund")
+    dispute_entry = _booking("dispute", "LED-D11-dispute")
+    refund_entry.order_id = case.order.id
+    dispute_entry.order_id = case.order.id
+
+    case = replace(
+        case, ledger_entries=(*case.ledger_entries, refund_entry, dispute_entry)
+    )
+
+    assert classify_order(case) == ()
+
+
+def test_a_dispute_debit_with_no_provider_refund_is_reported() -> None:
+    """D11's fourth row. The hold-out must not become a blanket exemption.
+
+    A dispute debit with no PayPal refund behind it is an unevidenced
+    movement: the seller's position moved and nothing from the provider
+    accounts for it. That is exactly what a reconciliation should surface, so
+    this one is a finding rather than a held-out row.
+    """
+    case = _disputed_order(with_provider_refund=False)
+    booking = _booking("dispute", "LED-D11-dispute")
+    booking.order_id = case.order.id
+    case = replace(
+        case,
+        ledger_entries=(
+            *[
+                entry
+                for entry in case.ledger_entries
+                if entry.entry_category != "commission_reversal"
+            ],
+            booking,
+        ),
+    )
+
+    findings = classify_order(case)
+
+    assert findings, (
+        "a 20.00 debit with no provider record behind it must not be silently "
+        "absorbed by the dispute hold-out"
+    )
+
+
+def test_the_hold_out_is_matched_on_amount() -> None:
+    """A dispute debit for a different amount is not the refund restated.
+
+    Without the amount check the rule would swallow any dispute debit on an
+    order that happened to have a refund, which would hide a real loss.
+    """
+    case = _disputed_order()
+    refund_entry = _booking("refund", "LED-D11-refund")
+    other = _booking("dispute", "LED-D11-dispute", amount="35.00")
+    refund_entry.order_id = case.order.id
+    other.order_id = case.order.id
+
+    case = replace(
+        case, ledger_entries=(*case.ledger_entries, refund_entry, other)
+    )
+
+    assert classify_order(case), (
+        "35.00 is not the 20.00 refund written twice, so it must still be "
+        "accounted for"
+    )

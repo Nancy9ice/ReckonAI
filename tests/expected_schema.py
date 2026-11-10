@@ -53,10 +53,26 @@ CONNECTOR_TABLES: tuple[str, ...] = (
 #: current. specs/2026-11-09-paypal-capture/requirements.md D13.
 DEMO_TABLES: tuple[str, ...] = ("demo_seed",)
 
+#: Block D's execution substrate and its output: the queue, the dedupe marker,
+#: and the runs and exceptions Block C froze a contract for.
+#: specs/2026-11-09-queue-scheduled-run/requirements.md D1, D5, D6.
+QUEUE_TABLES: tuple[str, ...] = (
+    "job",
+    "processed_event",
+    "reconciliation_exception",
+    "reconciliation_run",
+)
+
 #: Every table in `Base.metadata`. Excludes `alembic_version`, which Alembic
 #: owns and which never appears in the declarative metadata.
 MODEL_TABLES: tuple[str, ...] = tuple(
-    sorted(CATALOGUE_TABLES + EVENT_TABLES + CONNECTOR_TABLES + DEMO_TABLES)
+    sorted(
+        CATALOGUE_TABLES
+        + EVENT_TABLES
+        + CONNECTOR_TABLES
+        + DEMO_TABLES
+        + QUEUE_TABLES
+    )
 )
 
 #: Every table in the database, which is the above plus Alembic's own.

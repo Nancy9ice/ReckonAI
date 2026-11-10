@@ -60,6 +60,29 @@ TABLES_WITHOUT_EVIDENCE = (
     | {"connector_mapping", "quarantined_record"}
     # Records which dataset is loaded; holds no financial value.
     | {"demo_seed"}
+    # Block D's four. The queue tables are easy: `job` and `processed_event`
+    # hold an instruction and a dedupe marker, no amount and no provider
+    # record, nothing to be evidence *of*.
+    #
+    # **`reconciliation_exception` is the hard one, because it does carry
+    # amounts**, and excluding a money-bearing table from this gate is exactly
+    # what the derive-by-exclusion comment above warns against. The reason it
+    # is right here: P7 binds a *retrieved source document* to the record it
+    # produced, and a finding is neither retrieved nor a record of a movement -
+    # it is a conclusion drawn over many records at once. An order, its items,
+    # a capture, a platform fee and several ledger entries each link to their
+    # own payload; the finding rests on all of them. A single
+    # `raw_payload_id` could only name one, so the column would assert that
+    # one payload is the evidence for a conclusion the other five also
+    # support - a narrower claim than the truth, written into the schema.
+    #
+    # What carries the evidence instead is `evidence_refs`, NOT NULL, holding
+    # the external ids the finding rests on. Every id in it resolves to a
+    # record that does carry a payload link, so P7's chain is unbroken - it
+    # runs through the cited records rather than around them.
+    # `test_an_exception_cannot_exist_without_its_evidence` below is the
+    # compensating gate, so this exclusion costs no coverage.
+    | {"job", "processed_event", "reconciliation_run", "reconciliation_exception"}
 )
 
 
@@ -268,3 +291,54 @@ def test_no_financial_table_carries_a_cross_source_match(table: Table) -> None:
     matching = {name for name in table.c.keys() if name.startswith("matched_")}
 
     assert not matching, f"{table.name} carries {matching}"
+
+
+# ---------------------------------------------------------------------------
+# Block D - the compensating gates for the four tables excluded above
+# ---------------------------------------------------------------------------
+
+
+def test_an_exception_cannot_exist_without_its_evidence() -> None:
+    """P7's chain, for a table that cannot carry a single `raw_payload_id`.
+
+    `reconciliation_exception` is excluded from the evidence gate because a
+    finding is a conclusion over many records rather than one retrieved
+    document - see `TABLES_WITHOUT_EVIDENCE`. This is what replaces it: the
+    refs column is NOT NULL, so a finding cannot be stored with no stated
+    basis at all.
+
+    It does not assert the list is non-empty, because that is a value rule
+    rather than a schema one and `JSONB` cannot express it. The classifier is
+    what guarantees the ids, and Block E's exit criterion is that each one
+    resolves.
+    """
+    table = Base.metadata.tables["reconciliation_exception"]
+
+    assert "evidence_refs" in table.c
+    assert not table.c.evidence_refs.nullable, (
+        "a finding could then be stored with no stated evidence at all"
+    )
+    assert not table.c.evidence_basis.nullable, (
+        "specs/roadmap.md Phase 11 requires a finding resting on a derived "
+        "linkage to say so"
+    )
+
+
+def test_the_persisted_vocabularies_match_the_classifier() -> None:
+    """The models package duplicates `recon`'s enums as literals, on purpose.
+
+    `reckonai.models` must not import `reckonai.recon`: the latter is a pure
+    package under the purity gate, and a models-layer import would drag a
+    session-free package into one full of them. So the strings are written
+    twice and pinned here instead - the same pattern as the sim manifest and
+    the exception vocabulary.
+
+    Without this, a code added to the classifier would be rejected by a
+    `CHECK` at the moment a run tried to persist it, which is the worst place
+    to find out.
+    """
+    from reckonai.models.reconciliation import EVIDENCE_BASES, EXCEPTION_CODES
+    from reckonai.recon.vocabulary import EvidenceBasis, ExceptionCode
+
+    assert set(EXCEPTION_CODES) == {str(code) for code in ExceptionCode}
+    assert set(EVIDENCE_BASES) == {str(basis) for basis in EvidenceBasis}

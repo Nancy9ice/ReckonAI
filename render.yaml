@@ -136,12 +136,64 @@ services:
       - key: WORKER_TICK_SECONDS
         value: "30"
 
-# No cron job here yet. Render Cron Jobs are confirmed available on this plan
-# (notes.md, Group 0 step 4), so the worker-loop timer fallback is dropped - but
-# there is nothing for a scheduled invocation to do until the jobs table exists,
-# so Phase 8 declares it.
-#
-# No static site either. The frontend is Phase 14 (requirements.md D1).
+  # ---------------------------------------------------------------------------
+  # The scheduled reconciliation. Block D
+  # (specs/2026-11-09-queue-scheduled-run/requirements.md D8, D9).
+  #
+  # **DECLARED BUT NOT APPLIED.** This Blueprint has not been synced since this
+  # service was added, so the cron job does not yet exist on Render. That is
+  # deliberate: the replan's R2 budgeted one deploy and Block A's merge spent
+  # it, and a Blueprint sync redeploys the web service and the worker too,
+  # re-running migrations and the demo seed. Phase 8's "the cron job fires on
+  # the deployed environment" is therefore recorded as **deferred to Block F**,
+  # which owns the next deploy, rather than claimed.
+  #
+  # **It enqueues; it does not reconcile.** The worker above is what executes.
+  # A cron invocation that did the work itself would be a third process
+  # writing financial rows and racing the worker it was meant to feed, and
+  # `FOR UPDATE SKIP LOCKED` protects the queue rather than whoever bypasses
+  # it.
+  #
+  # Hourly rather than daily. The job is idempotent per window - the
+  # `processed_event` unique constraint is what guarantees that, not this
+  # schedule - so a tick whose window is already reconciled logs a skip and
+  # exits. Hourly means a late PayPal record is picked up within the hour
+  # instead of the next day, which is the whole point of R9's windowed run
+  # given reporting lags about a day.
+  #
+  # `--window-days 2`, not 1: the reporting APIs are eventually consistent and
+  # roughly a day behind (specs/tech-stack.md section 8), so a one-day window
+  # closes before the evidence for its final hours has arrived.
+  # ---------------------------------------------------------------------------
+  - type: cron
+    name: reckonai-recon
+    runtime: python
+    plan: starter
+    region: frankfurt
+    branch: main
+    buildCommand: pip install uv && uv sync --frozen --no-dev
+    schedule: "0 * * * *"
+
+    # No preDeployCommand. The web service owns migrations (D7), and a cron
+    # job racing it to migrate is the problem that avoids.
+    #
+    # --no-sync for the reason documented on the services above: without it
+    # `uv run` re-syncs first, undoing the build's --no-dev and doing network
+    # installs at container start.
+    startCommand: >
+      uv run --no-sync python -m reckonai.jobs.schedule --window-days 2
+
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: reckonai-db
+          property: connectionString
+      - key: ENVIRONMENT
+        value: production
+      - key: LOG_LEVEL
+        value: INFO
+
+# No static site yet. The frontend is Phase 14 (requirements.md D1).
 
 databases:
   - name: reckonai-db

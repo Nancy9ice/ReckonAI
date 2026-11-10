@@ -71,16 +71,29 @@ from reckonai.recon.vocabulary import (
     is_exception,
 )
 
-#: Ledger categories that move a seller's position on an order. `fee` and
-#: `dispute` are absent because neither appears in this dataset and treating
-#: an unseen category as position-moving would change every expected figure
-#: on the strength of no evidence.
+#: Ledger categories that move a seller's position on an order.
+#:
+#: `fee` is absent because it does not appear in this dataset and treating an
+#: unseen category as position-moving would change every expected figure on
+#: the strength of no evidence.
+#:
+#: **`dispute` was absent for that reason and is now present**
+#: (`specs/2026-11-09-queue-scheduled-run/requirements.md` D11). The exclusion
+#: was right about the evidence and wrong about the consequence: a dispute
+#: settled by a refund reduces the expected entitlement through the refund,
+#: and if the marketplace books that loss as a `dispute` debit then the ledger
+#: sum omits what the expectation already absorbed. The order then looks as
+#: though it never reflected its refund - a false positive on correct data,
+#: which is what Phase 11's hardest criterion forbids.
+#:
+#: The hazard this creates is double-counting, handled by `_dispute_surplus`.
 POSITION_CATEGORIES: tuple[str, ...] = (
     "sale",
     "commission",
     "refund",
     "commission_reversal",
     "adjustment",
+    "dispute",
 )
 
 
@@ -371,6 +384,13 @@ def classify_order(case: OrderCase) -> tuple[Finding, ...]:
     # refund out of the expected position: the defect is named once, and every
     # later comparison sees books that are internally consistent.
     duplicate_findings, surplus = _duplicate_findings(case, grouped)
+
+    # **A dispute debit that restates a refund debit is held out too.** Same
+    # mechanism, different cause: a marketplace may book a lost dispute once,
+    # as either category, or twice under both. Counting both halves debits the
+    # seller twice and reports a shortfall that does not exist (D11).
+    surplus = surplus | _dispute_surplus(case, grouped)
+
     grouped = {
         key: tuple(entry for entry in entries if entry.id not in surplus)
         for key, entries in grouped.items()
@@ -404,12 +424,25 @@ def _partition_by_ledger(
     adjustment, so a marketplace-only refund is treated as reflected here -
     its own finding is `awaiting_evidence`, and the provider record is the
     evidence that the refund happened at all.
+
+    **Either category reflects a refund** (`specs/2026-11-09-queue-scheduled-
+    run/requirements.md` D11). A refund that settles a lost dispute may be
+    written down as a `refund` debit or as a `dispute` debit, and a
+    marketplace that chose the second has still recorded the movement. Reading
+    only `refund` here reported it as a missing ledger adjustment *and* left
+    the commission expectation unreduced, so one correct booking produced two
+    findings on correct data.
+
+    This is the half of D11 that `POSITION_CATEGORIES` alone does not fix: the
+    categories decide what moves a position, and this decides what counts as
+    having recorded a refund. Both had to change, and the dispute fixture is
+    what showed it.
     """
     provider_ids = {refund.id for refund in case.provider_refunds}
     available: dict[tuple[uuid.UUID, str, str], int] = {}
 
     for (order_id, category), entries in grouped.items():
-        if order_id != case.order.id or category != "refund":
+        if order_id != case.order.id or category not in ("refund", "dispute"):
             continue
         for entry in entries:
             key = (
@@ -631,6 +664,68 @@ def _missing_adjustment_findings(
         )
 
     return findings
+
+
+def _dispute_surplus(
+    case: OrderCase,
+    grouped: Mapping[tuple[uuid.UUID, str], tuple[LedgerEntryLike, ...]],
+) -> set[uuid.UUID]:
+    """Dispute debits that restate a refund debit already counted.
+
+    `specs/2026-11-09-queue-scheduled-run/requirements.md` D11. A marketplace
+    settling a lost dispute may book the loss as a `refund` debit, as a
+    `dispute` debit, or - having done both for its own audit reasons - as one
+    of each for the same money. The first two are one debit and need no
+    special handling. The third is one movement written twice, and counting
+    both halves debits the seller twice and reports a shortfall that does not
+    exist.
+
+    **Matched on the order, the seller and the amount, not on
+    `dispute.capture_id`.** That column is `NULL` throughout and the model
+    records why: `disputed_transactions[].buyer_transaction_id` is the buyer's
+    side of the transaction, so the dispute-to-capture join is not
+    established. This rule does not need it - the two ledger entries are the
+    marketplace's own records of one loss, and the marketplace states both
+    amounts.
+
+    **Not a finding.** A marketplace that books both halves is not in error,
+    so this returns rows to hold out rather than a discrepancy to report. A
+    dispute debit with *no* matching refund debit is left in place, and the
+    residual check reports it if the expectation does not account for it -
+    which is the right answer, since an unevidenced loss is exactly what a
+    reconciliation should surface.
+    """
+    held_out: set[uuid.UUID] = set()
+
+    disputes = grouped.get((case.order.id, "dispute"), ())
+    refunds = grouped.get((case.order.id, "refund"), ())
+    if not disputes or not refunds:
+        return held_out
+
+    # Each refund debit can absorb at most one dispute debit, so a seller with
+    # two refunds and two dispute entries has both held out, and one with two
+    # dispute entries against a single refund keeps the second - where it
+    # belongs, as an unexplained movement the residual check will report.
+    available = [
+        entry
+        for entry in refunds
+        if entry.transaction_type == "debit"
+    ]
+
+    for dispute_entry in disputes:
+        if dispute_entry.transaction_type != "debit":
+            continue
+
+        for candidate in available:
+            if (
+                candidate.seller_id == dispute_entry.seller_id
+                and candidate.amount == dispute_entry.amount
+            ):
+                held_out.add(dispute_entry.id)
+                available.remove(candidate)
+                break
+
+    return held_out
 
 
 def _duplicate_findings(

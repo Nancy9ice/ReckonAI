@@ -700,7 +700,39 @@ data where Phases 0 and 0b confirmed it exists.
 
 ---
 
-## Phase 8 — Job queue and worker · ~2 hours
+## Phase 8 — Job queue and worker · ~2 hours · **COMPLETE 2026-11-10**
+
+> Delivered as Block D, with R9's date-windowed run and the exception table
+> Block C assigned to it. Spec and evidence:
+> `specs/2026-11-09-queue-scheduled-run/`.
+>
+> **Four of the five exit criteria are met**, each by test rather than by
+> inspection - two concurrent claimers taking disjoint sets while the first
+> holds an uncommitted lock; a job retrying to a terminal `failed` with its
+> error recorded; the same window refused by the `processed_event` constraint;
+> and a parked `awaiting_evidence` exception cleared by a later run once its
+> late PayPal record arrives.
+>
+> **The fifth - "the cron job fires a date-windowed run on the deployed
+> environment" - is deferred to Block F**, which owns the next deploy. The
+> `cron` service is declared in `render.yaml` and the Blueprint is not synced,
+> because R2's one deploy was spent on Block A's merge and a sync redeploys the
+> web service and worker too. Declared and unapplied is recorded as such, in
+> the Blueprint itself and in that block's `validation.md` §4; what is unproven
+> is a statement about Render, not about this code.
+>
+> **R9's window needed a second clause.** `order.placed_at` alone cannot see a
+> refund that settles a dispute weeks after the order, so selection is that
+> clause unioned with any order holding evidence retrieved since the last
+> completed run. It cannot be a SQL join: a late PayPal refund reaches its
+> order only through the matcher's claim, not through a column.
+>
+> **The dedupe key is the enqueuer's idempotency key**, of which a provider
+> event id is one kind. §4's "the provider's event id" assumed webhooks, which
+> R8 cut; keying on the composed window key keeps the property §4 argues for -
+> the marker and the financial write in one `COMMIT` - and makes it exercised
+> by the only path the MVP has, rather than shipping a table nothing writes to.
+
 
 > **Replanned 2026-11-08 (R7, R9):** minimised, **not cut.** Two reasons it
 > cannot go: `render.yaml` already declares `reckonai-worker` as a *paid*

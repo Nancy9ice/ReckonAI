@@ -1,7 +1,8 @@
 # ReckonAI — Roadmap
 
 > **Status:** Constitution. Implementation order and phase boundaries.
-> **Updated 2026-11-10: Phases 12, 13 and 14 are built and merged (Blocks E and F). Next is Block G (Phase 15: eval, demo, limitations).** The rest of
+> **Updated 2026-11-10: Phases 12, 13 and 14 are built and merged (Blocks E and F). Phase 15 (eval, demo, limitations) was skipped by the operator on
+> 2026-11-11, so every phase that will be built is built.** The rest of
 > this note is the earlier handoff to Block D, kept as history. **Block D** — the `jobs` table, `FOR UPDATE SKIP LOCKED`,
 > `processed_events`, the Cron Job, the date-windowed run, **and the exception
 > table Phase 11 assigned to it** (that block's `requirements.md` D8). Phases
@@ -1093,7 +1094,11 @@ from strings per [[tech-stack]] §7.
 
 ---
 
-## Phase 15 — Demo script and eval harness · 0.5 day
+## Phase 15 — Demo script and eval harness · 0.5 day · **SKIPPED 2026-11-11 (operator decision)**
+
+> Not built, and no spec exists. Detection and false positives are covered by
+> `tests/test_recon_gate.py`; the AI's root-cause accuracy is unmeasured. See
+> `CLAUDE.md`, "Block G was skipped".
 
 > **Kept by the replan (R12), against the cutline below**, which names the
 > harness as the second thing to drop. The reasoning inverts at two days:

@@ -30,8 +30,9 @@ mapping and a blocking validation gate, PayPal records in the same canonical
 model, a deterministic entitlement engine, classified exceptions, an AI agent
 that investigates each exception and reports ranked causes with cited record
 ids, a prioritised queue with human approve/reject, an operations dashboard, and
-an eval harness that scores detection rate, false positives and root-cause
-accuracy against a seeded fault manifest.
+a seeded fault manifest whose detection and false-positive results are asserted
+by the test suite. **There is no eval harness, and the AI's root-cause accuracy is
+not measured** (see the limitations below).
 
 **What it does not do.** Each is a deliberate decision with a reason, not an
 oversight:
@@ -65,8 +66,9 @@ decision rather than an omission (`specs/tech-stack.md` §5, amended
 | Limitation | Reason |
 |---|---|
 | **A refused investigation is reported as failed, and is not retried** — not on a second model and not on the second provider | Claude Haiku 5.5 has no server-side refusal fallback, and a cross-provider fallback was offered and declined. A refusal therefore stops, and is surfaced as a failed investigation: no report, no cause list, nothing presented as a conclusion. The gap is recorded rather than papered over, which also keeps the downgrade flag meaning exactly what it says |
-| **The model is a setting, and the default is the cheaper one.** `settings.agent_model` defaults to `claude-haiku-5-5` | The argument that the strongest model pays for itself on multi-step evidence reasoning still stands, but it is asserted rather than measured. The eval harness is the instrument that settles it, and the model is configuration so it can be scored either way with no code change. Every response's model id is stored and compared against the one requested, so the audit trail always states which model produced a report |
-| **A second provider is selectable and is not the measured default.** `settings.agent_provider` chooses Anthropic or OpenAI | Both return the same structured report, so the eval can score across providers as well as across models. The OpenAI path is implemented and unit-tested but has not been run against the live API. It also returns no reasoning summary, so investigations served that way carry no recorded reasoning — a real difference, and one the eval has to account for |
+| **The model is a setting, and the default is the cheaper one.** `settings.agent_model` defaults to `claude-haiku-5-5` | The argument that the strongest model pays for itself on multi-step evidence reasoning still stands, but it is asserted rather than measured. No eval was built to settle it (Phase 15 was skipped), so it stays an assertion; the model is configuration, so it can be changed with no code change. Every response's model id is stored and compared against the one requested, so the audit trail always states which model produced a report |
+| **No eval harness was built (Phase 15 was skipped), so the AI's root-cause accuracy is unmeasured** | Detection and false positives are asserted by tests against the seeded faults. For the AI, only hand-run investigations exist: the missing-refund case and the evidence-removed case passed in the agent block, the duplicate-entry case passed on the deployed app, the FX case returned "no clear cause", and the commission and payout cases were never run. No rate is claimed |
+| **A second provider is selectable and is not the measured default.** `settings.agent_provider` chooses Anthropic or OpenAI | Both return the same structured report. **The OpenAI path (`gpt-4.1`) is the one that has run live**, in the agent block and on the deployed app, and it is what the deployed app uses; the Anthropic path is implemented and unit-tested but has never run live (that account has no credit). OpenAI returns no reasoning summary, so investigations served that way carry no recorded reasoning, a real difference between the two |
 
 **Limitations the dashboard carries** (`specs/2026-11-10-queue-approval-dashboard/`):
 

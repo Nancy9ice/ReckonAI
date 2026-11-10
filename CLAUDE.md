@@ -31,8 +31,9 @@ Also read, and in this order:
 **Phases 0, 0b, 1, 2, 3, Block A (4 + 5 + 6), the PayPal capture (R16), Block
 B (Phase 10), Block C (Phase 11), Block D (Phase 8 + R9 + the exception table),
 Block E (Phase 12) and Block F (Phases 13 + 14) are built and merged (PR #24,
-merge commit `69a3a0c`, 2026-11-10 23:00 UTC).** Block G (eval harness,
-demo, limitations) is next. **Every merge to `main` deploys** the API and the
+merge commit `69a3a0c`, 2026-11-10 23:00 UTC).** **Every planned block is
+complete; Block G (eval harness, demo, limitations) was skipped on purpose** -
+see "Block G was skipped" below. **Every merge to `main` deploys** the API and the
 worker.
 
 **Read `specs/2026-11-10-queue-approval-dashboard/validation.md` before
@@ -80,15 +81,32 @@ moves to `/service`). Things not to re-derive:
   database breaks the suite** (`test_migrations` downgrades the schema): run
   `python -m reckonai.demo_data --reset` before `pytest`.
 
-**Starting Block G.** It has no spec yet: as every prior block did, write
-`requirements.md`, `plan.md` and `validation.md` into a dated `specs/` directory
-first. Its scope is the replan's Block G (one eval command scored against the
-sim manifest, three demo scenarios from a clean database, a rehearsal against the
-deployed app, the limitations section) and Phase 15 in `specs/roadmap.md`.
-**Block F has merged, so branch from `main`.** Block F's own deploy was
-verified in `specs/2026-11-10-queue-approval-dashboard/validation.md` §3a; read
-it before Block G, because the deployed environment is what Block G rehearses
-against.
+**Block G was skipped** (operator decision, 2026-11-11), so there is no next
+block to start. Do not begin one unprompted, and do not write a spec for it
+unless asked. What this leaves, so nothing is claimed that was not measured:
+
+- **No eval harness exists.** Detection and false positives are asserted by tests
+  (`tests/test_recon_gate.py`, `test_manifest_agrees_with_seed.py`), not printed as
+  a table. **Root-cause accuracy of the AI is not measured.** What is known is
+  hand-run: Scenario 1 (F1) and the evidence-removed case in Block E on
+  `gpt-4.1`, F4 correct on production, F3 (FX) came back "no clear cause", F2 and
+  F6 never investigated. Anthropic has never run. State it that way, never as a
+  rate.
+- **No scripted demo and no `demo.md` runbook.** The deployed app was exercised by
+  hand after the Block F merge (a run, then an investigation, on production;
+  `specs/2026-11-10-queue-approval-dashboard/validation.md` §3a).
+- **The limitations audit was not done**; the readme's limitations were written
+  block by block and have not been checked line by line against the replan.
+- **The age factor reads 0% on the seeded data** (orders are dated after today).
+- **About 30 comments in `src/` and `tests/` say "Block G's comparison" or "Block G
+  scores"** (same prompt and registry for both providers, exact confidence
+  storage, one spelling per outcome). Those design choices still stand for their
+  own reasons; the comparison they were built for was never made.
+
+If it is ever revived, the lean version was: one command printing the
+deterministic table, one agent run over F1, F2, F3, F4 and F6 plus the
+evidence-removed cases with results written down as they come, a short runbook, a
+rehearsal on the deployed app, and the limitations audit.
 
 **Read `specs/2026-11-10-investigation-agent/validation.md` before touching
 `reckonai/agent/`.** §6 lists five corrections this block made to earlier
@@ -166,8 +184,8 @@ calling every tool and asserting the session holds nothing pending.
 database with no committed marketplace rows — skipping the `--reset` afterwards
 fails six tests and errors 43 more, none of them about the agent. **The
 `insufficient_evidence` branch is still the criterion most at risk on a cheaper
-model, so Block G scores that branch specifically**, on both models and now
-both providers.
+model; no eval scores that branch (Block G was skipped)**, so it is known only
+from hand-run investigations.
 
 **Read `specs/2026-11-09-queue-scheduled-run/validation.md` §9 and §8 first**
 (three debts handed forward, three corrections to earlier documents), then

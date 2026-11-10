@@ -29,37 +29,64 @@ Also read, and in this order:
   evidence. The root specs state rules and point here; they do not repeat it.
 
 **Phases 0, 0b, 1, 2, 3, Block A (4 + 5 + 6), the PayPal capture (R16), Block
-B (Phase 10), Block C (Phase 11) and Block D (Phase 8 + R9 + the exception
-table) are complete. Block E is next** — the investigation agent, Phase 12,
-kept **entire**.
+B (Phase 10), Block C (Phase 11), Block D (Phase 8 + R9 + the exception table)
+and Block E (Phase 12, the investigation agent, kept entire) are complete.
+Block F is next** — Phases 13 and 14, and it owns the one remaining deploy.
 
-**Block E reads these, in this order, and little else.** [[roadmap]] Phase 12
-for the exit criteria; `specs/tech-stack.md` §5 for the model and §5.1 for the
-request configuration, which is unusually specific and was derived from real
-API behaviour — adaptive thinking with `display` set explicitly, `effort`
-`medium` set explicitly, no sampling parameters at all; and §5.2 for the four
-audit constraints, which are as binding as the money rules.
+**Read `specs/2026-11-10-investigation-agent/validation.md` before touching
+`reckonai/agent/`.** §6 lists five corrections this block made to earlier
+documents — two of them to rules stated in `CLAUDE.md` itself, corrected below
+— §7 lists four things found only by running it, and §8 the four debts.
 
-**The model is `claude-haiku-5-5`, by the dated 2026-11-10 amendment in §5, and
-it lives in `settings.agent_model` rather than in code** so Block G can score
-both models on the same faults. Two consequences to carry: **Haiku 5.5 has no
-server-side refusal fallback**, so a `stop_reason: "refusal"` ends the
-investigation and is reported as failed — never as a report — and nothing
-downgrades, which is why §5.2's downgrade flag has nothing to flag. And the
-`insufficient_evidence` branch is the criterion most at risk on a cheaper
-model, so **Block G scores that branch specifically**, not just overall
-detection. Then R11 in the replan, which states plainly what was cut (a Haiku
-field-*name*-guessing pass) and what was not (this entire block), and
-distinguishes the three different things these specs call "confidence". Load
-the `claude-api` skill before writing agent code.
+The agent lives in `reckonai/agent/`: `tools.py` (the read-only surface),
+`citations.py`, `registry.py` (one tool description, adapted to both
+providers), `report.py` (the shared Pydantic report), `prompt.py`,
+`providers/` (`anthropic.py` and `openai.py`), `store.py`, `investigate.py`
+(the `python -m` entry point). **It is the second package outside the purity
+gate and inside strict mypy**, after `jobs/`, and `tests/test_money_purity.py`
+records why.
+
+**Two providers, one report.** `settings.agent_provider` selects `anthropic`
+(default, `claude-haiku-5-5`) or `openai`; the structured report is the seam.
+`tech-stack.md` §1 and §5 carry the dated 2026-11-10 amendment, and **§5.1's
+request table is Anthropic-specific** — every row was derived from real Claude
+API behaviour and several are 400s there. The OpenAI path's configuration is
+recorded in that `validation.md` §3a, including that it returns **no reasoning
+summary**. Load the `claude-api` skill before changing the Anthropic provider.
+
+**Nothing downgrades, and the columns are what prove it.** Neither provider has
+a refusal fallback and there is none between them, so a `stop_reason:
+"refusal"` ends the investigation and is reported as **failed** — never as a
+report — and `investigation.downgraded` can never be set in the MVP. That is
+§5.2's rule honoured rather than exempted. `stop_reason` is read before any
+content on both providers.
+
+**Two `CLAUDE.md` rules this block corrected.** "Cite the capture, never
+`platform_fee.external_id`" is **incomplete**: a fee PayPal *reverses* has no
+`capture_id` — its parent is the refund — and Scenario 1's own order is that
+shape. The stable reference is the fee's parent, whichever it is, and
+`fetch_platform_fees` returns `fee_kind` so a capture fee and a reversal are
+never added together. And a fee id **does resolve** to a real record; it simply
+will not find it again after a reseed, so `Citation` answers `resolved` and
+`stable` separately — treating a fee id as fabricated would be false and would
+fail on the classifier's own findings.
 
 Three things Block E inherits rather than builds. `reconcile.run(session,
 tenant_id)` is its recompute tool and returns **every** finding regardless of
-any window, so the agent is not limited to what a scheduled run covered.
-**Cite the capture, never `platform_fee.external_id`** — the latter is rebuilt
-from a payload UUID on every seed, and Block E's exit criterion is that every
-cited id resolves to a real record. And the agent is **read-only**: it may
-enqueue nothing and move nothing (P6).
+any window. The exception to investigate is selected through
+`exceptions_only()`, so a parked `awaiting_evidence` finding is never handed to
+the agent as a discrepancy. And the agent is **read-only**: it enqueues nothing
+and moves nothing (P6), which
+`tests/test_agent_tools.py::test_no_tool_writes_to_the_session` proves by
+calling every tool and asserting the session holds nothing pending.
+
+**Running the agent locally needs seed, run, reset, in that order.**
+`python -m reckonai.demo_data --ensure` commits, and the suite requires a
+database with no committed marketplace rows — skipping the `--reset` afterwards
+fails six tests and errors 43 more, none of them about the agent. **The
+`insufficient_evidence` branch is still the criterion most at risk on a cheaper
+model, so Block G scores that branch specifically**, on both models and now
+both providers.
 
 **Read `specs/2026-11-09-queue-scheduled-run/validation.md` §9 and §8 first**
 (three debts handed forward, three corrections to earlier documents), then
@@ -138,8 +165,10 @@ impact figures, and four evidence references naming records that exist
 nowhere, all of them Block A synthetic rows retired by R16. Corrected against
 the fixtures and now pinned by `tests/test_manifest_agrees_with_seed.py` and
 `test_every_reference_the_manifest_names_is_a_real_record`, the two guards
-that were missing. **Cite the capture, never `platform_fee.external_id`** —
-the latter is built from a payload UUID and changes on every seed.
+that were missing. **Cite the fee's parent, never `platform_fee.external_id`**
+— the latter is built from a payload UUID and changes on every seed. Block C
+stated this as "cite the capture"; Block E found that a *reversal* fee has no
+capture and corrected it, as above.
 
 Two things from Block B that change how other code is written. A **type checker
 is now wired in**: `uv run mypy`, strict, scoped to `src/reckonai/engine/` by

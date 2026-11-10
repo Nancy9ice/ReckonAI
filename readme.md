@@ -58,6 +58,16 @@ causes, per-cause cited record ids, confidence values, and the
 `insufficient_evidence` answer when the evidence is not there. It is the
 product's differentiator and was never in scope for reduction.
 
+**Three limitations the agent carries**, recorded here because each is a
+decision rather than an omission (`specs/tech-stack.md` §5, amended
+2026-11-10):
+
+| Limitation | Reason |
+|---|---|
+| **A refused investigation is reported as failed, and is not retried** — not on a second model and not on the second provider | Claude Haiku 5.5 has no server-side refusal fallback, and a cross-provider fallback was offered and declined. A refusal therefore stops, and is surfaced as a failed investigation: no report, no cause list, nothing presented as a conclusion. The gap is recorded rather than papered over, which also keeps the downgrade flag meaning exactly what it says |
+| **The model is a setting, and the default is the cheaper one.** `settings.agent_model` defaults to `claude-haiku-5-5` | The argument that the strongest model pays for itself on multi-step evidence reasoning still stands, but it is asserted rather than measured. The eval harness is the instrument that settles it, and the model is configuration so it can be scored either way with no code change. Every response's model id is stored and compared against the one requested, so the audit trail always states which model produced a report |
+| **A second provider is selectable and is not the measured default.** `settings.agent_provider` chooses Anthropic or OpenAI | Both return the same structured report, so the eval can score across providers as well as across models. The OpenAI path is implemented and unit-tested but has not been run against the live API. It also returns no reasoning summary, so investigations served that way carry no recorded reasoning — a real difference, and one the eval has to account for |
+
 ---
 
 # 0. Running it

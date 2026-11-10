@@ -474,7 +474,7 @@ a `/code-review medium` (10 findings, 9 fixed) and what is unproven.
 
 **Later in Block F, at the operator's request:** "Investigate all" and checkbox
 "Investigate selected" on the queue (inline confirm, because each is a paid
-model call); the **scheduled run now queues investigations for what it finds**,
+model call); the **scheduled run now queues investigations for every open exception**,
 capped by `AUTO_INVESTIGATE_MAX` (default 25) and skipped with a warning when no
 model key is set, while a person's "Run reconciliation" never investigates by
 itself; and a plain-language wording pass for a finance audience, all in

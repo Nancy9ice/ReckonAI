@@ -140,6 +140,8 @@ export interface Coverage {
   with_exceptions: number;
   parked: number;
   clean: number;
+  not_examined: number;
+  not_examined_orders: string[];
   parked_items: { id: string; order_ref: string; detail: string; run_id: string }[];
   clean_orders: {
     order_ref: string;

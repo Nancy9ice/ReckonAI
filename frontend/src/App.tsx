@@ -9,12 +9,13 @@ import RunsView from "./RunsView";
 
 type View = "queue" | "coverage" | "runs";
 
-type RunNote = { tone: "ok" | "bad" | "busy"; text: string } | null;
+type RunNote = { tone: "ok" | "bad" | "busy" | "info"; text: string } | null;
 
-function Kpi(props: { label: string; value: number; tone?: string }) {
+// `null` renders as a dash: a figure that has not loaded is not a measured zero.
+function Kpi(props: { label: string; value: number | null; tone?: string }) {
   return (
     <div className={`kpi ${props.tone ?? ""}`}>
-      <span className="kpi-value">{props.value}</span>
+      <span className="kpi-value">{props.value ?? "-"}</span>
       <span className="kpi-label">{props.label}</span>
     </div>
   );
@@ -30,6 +31,13 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [runNote, setRunNote] = useState<RunNote>(null);
   const [running, setRunning] = useState(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   // Only the newest request may set the rows: switching run and back fires two
   // fetches, and the slower, older one must not overwrite the newer answer.
@@ -71,13 +79,16 @@ export default function App() {
     try {
       const result = await api.requestRun();
       if (!result.job) {
+        // "Already done today" is information, not success: new data may be
+        // waiting for tomorrow, and a green banner would read as "up to date".
         setRunNote({
-          tone: result.status === "already_done" ? "ok" : "bad",
+          tone: result.status === "already_done" ? "info" : "bad",
           text: result.message,
         });
         return;
       }
       let job = result.job;
+      let misses = 0;
       setRunNote({ tone: "busy", text: "Run queued. Waiting for the worker..." });
       for (let waited = 0; job.status === "queued" || job.status === "claimed"; ) {
         if (waited >= 120) {
@@ -88,8 +99,17 @@ export default function App() {
           return;
         }
         await new Promise((r) => setTimeout(r, 2000));
+        if (!mounted.current) return;
         waited += 2;
-        job = await api.job(job.id);
+        // One failed poll is not a failed run: the worker may well be
+        // finishing it. Give up only after three in a row.
+        try {
+          job = await api.job(job.id);
+          misses = 0;
+        } catch (e) {
+          if (++misses >= 3) throw e;
+          continue;
+        }
         if (job.status === "claimed")
           setRunNote({ tone: "busy", text: "Reconciling..." });
       }
@@ -178,7 +198,7 @@ export default function App() {
             <Kpi label="Suspected" value={stats.suspected} tone="warn" />
             <Kpi label="Awaiting a decision" value={stats.undecided} tone="accent" />
             <Kpi label="Investigated" value={stats.investigated} />
-            <Kpi label="Reconciled clean" value={coverage?.clean ?? 0} tone="good" />
+            <Kpi label="Reconciled clean" value={coverage ? coverage.clean : null} tone="good" />
           </section>
         )}
 

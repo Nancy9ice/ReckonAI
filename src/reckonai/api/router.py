@@ -3,7 +3,10 @@ by their own groups and live in this router too."""
 
 from __future__ import annotations
 
+import time
 import uuid
+from collections import deque
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Response
 
@@ -88,6 +91,24 @@ def investigate(
     return queries.job_out(job)
 
 
+#: A ceiling on paid model calls from this process, because the route is
+#: unauthenticated (requirements D5) and every call spends the operator's
+#: credit. A sliding window, in memory: it bounds one process, which is the
+#: honest scope of what it can promise.
+ASSISTANT_CALLS_PER_MINUTE = 20
+_assistant_calls: deque[float] = deque()
+
+
+def _assistant_slot() -> bool:
+    now = time.monotonic()
+    while _assistant_calls and now - _assistant_calls[0] > 60:
+        _assistant_calls.popleft()
+    if len(_assistant_calls) >= ASSISTANT_CALLS_PER_MINUTE:
+        return False
+    _assistant_calls.append(now)
+    return True
+
+
 @router.post("/grid-assistant", response_model=schemas.GridAssistantOut)
 def grid_assistant_route(body: schemas.GridAssistantIn) -> schemas.GridAssistantOut:
     """Turn a sentence into a grid state. Display only; reads no records.
@@ -95,6 +116,10 @@ def grid_assistant_route(body: schemas.GridAssistantIn) -> schemas.GridAssistant
     The browser sends the grid's own schema and state (AG Grid's AI Toolkit);
     nothing from the database is involved, so this route takes no session.
     """
+    if not _assistant_slot():
+        raise HTTPException(
+            status_code=429, detail="too many assistant requests; try again shortly"
+        )
     try:
         result = grid_assistant.ask(
             get_settings(), body.request, body.state, body.grid_schema
@@ -131,9 +156,7 @@ def coverage(session: SessionDep, tenant_id: TenantDep) -> schemas.CoverageOut:
 
 
 @router.get("/evidence/{ref:path}/raw")
-def evidence_raw(
-    ref: str, session: SessionDep, tenant_id: TenantDep
-) -> dict[str, object]:
+def evidence_raw(ref: str, session: SessionDep, tenant_id: TenantDep) -> Any:
     """The provider's own response behind a record, as retained."""
     body = evidence.raw_body(session, tenant_id, ref)
     if body is None:

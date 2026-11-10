@@ -37,6 +37,11 @@ PROPERTIES: Final = (
 
 MAX_TOKENS = 4_000
 
+#: Features the client leaves out of the schema so the model cannot ask for
+#: totals or pivots. **Enforced here as well**, because the schema is a request
+#: to the model and not a guarantee about its reply.
+FORBIDDEN: Final = ("aggregation", "pivot", "columnSizing")
+
 SYSTEM = """\
 You change how a table is displayed. The user types a sentence; you answer with
 the grid state that does what they asked.
@@ -93,6 +98,8 @@ def parse(text: str) -> dict[str, Any]:
         )
     if not isinstance(why, str):
         raise GridAssistantError("explanation is missing")
+    state = {k: v for k, v in state.items() if k not in FORBIDDEN}
+    ignore = list(dict.fromkeys([*ignore, *FORBIDDEN]))
     return {"gridState": state, "propertiesToIgnore": ignore, "explanation": why}
 
 

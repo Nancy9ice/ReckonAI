@@ -7,11 +7,12 @@ only ever displays them.
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from reckonai.schemas.money import MoneyOut
 
@@ -132,6 +133,10 @@ class DecisionIn(BaseModel):
     ) = None
 
 
+#: Generous for a real grid schema, small enough to refuse a flood.
+MAX_ASSISTANT_BYTES = 200_000
+
+
 class GridAssistantIn(BaseModel):
     """A sentence plus the grid's own schema and state, from AG Grid's toolkit."""
 
@@ -143,6 +148,14 @@ class GridAssistantIn(BaseModel):
     state: dict[str, Any]
     #: Named `grid_schema` because `schema` shadows a pydantic attribute.
     grid_schema: dict[str, Any] = Field(alias="schema")
+
+    @model_validator(mode="after")
+    def _bounded(self) -> GridAssistantIn:
+        """The whole body is forwarded to a paid model, so its size is capped."""
+        size = len(json.dumps(self.state)) + len(json.dumps(self.grid_schema))
+        if size > MAX_ASSISTANT_BYTES:
+            raise ValueError("the grid state and schema are too large")
+        return self
 
 
 class GridAssistantOut(BaseModel):
@@ -196,6 +209,9 @@ class CoverageOut(BaseModel):
     with_exceptions: int
     parked: int
     clean: int
+    #: Orders no completed run has looked at since they arrived. Not clean: unknown.
+    not_examined: int
+    not_examined_orders: list[str]
     parked_items: list[ParkedOut]
     clean_orders: list[CleanOrderOut]
     #: Said plainly, because it bounds the claim: a run records how many orders

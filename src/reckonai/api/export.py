@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import csv
 import io
+import re
 import uuid
 
 from sqlalchemy import select
@@ -24,10 +25,17 @@ from reckonai.schemas.money import MoneyOut
 
 _FORMULA_STARTS = ("=", "+", "-", "@", "\t", "\r")
 
+#: A plain decimal, signed or not. A spreadsheet reads it as a number, which is
+#: what a negative amount must stay: neutralising `-12.50` would turn the audit
+#: export's money into text that SUM() ignores.
+_PLAIN_NUMBER = re.compile(r"[+-]?\d+(\.\d+)?")
+
 
 def safe(value: object) -> str:
     """A cell that a spreadsheet will read as text, whatever it holds."""
     text = "" if value is None else str(value)
+    if _PLAIN_NUMBER.fullmatch(text):
+        return text
     return "'" + text if text.startswith(_FORMULA_STARTS) else text
 
 

@@ -490,13 +490,24 @@ def get_job(session: Session, tenant_id: uuid.UUID, job_id: uuid.UUID) -> Job | 
 
 
 def coverage(session: Session, tenant_id: uuid.UUID) -> schemas.CoverageOut:
-    """What the newest findings say about every order the tenant has.
+    """Account for every order exactly once.
 
-    An order is **clean** only if it has neither an open exception nor a parked
-    `awaiting_evidence` finding. That is the claim "nothing was found", and it
-    is only as good as a run having looked: a run records how many orders it
-    covered, not which, so an order no run has reached reads as clean here.
-    The `basis` field says so, rather than the page implying more.
+    Four disjoint states, in this precedence: **with an exception** (it is in
+    the queue), **parked** (`awaiting_evidence` and not flagged), **not yet
+    examined**, and **clean**. They sum to the number of orders, which a test
+    pins.
+
+    **"Clean" is a claim that something looked and found nothing**, so it needs
+    a run to have looked. An order counts as examined only if a completed run's
+    window contains its `placed_at` *and* that run started after the order was
+    ingested; otherwise "no findings" would mean "never checked", the
+    absence-versus-measured-zero confusion `mission.md` P3 forbids. (An old
+    order a run re-examined because new evidence arrived is not recognised as
+    examined here unless its window also covers it, so this errs toward saying
+    "not yet examined".)
+
+    Still not knowable: a run records how many orders it covered, not which, so
+    an exception a later run stopped emitting is not retracted.
     """
     orders = list(
         session.scalars(
@@ -508,10 +519,31 @@ def coverage(session: Session, tenant_id: uuid.UUID) -> schemas.CoverageOut:
     flagged = {
         r.order_external_ref for r in _newest_exception_rows(session, tenant_id, None)
     }
-    parked_rows = _newest_exception_rows(
-        session, tenant_id, None, is_exception=False, code="awaiting_evidence"
-    )
+    parked_rows = [
+        r
+        for r in _newest_exception_rows(
+            session, tenant_id, None, is_exception=False, code="awaiting_evidence"
+        )
+        # An order with an open exception is counted once, as flagged.
+        if r.order_external_ref not in flagged
+    ]
     parked_refs = {r.order_external_ref for r in parked_rows}
+
+    runs = list(
+        session.scalars(
+            select(ReconciliationRun).where(
+                ReconciliationRun.tenant_id == tenant_id,
+                ReconciliationRun.status == "completed",
+            )
+        )
+    )
+
+    def examined(order: Order) -> bool:
+        return any(
+            run.window_start <= order.placed_at < run.window_end
+            and run.started_at >= order.created_at
+            for run in runs
+        )
 
     seller_rows = session.execute(
         select(OrderItem.order_id, Seller.name)
@@ -527,21 +559,30 @@ def coverage(session: Session, tenant_id: uuid.UUID) -> schemas.CoverageOut:
     for order_id, name in seller_rows:
         sellers.setdefault(order_id, []).append(name)
 
-    clean = [
-        schemas.CleanOrderOut(
-            order_ref=o.external_ref,
-            total=MoneyOut.from_money(o.total),
-            placed_at=o.placed_at,
-            sellers=sorted(sellers.get(o.id, [])),
+    clean: list[schemas.CleanOrderOut] = []
+    not_examined: list[str] = []
+    for o in orders:
+        if o.external_ref in flagged or o.external_ref in parked_refs:
+            continue
+        if not examined(o):
+            not_examined.append(o.external_ref)
+            continue
+        clean.append(
+            schemas.CleanOrderOut(
+                order_ref=o.external_ref,
+                total=MoneyOut.from_money(o.total),
+                placed_at=o.placed_at,
+                sellers=sorted(sellers.get(o.id, [])),
+            )
         )
-        for o in orders
-        if o.external_ref not in flagged and o.external_ref not in parked_refs
-    ]
+
     return schemas.CoverageOut(
         orders_total=len(orders),
         with_exceptions=len(flagged),
         parked=len(parked_refs),
         clean=len(clean),
+        not_examined=len(not_examined),
+        not_examined_orders=not_examined,
         parked_items=[
             schemas.ParkedOut(
                 id=r.id,
@@ -553,9 +594,10 @@ def coverage(session: Session, tenant_id: uuid.UUID) -> schemas.CoverageOut:
         ],
         clean_orders=clean,
         basis=(
-            "Read from the newest findings per order. A run records how many "
-            "orders it covered, not which, so an order no run has reached "
-            "appears here as clean."
+            "Clean means a completed run's window covered the order after it "
+            "arrived and found nothing. A run records how many orders it "
+            "covered, not which, so an exception a later run stopped reporting "
+            "is not retracted."
         ),
     )
 
@@ -570,8 +612,6 @@ def request_run(session: Session, tenant_id: uuid.UUID) -> schemas.RunRequestOut
     queued twice. That is `reconcile_job.idempotency_key`'s rule and this
     does not route around it.
     """
-    from datetime import UTC, datetime
-
     from reckonai.jobs import reconcile_job, window
 
     bounds = session.execute(
@@ -617,8 +657,10 @@ def request_run(session: Session, tenant_id: uuid.UUID) -> schemas.RunRequestOut
             window_end=win.end,
             job=None,
             message=(
-                "This window has already been reconciled today. A run is "
-                "date-grained by design, so the next one is available tomorrow."
+                "This window was already reconciled today, so nothing was "
+                "queued. A run is date-grained by design: anything ingested "
+                "since is not examined until tomorrow's run, and Coverage "
+                "lists it as not yet examined."
             ),
         )
 

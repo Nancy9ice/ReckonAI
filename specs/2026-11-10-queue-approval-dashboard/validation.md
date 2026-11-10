@@ -139,6 +139,32 @@ test races two real connections.**
 - The P6 guard on `api/` now allows one module to name money tables:
   `evidence.py`, which a second test holds to read-only.
 
+## 4c. Second code review (the work after the first)
+
+`/code-review medium` over everything added after the first pass: the assistant,
+evidence, run-now, coverage, export and the redesigned frontend. **10 findings;
+9 real and fixed, 1 a cleanup, also done.** No finding was invisible to the
+tests that existed, which is the point: the worst two were wrong answers, not
+crashes.
+
+| Finding | Outcome |
+|---|---|
+| Coverage could count an order as both flagged and parked | Fixed: one precedence (flagged, parked, not examined, clean); a test pins that the four sum to the order count |
+| Orders no run had looked at were called clean | Fixed: clean now needs a completed run whose window contained the order **after it was ingested**; otherwise "not yet examined", its own count and list. The KPI shows a dash, not 0, until loaded |
+| CSV guard turned negative amounts into text | Fixed: plain decimals are left alone; `=`, `@`, tab and `-SUM(...)` are still neutralised |
+| Assistant route: unauthenticated and unbounded paid calls | Fixed: body size capped (200 KB), 20 calls a minute per process. **Still unauthenticated**, so this bounds the cost, it does not remove the exposure |
+| Server did not enforce the features the client excluded | Fixed: `aggregation`, `pivot` and `columnSizing` are stripped from any reply and always listed as ignored |
+| Raw payload route coerced a non-object body | Fixed: returned exactly as retained |
+| Group-by select went stale when the assistant or a saved view regrouped | Fixed: the select follows the grid's own grouping, with a "Custom grouping" entry |
+| "Already reconciled today" shown as green success | Fixed: a neutral notice that says new data waits for tomorrow, and Coverage lists it as not yet examined |
+| Run-now poll gave up on one failed request, and ran after unmount | Fixed: three consecutive misses, and a mounted check |
+| Redundant imports in `request_run` | Cleaned |
+
+Still true after the fixes: the rate limit is per process and in memory, so two
+workers allow twice the rate; and "examined" cannot recognise an old order a run
+re-examined only because new evidence arrived, so it errs toward "not yet
+examined".
+
 ## 5. Corrections and debts handed on
 
 - **Age reads 0% on every seeded row.** The seed's orders are dated 2026-11-13 to

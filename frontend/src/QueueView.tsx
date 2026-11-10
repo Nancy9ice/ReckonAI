@@ -22,6 +22,7 @@ const GROUPS: { id: string; label: string }[] = [
   { id: "status", label: "Status" },
   { id: "decision", label: "Decision" },
   { id: "currency", label: "Currency" },
+  { id: "__custom", label: "Custom grouping" },
 ];
 
 interface Props {
@@ -83,12 +84,23 @@ export default function QueueView({
     [rows, certainty, decided],
   );
 
+  // The grid is the source of truth for grouping: the assistant, a saved view
+  // and the sidebar all change it, so the select follows the grid.
+  const onGroupChanged = useCallback(() => {
+    const cols = gridApi.current?.getRowGroupColumns() ?? [];
+    if (cols.length === 0) setGroup("");
+    else if (cols.length === 1 && GROUPS.some((g) => g.id === cols[0].getColId()))
+      setGroup(cols[0].getColId());
+    else setGroup("__custom");
+  }, []);
+
   const onReady = useCallback((e: GridReadyEvent<ExceptionRow>) => {
     gridApi.current = e.api;
     initial.current = e.api.getState();
   }, []);
 
   const changeGroup = (id: string) => {
+    if (id === "__custom") return;
     setGroup(id);
     gridApi.current?.applyColumnState({
       state: id ? [{ colId: id, rowGroup: true, hide: true }] : [],
@@ -190,6 +202,7 @@ export default function QueueView({
             quickFilterText={quick}
             getRowId={(p) => p.data.id}
             onGridReady={onReady}
+            onColumnRowGroupChanged={onGroupChanged}
             rowSelection={{
               mode: "singleRow",
               checkboxes: false,

@@ -216,9 +216,18 @@ def test_a_job_can_be_polled_and_only_by_its_tenant(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("value", ["=SUM(A1)", "+1", "-1", "@x", "\tcmd"])
+@pytest.mark.parametrize(
+    "value", ["=SUM(A1)", "@x", "\tcmd", "-1+2", "+cmd|x", "-SUM(A1)", "-12.50 USD"]
+)
 def test_a_cell_that_would_execute_is_neutralised(value: str) -> None:
     assert export.safe(value).startswith("'")
+
+
+@pytest.mark.parametrize("value", ["-12.50", "+1", "0.00", "90.00", "-0.01"])
+def test_a_plain_number_is_left_alone_so_a_negative_amount_stays_a_number(
+    value: str,
+) -> None:
+    assert export.safe(value) == value
 
 
 def test_ordinary_cells_are_untouched() -> None:
@@ -254,3 +263,86 @@ def test_the_decision_log_keeps_superseded_decisions_and_neutralises_notes(
     assert text.count("Nancy") == 2
     assert "'=HYPERLINK(1)" in text
     assert session.query(ExceptionDecision).count() == 2
+
+
+# ---------------------------------------------------------------------------
+# Found by the second code review
+# ---------------------------------------------------------------------------
+
+
+def test_an_order_with_an_exception_and_a_parked_finding_is_counted_once(
+    client: TestClient, session: Session, seeded_exception: ReconciliationException
+) -> None:
+    session.add(
+        ReconciliationException(
+            tenant_id=seeded_exception.tenant_id,
+            run_id=seeded_exception.run_id,
+            code="awaiting_evidence",
+            order_external_ref=seeded_exception.order_external_ref,
+            detail="late",
+            is_exception=False,
+            impact=seeded_exception.impact,
+            evidence_refs=[],
+            evidence_basis="provider_reported",
+        )
+    )
+    session.flush()
+    cov = client.get("/api/coverage").json()
+    assert cov["with_exceptions"] == 1
+    assert cov["parked"] == 0
+    assert (
+        cov["with_exceptions"] + cov["parked"] + cov["clean"] + cov["not_examined"]
+        == cov["orders_total"]
+    )
+
+
+def test_an_order_no_run_has_examined_is_not_called_clean(
+    demo: TestClient, session: Session
+) -> None:
+    from datetime import timedelta
+
+    from reckonai.models import Order
+    from reckonai.money import Money
+
+    tenant_id = session.scalar(select(Tenant.id).where(Tenant.slug == data.TENANT_SLUG))
+    before = demo.get("/api/coverage").json()
+    # Ingested after the run finished, inside its window.
+    session.add(
+        Order(
+            tenant_id=tenant_id,
+            external_ref="ORD-LATE",
+            total=Money("10.00", "USD"),
+            placed_at=datetime(2026, 11, 5, tzinfo=UTC),
+            created_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+    )
+    session.flush()
+    cov = demo.get("/api/coverage").json()
+    assert "ORD-LATE" in cov["not_examined_orders"]
+    assert cov["clean"] == before["clean"]
+    assert cov["not_examined"] == before["not_examined"] + 1
+    assert (
+        cov["with_exceptions"] + cov["parked"] + cov["clean"] + cov["not_examined"]
+        == cov["orders_total"]
+    )
+
+
+def test_with_no_run_at_all_nothing_is_clean(
+    client: TestClient, session: Session, tenant: Tenant
+) -> None:
+    from reckonai.models import Order
+    from reckonai.money import Money
+
+    session.add(
+        Order(
+            tenant_id=tenant.id,
+            external_ref="ORD-ALONE",
+            total=Money("10.00", "USD"),
+            placed_at=datetime(2026, 11, 5, tzinfo=UTC),
+        )
+    )
+    session.flush()
+    cov = client.get("/api/coverage").json()
+    assert cov["clean"] == 0
+    assert cov["not_examined"] == cov["orders_total"] == 1
+    assert cov["not_examined_orders"] == ["ORD-ALONE"]

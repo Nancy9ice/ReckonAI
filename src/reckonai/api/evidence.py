@@ -163,7 +163,7 @@ def describe(
     )
 
 
-def raw_body(session: Session, tenant_id: uuid.UUID, ref: str) -> dict[str, Any] | None:
+def raw_body(session: Session, tenant_id: uuid.UUID, ref: str) -> Any | None:
     """The provider's own response behind a record, exactly as retained."""
     citation = citations.CitationResolver(session, tenant_id).resolve(ref)
     if citation.kind is None or citation.kind not in _SOURCES:
@@ -185,4 +185,6 @@ def raw_body(session: Session, tenant_id: uuid.UUID, ref: str) -> dict[str, Any]
             RawPayload.tenant_id == tenant_id, RawPayload.id == payload_id
         )
     )
-    return dict(body) if body is not None else None
+    # Exactly as retained: a payload need not be a JSON object, and coercing it
+    # would be changing the evidence.
+    return body

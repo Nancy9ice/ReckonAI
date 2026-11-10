@@ -29,12 +29,20 @@ def _settings(monkeypatch: pytest.MonkeyPatch, provider: str, model: str) -> Set
     return Settings()  # type: ignore[call-arg]
 
 
+def _same_as_good(result: dict[str, Any]) -> None:
+    """The reply as sent, plus the features the server always forbids."""
+    assert result["gridState"] == GOOD["gridState"]
+    assert result["explanation"] == GOOD["explanation"]
+    assert set(GOOD["propertiesToIgnore"]) <= set(result["propertiesToIgnore"])
+    assert {"aggregation", "pivot", "columnSizing"} <= set(result["propertiesToIgnore"])
+
+
 def test_a_valid_reply_parses() -> None:
-    assert parse(json.dumps(GOOD)) == GOOD
+    _same_as_good(parse(json.dumps(GOOD)))
 
 
 def test_a_fenced_reply_parses() -> None:
-    assert parse("```json\n" + json.dumps(GOOD) + "\n```") == GOOD
+    _same_as_good(parse("```json\n" + json.dumps(GOOD) + "\n```"))
 
 
 @pytest.mark.parametrize(
@@ -80,7 +88,7 @@ def test_anthropic_path_sends_no_sampling_parameters_and_reads_the_reply(
         {},
         client=stub,
     )
-    assert result == GOOD
+    _same_as_good(result)
     sent = stub.calls[0]
     assert not {"temperature", "top_p", "top_k", "thinking", "tools"} & sent.keys()
     assert sent["output_config"] == {"effort": "low"}
@@ -113,7 +121,7 @@ def test_openai_path_asks_for_a_json_object(monkeypatch: pytest.MonkeyPatch) -> 
         chat=SimpleNamespace(completions=SimpleNamespace(create=create))
     )
     result = ask(_settings(monkeypatch, "openai", "gpt-4.1"), "x", {}, {}, client=stub)
-    assert result == GOOD
+    _same_as_good(result)
     assert sent["response_format"] == {"type": "json_object"}
 
 
@@ -146,6 +154,7 @@ def test_the_route_returns_the_validated_state(
     monkeypatch.setattr(grid_assistant, "ask", lambda *_a, **_k: GOOD)
     response = client.post("/api/grid-assistant", json=BODY)
     assert response.status_code == 200
+    # `ask` is stubbed here, so the route's own contribution is passing it through.
     assert response.json() == GOOD
 
 
@@ -174,3 +183,41 @@ def test_a_blank_or_oversized_request_is_refused(client: TestClient) -> None:
     )
     big = {**BODY, "request": "x" * 501}
     assert client.post("/api/grid-assistant", json=big).status_code == 422
+
+
+def test_features_the_client_excluded_are_stripped_from_the_reply() -> None:
+    reply = {
+        "gridState": {
+            "filter": {"filterModel": {}},
+            "aggregation": {"aggregationModel": {}},
+            "pivot": {"pivotMode": True},
+            "columnSizing": {},
+        },
+        "propertiesToIgnore": ["sort"],
+        "explanation": "x",
+    }
+    result = parse(json.dumps(reply))
+    assert set(result["gridState"]) == {"filter"}
+    assert {"aggregation", "pivot", "columnSizing"} <= set(result["propertiesToIgnore"])
+
+
+def test_an_oversized_state_is_refused(client: TestClient) -> None:
+    big = {"request": "x", "state": {"k": "x" * 250_000}, "schema": {}}
+    assert client.post("/api/grid-assistant", json=big).status_code == 422
+
+
+def test_the_assistant_is_rate_limited(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import importlib
+
+    router = importlib.import_module("reckonai.api.router")
+    router._assistant_calls.clear()
+    monkeypatch.setattr(grid_assistant, "ask", lambda *_a, **_k: GOOD)
+    codes = [
+        client.post("/api/grid-assistant", json=BODY).status_code
+        for _ in range(router.ASSISTANT_CALLS_PER_MINUTE + 2)
+    ]
+    router._assistant_calls.clear()
+    assert codes.count(200) == router.ASSISTANT_CALLS_PER_MINUTE
+    assert codes[-1] == 429

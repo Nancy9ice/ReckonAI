@@ -52,11 +52,12 @@ export default function CoverageView({ coverage }: { coverage: Coverage | null }
 
   return (
     <>
-      <section className="kpis four" aria-label="Coverage summary">
+      <section className="kpis five" aria-label="Coverage summary">
         <Stat label="Orders in the data" value={coverage.orders_total} hint="Every order held for this marketplace." />
         <Stat label="With an exception" value={coverage.with_exceptions} tone="bad" hint="In the exception queue." />
         <Stat label="Parked, awaiting evidence" value={coverage.parked} tone="warn" hint="Not exceptions: the other side of the record has not arrived." />
-        <Stat label="Reconciled clean" value={coverage.clean} tone="good" hint="No exception and nothing parked." />
+        <Stat label="Reconciled clean" value={coverage.clean} tone="good" hint="A run looked at it after it arrived and found nothing." />
+        <Stat label="Not yet examined" value={coverage.not_examined} tone="muted" hint="No completed run has looked at these since they arrived. Unknown, not clean." />
       </section>
 
       <p className="muted basis">{coverage.basis}</p>
@@ -84,6 +85,23 @@ export default function CoverageView({ coverage }: { coverage: Coverage | null }
           </div>
         )}
       </section>
+
+      {coverage.not_examined > 0 && (
+        <section className="card spaced">
+          <div className="card-head">
+            <h2>Not yet examined</h2>
+            <p className="muted">
+              No completed run has looked at these since they arrived, so they
+              are not claimed clean. Run a reconciliation to examine them.
+            </p>
+          </div>
+          <div className="refs">
+            {coverage.not_examined_orders.map((r) => (
+              <code key={r}>{r}</code>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="card spaced">
         <div className="card-head">

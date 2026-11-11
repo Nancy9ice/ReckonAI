@@ -158,10 +158,12 @@ export function TypePanel(props: {
                 {t.at_risk.map((m) => (
                   <span key={m.currency} className="tbar">
                     <span className="track">
-                      <span
-                        className="fill"
-                        style={{ "--s": t.shares[m.currency] ?? "0" } as CSSProperties}
-                      />
+                      {t.shares[m.currency] !== undefined && (
+                        <span
+                          className="fill"
+                          style={{ "--s": t.shares[m.currency] } as CSSProperties}
+                        />
+                      )}
                     </span>
                     <span className="money">{formatMoney(m)}</span>
                   </span>

@@ -63,13 +63,21 @@ export default function App() {
   const refresh = useCallback(async () => {
     const ticket = ++latest.current;
     try {
-      const [fetched, sums] = await Promise.all([
-        api.exceptions(runId),
-        api.summary(runId),
-      ]);
+      // Separate requests: the summary failing must not freeze the queue.
+      const summaryRequest = api.summary(runId).then(
+        (sums) => ({ sums }),
+        (e: unknown) => ({ failure: e }),
+      );
+      const fetched = await api.exceptions(runId);
+      const outcome = await summaryRequest;
       if (ticket === latest.current) {
         setRows(fetched);
-        setSummary(sums);
+        if ("sums" in outcome) setSummary(outcome.sums);
+        else {
+          setSummary(null);
+          setError(`The summary could not be loaded: ${String(outcome.failure)}`);
+          return;
+        }
         setError(null);
       }
     } catch (e) {
@@ -86,6 +94,17 @@ export default function App() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // An issue filter that no longer matches anything in the summary is dropped,
+  // so a different run or a cleared fault cannot leave an empty grid behind it.
+  useEffect(() => {
+    if (
+      typeFilter !== null &&
+      summary !== null &&
+      !summary.by_type.some((t) => t.code === typeFilter)
+    )
+      setTypeFilter(null);
+  }, [summary, typeFilter]);
 
   useEffect(() => {
     api.runs().then(setRuns).catch((e) => setError(String(e)));
@@ -320,6 +339,7 @@ export default function App() {
               rows={rows}
               selectedId={selected}
               onSelect={setSelected}
+              onDeselect={close}
               runFilterActive={runId !== undefined}
               runId={runId}
               typeFilter={typeFilter}

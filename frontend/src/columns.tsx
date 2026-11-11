@@ -160,13 +160,16 @@ export const columns: ColDef<ExceptionRow>[] = [
     // The bar is this row's share of the largest difference in the same
     // currency, which the server computes (priority factor "impact"); CSS draws
     // it from the string, so nothing here converts or divides.
+    // No factor means no bar, never an empty one: that would read as zero.
     cellRenderer: (p: ICellRendererParams<ExceptionRow>) =>
       p.data ? (
         <span
           className="valcell"
-          style={{ "--s": p.data.priority.factors.impact ?? "0" } as CSSProperties}
+          style={
+            { "--s": p.data.priority.factors.impact ?? undefined } as CSSProperties
+          }
         >
-          <span className="valbar" />
+          {p.data.priority.factors.impact != null && <span className="valbar" />}
           <span className="valtext">{formatMoney(p.data.impact)}</span>
         </span>
       ) : null,

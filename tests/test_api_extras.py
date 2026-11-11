@@ -467,3 +467,25 @@ def test_summary_matches_the_queue_per_currency_and_never_mixes(
         for t in body["by_type"]
     ]
     assert firsts == sorted(firsts, reverse=True)
+
+
+def test_summary_buckets_shares_and_run_filter(demo: TestClient) -> None:
+    from decimal import Decimal
+
+    body = demo.get("/api/summary").json()
+    assert (
+        body["confirmed"]["count"] + body["suspected"]["count"]
+        == body["open"]["count"]
+    )
+    # Every currency's largest type is exactly 1, and nothing exceeds it.
+    top: dict[str, Decimal] = {}
+    for t in body["by_type"]:
+        for cur, share in t["shares"].items():
+            assert Decimal(0) <= Decimal(share) <= Decimal(1)
+            top[cur] = max(top.get(cur, Decimal(0)), Decimal(share))
+    assert top and all(v == Decimal("1.0000") for v in top.values())
+
+    run_id = demo.get("/api/runs").json()[0]["id"]
+    scoped = demo.get("/api/summary", params={"run_id": run_id}).json()
+    rows = demo.get("/api/exceptions", params={"run_id": run_id}).json()
+    assert scoped["open"]["count"] == len(rows)

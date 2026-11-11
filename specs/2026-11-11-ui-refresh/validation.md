@@ -54,3 +54,20 @@ observation named; `[ ]` means not proven.
   until the tab is chosen. Not reviewed by a finance user.
 - [ ] Issue pill tints are a hash of the code, not a meaning; colour carries no
   severity.
+
+## 5. Code review (`/code-review medium`): 10 findings
+
+| Finding | Outcome |
+|---|---|
+| Default "Needs a decision" tab hid rows the cards counted | Fixed: default is All |
+| Drawer stayed open on a row that left the list | Fixed: the drawer closes when its row is not in view |
+| Summary and exceptions fetched in one `Promise.all` | Fixed: separate; a summary failure shows a banner and the queue still updates |
+| Issue filter outlived its issue | Fixed: dropped when absent from the summary |
+| Missing impact factor or share drew an empty bar (reads as zero) | Fixed: no bar is drawn |
+| ARIA `tab` roles not implemented | Fixed: a group of `aria-pressed` buttons |
+| Summary test thin | Fixed: buckets, share bounds, run filter |
+| `summary()` runs the whole exceptions pipeline, so a refresh does it twice | Deferred: harmless at 18 rows; same debt as `exception_detail` |
+| Type-panel shares compare type totals; grid bars compare single rows | Deferred and documented: both are labelled in the UI, different questions |
+| Grid bars are scaled to the whole queue, not the filtered view | By design: a bar means share of the largest difference in that currency |
+
+Not re-observed in a browser after these fixes beyond the build and tests.

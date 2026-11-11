@@ -5,7 +5,7 @@ import type {
   RowClickedEvent,
 } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ExceptionRow } from "./api";
 import AssistantBar from "./AssistantBar";
 import { columns, decisionText } from "./columns";
@@ -32,6 +32,7 @@ interface Props {
   rows: ExceptionRow[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  onDeselect: () => void;
   runFilterActive: boolean;
   onClearRun: () => void;
   runId?: string;
@@ -67,6 +68,7 @@ export default function QueueView({
   rows,
   selectedId,
   onSelect,
+  onDeselect,
   runFilterActive,
   onClearRun,
   runId,
@@ -79,7 +81,7 @@ export default function QueueView({
   const initial = useRef<GridState | null>(null);
   const [quick, setQuick] = useState("");
   const [certainty, setCertainty] = useState<Certainty>("all");
-  const [decided, setDecided] = useState<Decided>("Undecided");
+  const [decided, setDecided] = useState<Decided>("all");
   const [group, setGroup] = useState("");
   const [checked, setChecked] = useState<string[]>([]);
   // Two-step, inline: every investigation is a paid model call, and a browser
@@ -122,6 +124,14 @@ export default function QueueView({
       ),
     [rows, typeFilter, certainty, decided],
   );
+
+  // The drawer follows the list: a row that leaves the view (it was just
+  // decided, or a filter now excludes it) must not stay open beside a grid that
+  // no longer shows it.
+  useEffect(() => {
+    if (selectedId !== null && !visible.some((r) => r.id === selectedId))
+      onDeselect();
+  }, [selectedId, visible, onDeselect]);
 
   // The grid is the source of truth for grouping: the assistant, a saved view
   // and the sidebar all change it, so the select follows the grid.
@@ -220,7 +230,7 @@ export default function QueueView({
         </div>
       )}
 
-      <div className="tabs" role="tablist" aria-label="Decision status">
+      <div className="tabs" role="group" aria-label="Decision status">
         {(
           [
             ["Undecided", "Needs a decision"],
@@ -231,8 +241,7 @@ export default function QueueView({
           <button
             key={id}
             type="button"
-            role="tab"
-            aria-selected={decided === id}
+            aria-pressed={decided === id}
             className={decided === id ? "qtab on" : "qtab"}
             onClick={() => setDecided(id)}
           >

@@ -19,9 +19,9 @@ type Decided = "all" | "Undecided" | "decided";
 
 const GROUPS: { id: string; label: string }[] = [
   { id: "", label: "No grouping" },
-  { id: "type", label: "Type" },
+  { id: "type", label: "Issue" },
   { id: "seller", label: "Seller" },
-  { id: "status", label: "Status" },
+  { id: "status", label: "Certainty" },
   { id: "decision", label: "Decision" },
   { id: "currency", label: "Currency" },
   { id: "__custom", label: "Custom grouping" },
@@ -200,12 +200,12 @@ export default function QueueView({
         <input
           className="search"
           aria-label="Search the queue"
-          placeholder="Search orders, sellers, types"
+          placeholder="Search orders, sellers, issues"
           value={quick}
           onChange={(e) => setQuick(e.target.value)}
         />
         <Segmented<Certainty>
-          label="Status"
+          label="Certainty"
           value={certainty}
           onChange={setCertainty}
           options={[

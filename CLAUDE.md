@@ -62,7 +62,10 @@ moves to `/service`). Things not to re-derive:
   seller is owed) and "reported" is what the marketplace recorded, so the UI
   labels them per type ("PayPal settled" / "Marketplace recorded"). Change a
   label there, never by showing the engine's words. The exception types have a
-  plain title, a meaning and an action each.
+  plain title, a meaning and an action each. Column header hints are in
+  `COLUMN_HINTS` there. The queue's problem column is labelled **Issue**, but its
+  column id is still `type`: saved views and the assistant's schema key on the
+  id, so change the label, never the id.
 - **A decision is keyed by (order, code)**, not by exception id: every run writes
   a fresh row for the same fault.
 - **The approver is free text, unauthenticated** (D5). Do not describe it as an

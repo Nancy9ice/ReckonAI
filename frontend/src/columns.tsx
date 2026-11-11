@@ -6,10 +6,12 @@ import {
   DAYS_OPEN_HINT,
   DECIDED_HINT,
   FACTOR_NAMES,
+  COLUMN_HINTS,
   FOUND_HINT,
   ORDER_DATE_HINT,
   PRIORITY_HINT,
   VERDICT_TEXT,
+  typeCopy,
 } from "./copy";
 import { formatFraction, formatMoney } from "./money";
 
@@ -82,8 +84,7 @@ export const columns: ColDef<ExceptionRow>[] = [
   {
     colId: "status",
     headerName: "Certainty",
-    headerTooltip:
-      "Confirmed: the records agree on what happened. Suspected: the link between records was inferred, so check it.",
+    headerTooltip: COLUMN_HINTS.certainty,
     valueGetter: (p) =>
       p.data ? (p.data.certainty === "confirmed" ? "Confirmed" : "Suspected") : "",
     enableRowGroup: true,
@@ -97,9 +98,14 @@ export const columns: ColDef<ExceptionRow>[] = [
       ) : null,
   },
   {
+    // The id stays "type": saved views and the assistant's schema key on it.
     colId: "type",
-    headerName: "Type",
+    headerName: "Issue",
+    headerTooltip: COLUMN_HINTS.issue,
     valueGetter: (p) => (p.data ? label(p.data.code) : ""),
+    // The cell is cut off at narrow widths, so the full meaning is on hover.
+    tooltipValueGetter: (p) =>
+      p.data ? `${label(p.data.code)}. ${typeCopy(p.data.code).meaning}` : undefined,
     enableRowGroup: true,
     filter: "agSetColumnFilter",
     flex: 2,
@@ -108,6 +114,7 @@ export const columns: ColDef<ExceptionRow>[] = [
   {
     colId: "order",
     headerName: "Order",
+    headerTooltip: COLUMN_HINTS.order,
     valueGetter: (p) => p.data?.order_ref ?? "",
     enableRowGroup: true,
     width: 115,
@@ -116,6 +123,7 @@ export const columns: ColDef<ExceptionRow>[] = [
   {
     colId: "seller",
     headerName: "Seller",
+    headerTooltip: COLUMN_HINTS.seller,
     valueGetter: (p) =>
       p.data ? (p.data.seller_name ?? `${p.data.seller_count} sellers`) : "",
     enableRowGroup: true,
@@ -126,7 +134,7 @@ export const columns: ColDef<ExceptionRow>[] = [
   {
     colId: "impact",
     headerName: "Difference",
-    headerTooltip: "The size of the gap, in the currency of the record.",
+    headerTooltip: COLUMN_HINTS.difference,
     // The amount string, ordered and filtered by the grid. Display uses the
     // record's own currency; no arithmetic happens in this file.
     valueGetter: (p) => p.data?.impact.amount ?? null,
@@ -143,6 +151,7 @@ export const columns: ColDef<ExceptionRow>[] = [
   {
     colId: "currency",
     headerName: "Currency",
+    headerTooltip: COLUMN_HINTS.currency,
     valueGetter: (p) => p.data?.impact.currency ?? "",
     enableRowGroup: true,
     filter: "agSetColumnFilter",
@@ -199,7 +208,7 @@ export const columns: ColDef<ExceptionRow>[] = [
   {
     colId: "investigation",
     headerName: "AI result",
-    headerTooltip: "What the AI found when it looked into this exception.",
+    headerTooltip: COLUMN_HINTS.aiResult,
     valueGetter: (p) => (p.data ? verdictText(p.data) : ""),
     enableRowGroup: true,
     filter: "agSetColumnFilter",
@@ -208,6 +217,7 @@ export const columns: ColDef<ExceptionRow>[] = [
   {
     colId: "decision",
     headerName: "Decision",
+    headerTooltip: COLUMN_HINTS.decision,
     valueGetter: (p) => (p.data ? decisionText(p.data) : ""),
     enableRowGroup: true,
     filter: "agSetColumnFilter",
@@ -238,7 +248,7 @@ export const columnContext = {
     description: "Confirmed discrepancy or suspected issue",
     includeSetValues: true,
   },
-  type: { description: "The kind of exception", includeSetValues: true },
+  type: { description: "The kind of issue", includeSetValues: true },
   order: { description: "The marketplace order reference" },
   seller: {
     description: "The seller the exception affects",

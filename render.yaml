@@ -143,10 +143,12 @@ services:
       - key: SIM_WRITE_SECRET
         sync: false
       # The judge scenarios (specs/2026-11-11-judge-scenarios): name-only
-      # routes that place real sandbox orders. Off unless `true`. Needs the
-      # PayPal credentials above, and the web service only.
+      # routes that place real sandbox orders, capped by JUDGE_MAX_SETS (25)
+      # and per client. On here so a merge enables the demo with no dashboard
+      # step; set it to "false" and merge to switch it off. Needs the PayPal
+      # credentials above, and the web service only.
       - key: JUDGE_SCENARIOS_ENABLED
-        sync: false
+        value: "true"
       - key: LOG_LEVEL
         value: INFO
 

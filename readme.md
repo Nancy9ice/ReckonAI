@@ -78,8 +78,8 @@ new set; the same name again creates nothing.
 
 After a reconciliation, **Deliver PayPal's refund** in the same panel, then
 reconcile again: S4's waiting finding clears. If Run reconciliation says nothing
-is new or a run is cooling down (five minutes), an earlier run already covers
-your orders. Foreign currency and disbursement shortfalls are on the seeded
+is new, an earlier run already covers your orders; if it says a check just
+finished, try again in a few seconds. Foreign currency and disbursement shortfalls are on the seeded
 orders (ORD-0015, ORD-0008, ORD-0018). The same thing is available from a
 terminal: `python3 scripts/judge_scenarios.py --name yourname`.
 

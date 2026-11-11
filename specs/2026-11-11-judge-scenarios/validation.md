@@ -84,3 +84,14 @@ After merge: the same on Render, which needs the flag and is the operator's.
 | Findings in the queue | **Pass.** After Run reconciliation: `JUDGE-...-S2`, `S5`, `S6` appeared; `S1`, `S3` did not; `S4` is not an exception so is not in the queue. |
 | Console | Only AG Grid's licence notice, which is this local build having no licence key; unrelated. |
 | Not exercised in the browser | A second click on the same name (covered by tests); the late-refund button (covered through the API earlier); an error state; a phone-width layout. |
+
+### 5b. The refund button and the cooldown (local stack, real sandbox, Chrome)
+
+| Check | Result |
+|---|---|
+| First run | **Pass.** S4 read `awaiting_evidence`; S2, S5, S6 were exceptions. |
+| Deliver PayPal's refund | **Pass.** Panel showed "PayPal's refund is in. Run reconciliation again; that order should clear." |
+| Second run | **Pass, after a fix.** With the 5-minute cooldown it answered "a check finished a moment ago" and the judge would have had to wait. Cooldown default lowered to 10s (requirements section 5); the next click ran at once and S4 cleared, leaving only the three exceptions. |
+| Second press | **Pass.** "PayPal's refund was already delivered for this name." No second PayPal refund. |
+| Name memory | A name saved in the browser was offered again on a fresh database and worked. |
+Not tested: a phone-width layout, and an error state in the panel.

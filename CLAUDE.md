@@ -212,7 +212,7 @@ still date-windowed; ingestion is now event-fed. Things not to re-derive:
   decide_run`, one function for the cron and run-now). The idempotency key now
   carries the watermark, and the payload carries it too (`payload_for`); the key
   alone would allow an endless chain, so the new-evidence gate is also required.
-  `RUN_COOLDOWN_SECONDS` (default 300) spaces same-day runs.
+  `RUN_COOLDOWN_SECONDS` (default 10, was 300) spaces same-day runs.
 - **A webhook is a notification**: `POST /webhooks/paypal` verifies (fail
   closed), stores the event, queues a `paypal_event` job; the job re-fetches the
   order and `replay.ingest_document` writes it. Routing is merchant to tenant

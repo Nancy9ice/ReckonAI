@@ -93,8 +93,7 @@ If Run reconciliation says nothing is new, an earlier run already covers your
 orders. If it says a check just finished, try again in a few seconds.
 
 Foreign currency and disbursement shortfalls are on the seeded orders
-(ORD-0015, ORD-0008, ORD-0018). The same set can be created from a terminal:
-`python3 scripts/judge_scenarios.py --name yourname`.
+(ORD-0015, ORD-0008, ORD-0018).
 
 Then explore what the queue offers:
 

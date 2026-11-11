@@ -59,13 +59,21 @@ agent runs on OpenAI (`gpt-4.1`) or Anthropic, selectable by setting.
 
 ## Try it yourself
 
-On the live demo, click **Create test transactions** (top right). Pick a name or
-keep the one offered, press **Create my test transactions**, and wait: it places
-six real PayPal sandbox orders under your name, waits for them to arrive (by
-webhook, or fetched directly if one is slow; the table says which), and tells
-you when it is done. Then click **Run reconciliation**, search the queue for
-`JUDGE-YOURNAME`, and **Investigate** any exception. A different name gets a
-new set; the same name again creates nothing.
+Create your own live transactions on the demo and watch ReckonAI handle each.
+The PayPal side is real: each order is a real PayPal sandbox order (no real
+money moves). The marketplace side is simulated: ReckonAI books the matching
+marketplace records, and for some orders deliberately gets them wrong, so there
+is something to find.
+
+1. Click **Create test transactions** (top right). Keep the name offered or pick
+   your own (letters and digits, up to 12), then press **Create my test
+   transactions**.
+2. Wait about a minute. The panel places six orders, waits for each to reach
+   ReckonAI (by webhook, or fetched directly if one is slow; the table says
+   which), and tells you when it is done. A different name gets a fresh set;
+   the same name again creates nothing.
+3. Click **Run reconciliation**, then search the queue for `JUDGE-YOURNAME`.
+4. Open each order and **Investigate** the exceptions.
 
 | Order | What it is | Expected |
 |---|---|---|
@@ -76,12 +84,17 @@ new set; the same name again creates nothing.
 | `S5-NO-LEDGER` | Refund made at PayPal, ledger never adjusted | refund not booked to the seller |
 | `S6-DUPLICATE` | Sale credited twice | same payment booked twice |
 
-After a reconciliation, **Deliver PayPal's refund** in the same panel, then
-reconcile again: S4's waiting finding clears. If Run reconciliation says nothing
-is new, an earlier run already covers your orders; if it says a check just
-finished, try again in a few seconds. Foreign currency and disbursement shortfalls are on the seeded
-orders (ORD-0015, ORD-0008, ORD-0018). The same thing is available from a
-terminal: `python3 scripts/judge_scenarios.py --name yourname`.
+**To see a finding wait and then clear (S4):** after your first reconciliation,
+press **Deliver PayPal's refund** in the same panel, then click **Run
+reconciliation** again. S4's waiting finding disappears. Pressing the button
+before the first run is harmless, but S4 then never shows as waiting.
+
+If Run reconciliation says nothing is new, an earlier run already covers your
+orders. If it says a check just finished, try again in a few seconds.
+
+Foreign currency and disbursement shortfalls are on the seeded orders
+(ORD-0015, ORD-0008, ORD-0018). The same set can be created from a terminal:
+`python3 scripts/judge_scenarios.py --name yourname`.
 
 Then explore what the queue offers:
 

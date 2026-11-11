@@ -103,7 +103,10 @@ unless asked. What this leaves, so nothing is claimed that was not measured:
   `specs/2026-11-10-queue-approval-dashboard/validation.md` §3a).
 - **The limitations audit was not done**; the readme's limitations were written
   block by block and have not been checked line by line against the replan.
-- **The age factor reads 0% on the seeded data** (orders are dated after today).
+- **The priority score ages from first found, not from the order date**
+  (`first_found_at`, the earliest run that reported the fault). A fault found
+  today scores zero for age, so on freshly seeded data every row reads 0% until
+  days pass; that is correct, not a bug.
 - **About 30 comments in `src/` and `tests/` say "Block G's comparison" or "Block G
   scores"** (same prompt and registry for both providers, exact confidence
   storage, one spelling per outcome). Those design choices still stand for their

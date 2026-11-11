@@ -364,14 +364,16 @@ def test_first_found_is_kept_per_exception_type(
     client: TestClient, session: Session, seeded_exception: ReconciliationException
 ) -> None:
     """An older finding of a different type on the same order is not this one's."""
-    _earlier_run_reporting(
+    older = _earlier_run_reporting(
         session, seeded_exception, days_ago=30, code="duplicate_ledger_entry"
     )
 
-    row = client.get("/api/exceptions").json()[0]
+    rows = {r["code"]: r for r in client.get("/api/exceptions").json()}
 
-    found = datetime.fromisoformat(row["first_found_at"])
-    assert found > datetime.now(UTC) - timedelta(days=1)
+    mine = datetime.fromisoformat(rows["commission_mismatch"]["first_found_at"])
+    assert mine > datetime.now(UTC) - timedelta(days=1)
+    other = datetime.fromisoformat(rows["duplicate_ledger_entry"]["first_found_at"])
+    assert other == older
 
 
 def test_first_found_ignores_non_exceptions(
@@ -406,3 +408,38 @@ def test_a_decision_date_is_on_the_row(
     decision = client.get("/api/exceptions").json()[0]["decision"]
     assert decision["outcome"] == "approved"
     assert datetime.fromisoformat(decision["decided_at"])
+
+
+# ---------------------------------------------------------------------------
+# The age factor follows first found, not the order date.
+# ---------------------------------------------------------------------------
+
+
+def _age_factor(row: dict) -> Decimal:
+    return Decimal(row["priority"]["factors"]["age"])
+
+
+def test_a_fault_found_today_has_no_age_whatever_the_order_date(
+    client: TestClient, seeded_exception: ReconciliationException
+) -> None:
+    """The seeded order was placed six days ago. Before this, that alone gave
+    the exception an age factor of 0.2; now it has been open for no time."""
+    row = client.get("/api/exceptions").json()[0]
+    assert _age_factor(row) < Decimal("0.001")
+
+
+def test_age_grows_with_the_days_since_first_found(
+    client: TestClient, session: Session, seeded_exception: ReconciliationException
+) -> None:
+    _earlier_run_reporting(session, seeded_exception, days_ago=15)
+    row = client.get("/api/exceptions").json()[0]
+    # 15 days of a 30-day cap.
+    assert abs(_age_factor(row) - Decimal("0.5")) < Decimal("0.001")
+
+
+def test_age_saturates_at_the_cap(
+    client: TestClient, session: Session, seeded_exception: ReconciliationException
+) -> None:
+    _earlier_run_reporting(session, seeded_exception, days_ago=90)
+    row = client.get("/api/exceptions").json()[0]
+    assert _age_factor(row) == Decimal(1)

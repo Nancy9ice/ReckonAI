@@ -278,13 +278,20 @@ def exceptions(
                 # An exception naming one seller affects that seller; one about
                 # the order as a whole affects every seller on it.
                 seller_count=_seller_count(r, order, seller_counts),
-                # No order row means no placed date to age from; zero rather
-                # than a guess, and the field is null in the response.
-                age_days=Decimal(0)
-                if order is None
-                else max(
+                # **How long it has been open, not how old the order is.** The
+                # age of a problem is the days since a check first reported it
+                # (`first_found`), which is what a reviewer waits on; an old
+                # order with a problem found today is new work. A fault found
+                # in this run therefore scores zero for age by construction.
+                age_days=max(
                     Decimal(0),
-                    Decimal(str((now - order.placed_at).total_seconds()))
+                    Decimal(
+                        str(
+                            (
+                                now - found[(r.order_external_ref, r.code)]
+                            ).total_seconds()
+                        )
+                    )
                     / SECONDS_PER_DAY,
                 ),
                 confidence=confidences.get(inv.id) if inv is not None else None,

@@ -123,11 +123,15 @@ rehearsal on the deployed app, and the limitations audit.
 operator. Do not assume any of these; ask or check.
 
 1. **The nightly sweep was seen running on Render, 2026-11-11 01:00 UTC.** The
-   cron job started at 01:00:05, enqueued one run and finished successfully; the
-   worker completed the run, logged `auto_investigate queued=4 already_settled=1`
-   (ORD-0013, 14, 15 and 18 queued; ORD-0016 already settled), and all four
-   investigations completed against the model. Read from the Render CLI logs
-   (ids in `specs/2026-11-07-canonical-core/notes.md`). Not yet seen: the
+   cron job started at 01:00:05, logged one `enqueued` line, and Render ended it
+   with "Cron job run finished successfully"; the worker completed the run (9
+   orders, 6 findings, 5 exceptions), logged
+   `auto_investigate queued=4 already_settled=1`, and four investigations
+   completed. `/api/exceptions` shows them: ORD-0013, 14, 15 and 18 started
+   between 01:00:29 and 01:00:45, ORD-0016 was settled by the earlier night, and
+   **every one ran on OpenAI `gpt-4.1`**, the provider the criteria were met on;
+   Anthropic is still unexercised. Read from the Render CLI logs (ids in
+   `specs/2026-11-07-canonical-core/notes.md`) and the public API. Not yet seen: the
    *second* night's run, and the new `--recover-hours 72` step, which only
    exists from the merge of PR #29 onward.
 2. **How testers use their own credentials is undecided.** Discussed: (a) each
@@ -151,7 +155,9 @@ operator. Do not assume any of these; ask or check.
 6. **Live ingestion on Render: deployed, not yet proven by a real delivery.**
    Observed 2026-11-11 from outside: `/webhooks/paypal` is live (an unsigned POST
    gets `401`, a GET `405`), and the simulator write side answers `403` without
-   a secret, which means it is enabled with a secret set. Not observable from
+   a secret. By the route's own code that is only reachable when it is enabled
+   and a secret is set (disabled answers `404`, enabled with no secret `503`), so
+   this is inferred from the code, not observed in the dashboard. Not observable from
    outside, and so still unverified: whether `PAYPAL_WEBHOOK_ID` is set and the
    webhook registered, and whether the worker and cron carry the PayPal
    credentials. The first real sandbox order placed from the deployed app is
@@ -322,9 +328,13 @@ logs show a run (`render logs -r crn-dbpijkmi0phs73aa406g`), which closes Phase
 it on 2026-11-10 14:27 UTC (`reckonai-recon`).
 It runs **daily**, not hourly: the window bounds and the idempotency key are
 both date-grained (the key now also carries a watermark; see live ingestion), so every tick in a UTC day is the same piece of work unless new evidence arrives. **The
-first tick covers 2 of the 18 seeded orders** - the window is `[11-10, 11-12)`
-and the seed is fixed-date (Nov 2-19) - so the full set of faults appears only
-as the calendar advances, unless a wide initial run is enqueued by hand.
+first tick was predicted to cover 2 of the 18 seeded orders, and that was
+wrong**: the run for window `[11-10, 11-12)` covered **9 orders** (6 findings, 5
+exceptions), read from `/api/runs` on 2026-11-11, because a run also selects
+orders holding evidence retrieved since the last completed run. The seed is
+fixed-date (Nov 2-19), so the full set of faults still reaches a windowed run
+only as the calendar advances or evidence arrives, unless a wide run is
+enqueued by hand.
 
 **A `/code-review medium` on Block D returned nine findings, all nine real** -
 two of them high, and seven invisible to the seeded dataset. That directory's

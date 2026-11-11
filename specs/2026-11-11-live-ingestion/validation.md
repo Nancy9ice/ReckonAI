@@ -140,3 +140,27 @@ Ten findings. Each was checked against the code before anything was changed.
 | 8 | Missing credentials gave a 500; a client was built per request and never closed | **Real, fixed.** 503 with a logged reason; the client is closed |
 | 9 | A recovery failure was swallowed at warning level | **Real, fixed.** Logged at error level, the nightly run is still enqueued, and the cron job exits non-zero so the failure shows |
 | 10 | `.env.example` had a typo and angle-bracket placeholders | **Real, fixed.** Note that this edit was the operator's; placeholders now follow the file's `replace-with-` convention |
+
+## 9. After the merge, 2026-11-11 (read from Render and the public URL)
+
+- **Deploy.** PR #29 (merge commit `cddcfc1`) and #30 (`d4b8231`) merged at
+  01:48 UTC. Render started a deploy for `cddcfc1` and cancelled it when the
+  second merge arrived, so there is no live deploy for `cddcfc1` and that is
+  expected: `d4b8231` contains both. It went live on the worker at 01:49:24 and
+  on the web service at 01:50:30. The pre-deploy step ran
+  `Running upgrade b3a91c47d2e0 -> d7e1f3a9c2b4, paypal_event job type`, then
+  `demo_data --ensure` reported `already_seeded`.
+- **Routes.** `GET /webhooks/paypal` gives `405` and an unsigned
+  `POST /webhooks/paypal` gives `401`, so the route is live and refuses an
+  unverifiable delivery. The simulator write side gives `403` without a secret,
+  so it is enabled with a secret set.
+- **Nightly cron, before this merge.** It fired at 01:00:05 UTC and Render
+  logged "Cron job run finished successfully". The worker completed the run (9
+  orders, 6 findings, 5 exceptions; the earlier prediction of 2 orders was
+  wrong) and four automatic investigations, all on OpenAI `gpt-4.1`.
+  This closes open item 1 and Phase 8's fourth criterion. It predates live
+  ingestion, so it does not test the recovery step.
+- **Not observable from outside, still unverified:** the webhook id and
+  registration, the worker and cron PayPal credentials, a genuine signed
+  delivery, capture events carrying `payee.merchant_id`, and the events-list
+  retention.

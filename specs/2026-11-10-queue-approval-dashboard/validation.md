@@ -246,7 +246,8 @@ examined".
   not seen on screen, and the other eight types' text was not seen in a browser.
 - [ ] The evidence viewer's field names are mapped for the common ones; an
   uncommon field falls back to its raw name.
-- [ ] "Order date" is hidden by default to make room; it is in the Columns panel.
+- [ ] ~~"Order date" is hidden by default to make room.~~ Superseded 2026-11-11:
+  it is visible by default, with First found, Days open and Decided on.
 
 ## 4f. The nightly sweep covers every open exception (2026-11-11)
 

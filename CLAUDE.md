@@ -82,7 +82,14 @@ moves to `/service`). Things not to re-derive:
 - **Local UI work needs the worker running** for Run reconciliation and
   Investigate (`WORKER_TICK_SECONDS=3` locally; the default is 30). **A seeded dev
   database breaks the suite** (`test_migrations` downgrades the schema): run
-  `python -m reckonai.demo_data --reset` before `pytest`.
+  `python -m reckonai.demo_data --reset` before `pytest`. **The app does not read
+  the local settings file** (Render supplies the environment in service), so a
+  server started from a shell sees no PayPal or model credentials: run it as
+  `uv run python scripts/with_local_env.py uv run uvicorn reckonai.app:app` (and
+  the same for the worker), which loads them for that one command and prints
+  nothing. **Docker Desktop must be running**, and the `reckonai-postgres`
+  container started, or the app answers `database_unreachable`. After rebuilding
+  the frontend a browser may keep the old page; reload with a query string.
 
 **Block G was skipped** (operator decision, 2026-11-11), so there is no next
 block to start. Do not begin one unprompted, and do not write a spec for it
@@ -122,14 +129,18 @@ rehearsal on the deployed app, and the limitations audit.
 **Open items, as of 2026-11-11.** Not decided, not yet seen, or held only by the
 operator. Do not assume any of these; ask or check.
 
-1. **The nightly sweep has not been seen running on Render.** The first tick after
-   it deployed is 01:00 UTC 2026-11-11. If it worked, open exceptions without a
-   conclusion (expected: ORD-0013, ORD-0014, ORD-0015, ORD-0018; ORD-0016 was
-   already investigated) now show an AI result. Check `/api/exceptions`, the
-   worker's `reckonai.jobs.auto_investigate` log line and the cron job's logs
-   (Render CLI ids are in `specs/2026-11-07-canonical-core/notes.md`). It needs a
-   model key on the **worker**, which a completed investigation there has shown
-   it has.
+1. **The nightly sweep was seen running on Render, 2026-11-11 01:00 UTC.** The
+   cron job started at 01:00:05, logged one `enqueued` line, and Render ended it
+   with "Cron job run finished successfully"; the worker completed the run (9
+   orders, 6 findings, 5 exceptions), logged
+   `auto_investigate queued=4 already_settled=1`, and four investigations
+   completed. `/api/exceptions` shows them: ORD-0013, 14, 15 and 18 started
+   between 01:00:29 and 01:00:45, ORD-0016 was settled by the earlier night, and
+   **every one ran on OpenAI `gpt-4.1`**, the provider the criteria were met on;
+   Anthropic is still unexercised. Read from the Render CLI logs (ids in
+   `specs/2026-11-07-canonical-core/notes.md`) and the public API. Not yet seen: the
+   *second* night's run, and the new `--recover-hours 72` step, which only
+   exists from the merge of PR #29 onward.
 2. **How testers use their own credentials is undecided.** Discussed: (a) each
    tester brings a model key, which works for the assistant but would put a secret
    through the job queue for investigations; (b) named logins (about an hour),
@@ -148,19 +159,24 @@ operator. Do not assume any of these; ask or check.
    known: the web service has a working model key (an assistant call succeeded) and
    so does the worker (an investigation completed); whether the AG Grid variable
    is set on Render is unknown.
-6. **Live ingestion needs the operator, after PR #29 merges:** set
-   `PAYPAL_WEBHOOK_ID`, `SIM_WRITE_SECRET` and `SIM_WRITE_ENABLED` on
-   `reckonai-api`, and `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET` and
-   `PAYPAL_BN_CODE` on `reckonai-worker` and `reckonai-recon`; register the
-   sandbox webhook at `/webhooks/paypal`. Then place a real sandbox order from
-   the deployed app, which is the first real signed delivery and settles what
-   `validation.md` section 6 lists as unproven.
+6. **Live ingestion on Render: deployed, not yet proven by a real delivery.**
+   Observed 2026-11-11 from outside: `/webhooks/paypal` is live (an unsigned POST
+   gets `401`, a GET `405`), and the simulator write side answers `403` without
+   a secret. By the route's own code that is only reachable when it is enabled
+   and a secret is set (disabled answers `404`, enabled with no secret `503`), so
+   this is inferred from the code, not observed in the dashboard. Not observable from
+   outside, and so still unverified: whether `PAYPAL_WEBHOOK_ID` is set and the
+   webhook registered, and whether the worker and cron carry the PayPal
+   credentials. The first real sandbox order placed from the deployed app is
+   the first signed delivery, and settles what `validation.md` section 6 lists
+   as unproven.
 7. **Decided by nobody yet:** whether out-of-order webhook events should be
    rescued by using the stored `COMPLETED` event as the capture-time snapshot
    (`validation.md` section 8, finding 3). It relaxes "a webhook is a
    notification, never the record", so it is a decision, not a fix.
 
-**Live ingestion is built (PR #29, check whether it has merged); read
+**Live ingestion is built, merged and deployed (PR #29, 2026-11-11; Render
+deployed `d4b8231`, and the `d7e1f3a9c2b4` migration ran on the web service); read
 `specs/2026-11-11-live-ingestion/` first, and its `validation.md` sections 5 to 8
 for results and the code review.** Reconciliation is
 still date-windowed; ingestion is now event-fed. Things not to re-derive:
@@ -313,16 +329,19 @@ now a position-moving ledger category**, which took changing both
 counts as having recorded a refund, and reading only `refund` entries there
 made one correct booking produce two findings.
 
-**The Cron Job is deployed and has not yet fired.** The Blueprint sync that
-PR #22's merge triggered created it on 2026-11-10 14:27 UTC (`reckonai-recon`,
-`crn-dbpijkmi0phs73aa406g`). Render does not run a cron job at creation, so the
-first tick is 01:00 UTC on 2026-11-11, and Phase 8's fourth criterion stays
-unproven until its logs show a run (`render logs -r crn-dbpijkmi0phs73aa406g`).
+**The Cron Job fired for the first time at 01:00 UTC on 2026-11-11** and its
+logs show a run (`render logs -r crn-dbpijkmi0phs73aa406g`), which closes Phase
+8's fourth criterion. The Blueprint sync that PR #22's merge triggered created
+it on 2026-11-10 14:27 UTC (`reckonai-recon`).
 It runs **daily**, not hourly: the window bounds and the idempotency key are
 both date-grained (the key now also carries a watermark; see live ingestion), so every tick in a UTC day is the same piece of work unless new evidence arrives. **The
-first tick covers 2 of the 18 seeded orders** - the window is `[11-10, 11-12)`
-and the seed is fixed-date (Nov 2-19) - so the full set of faults appears only
-as the calendar advances, unless a wide initial run is enqueued by hand.
+first tick was predicted to cover 2 of the 18 seeded orders, and that was
+wrong**: the run for window `[11-10, 11-12)` covered **9 orders** (6 findings, 5
+exceptions), read from `/api/runs` on 2026-11-11, because a run also selects
+orders holding evidence retrieved since the last completed run. The seed is
+fixed-date (Nov 2-19), so the full set of faults still reaches a windowed run
+only as the calendar advances or evidence arrives, unless a wide run is
+enqueued by hand.
 
 **A `/code-review medium` on Block D returned nine findings, all nine real** -
 two of them high, and seven invisible to the seeded dataset. That directory's

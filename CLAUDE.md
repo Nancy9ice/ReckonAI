@@ -144,6 +144,28 @@ operator. Do not assume any of these; ask or check.
    so does the worker (an investigation completed); whether the AG Grid variable
    is set on Render is unknown.
 
+**Live ingestion is built on branch `spec-live-ingestion` (not merged as of
+writing); read `specs/2026-11-11-live-ingestion/` first.** Reconciliation is
+still date-windowed; ingestion is now event-fed. Things not to re-derive:
+
+- **A run over dates that already have one needs new evidence** (`reconcile_job.
+  decide_run`, one function for the cron and run-now). The idempotency key now
+  carries the watermark, and the payload carries it too (`payload_for`); the key
+  alone would allow an endless chain, so the new-evidence gate is also required.
+  `RUN_COOLDOWN_SECONDS` (default 300) spaces same-day runs.
+- **A webhook is a notification**: `POST /webhooks/paypal` verifies (fail
+  closed), stores the event, queues a `paypal_event` job; the job re-fetches the
+  order and `replay.ingest_document` writes it. Routing is merchant to tenant
+  and refuses to guess. Unrouted and unhandled events are logged, not stored.
+- **The simulator has a guarded write side** (`sim/live.py`, `SIM_WRITE_ENABLED`
+  plus `SIM_WRITE_SECRET`), direct like the seed, labelled by
+  `endpoint = SIMULATED ...`. `scripts/e2e_live.py` runs it against the real
+  sandbox (adds sandbox records every run).
+- **Unverified until a real delivery on Render:** that capture events carry
+  `payee.merchant_id`, that verification succeeds for a connected seller, the
+  events-list retention. Recovery runs in the nightly cron (`--recover-hours`).
+- The repo does not use `ruff format`; running it rewrites dozens of files.
+
 **Read `specs/2026-11-10-investigation-agent/validation.md` before touching
 `reckonai/agent/`.** §6 lists five corrections this block made to earlier
 documents — two of them to rules stated in `CLAUDE.md` itself, corrected below

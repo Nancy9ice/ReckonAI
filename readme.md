@@ -93,7 +93,7 @@ reconciliation** again. S4's waiting finding disappears. Pressing the button
 before the first run is harmless, but S4 then never shows as waiting.
 
 If Run reconciliation says nothing is new, an earlier run already covers your
-orders. If it says a check just finished, try again in a few seconds.
+orders. If it says a check just finished, try again shortly.
 
 Foreign currency and disbursement shortfalls are on the seeded orders
 (ORD-0015, ORD-0008, ORD-0018).

@@ -397,3 +397,19 @@ def test_the_enabled_probe_answers_either_way(
     assert off.status_code == 200 and off.json() == {"enabled": False}
     _enable(monkeypatch)
     assert http.get("/sim/judge/enabled").json() == {"enabled": True}
+
+
+def test_a_spoofed_forwarded_header_does_not_mint_a_new_client(
+    http: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _enable(monkeypatch, JUDGE_SETS_PER_CLIENT_PER_DAY="1")
+    first = http.post(
+        "/sim/judge/scenarios", json={"name": "one"},
+        headers={"X-Forwarded-For": "1.1.1.1"},
+    )
+    assert first.status_code == 200
+    second = http.post(
+        "/sim/judge/scenarios", json={"name": "two"},
+        headers={"X-Forwarded-For": "2.2.2.2"},
+    )
+    assert second.status_code == 429, "the same caller, however the header reads"

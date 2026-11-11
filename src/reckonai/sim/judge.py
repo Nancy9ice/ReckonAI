@@ -477,11 +477,14 @@ def _session(request: Request) -> Iterator[Session]:
 
 
 def _client(request: Request) -> str | None:
-    """A short hash of the caller's address; the address itself is not stored."""
-    forwarded = request.headers.get("x-forwarded-for", "")
-    host = forwarded.split(",")[0].strip() or (
-        request.client.host if request.client else ""
-    )
+    """A short hash of the caller's address; the address itself is not stored.
+
+    `request.client.host` only: uvicorn's proxy-headers handling has already
+    resolved it from the forwarded chain. Reading `X-Forwarded-For` here would
+    trust its leftmost entry, which the caller writes, so a changed header would
+    be a fresh client and the per-client cap would mean nothing.
+    """
+    host = request.client.host if request.client else ""
     return hashlib.sha256(host.encode()).hexdigest()[:16] if host else None
 
 

@@ -672,7 +672,7 @@ _RUN_REFUSAL = {
     ),
     "cooling_down": (
         "New records have arrived, but a check finished a moment ago. Try again "
-        "in a few seconds; the next check will include them."
+        "shortly; the next check will include them."
     ),
 }
 

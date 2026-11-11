@@ -44,6 +44,19 @@ function arrival(row: JudgeRow): string {
   return row.path === "fallback" ? JUDGE.viaFetch : JUDGE.viaWebhook;
 }
 
+// One failed request is not a failed run: the server-side work is idempotent, so
+// asking again is safe. Three tries, then the error is shown.
+async function retry<T>(call: () => Promise<T>, tries = 3): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await call();
+    } catch (e) {
+      if (attempt >= tries) throw e;
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+  }
+}
+
 type Phase = "idle" | "working" | "done" | "failed";
 
 export default function JudgeScenarios({ onClose }: { onClose: () => void }) {
@@ -114,7 +127,7 @@ export default function JudgeScenarios({ onClose }: { onClose: () => void }) {
         if (waited >= FETCH_AFTER_S && !fetched) {
           fetched = true;
           setNote(JUDGE.fetching);
-          const after = await api.judgeIngest(name);
+          const after = await retry(() => api.judgeIngest(name));
           if (after.error) {
             setRows(after.scenarios);
             setPhase("failed");

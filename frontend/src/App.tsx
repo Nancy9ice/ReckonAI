@@ -315,8 +315,12 @@ export default function App() {
         </header>
 
         <main className={selected && view === "queue" ? "page with-drawer" : "page"}>
-          {judgeOn && judgeOpen && (
-            <JudgeScenarios onClose={() => setJudgeOpen(false)} />
+          {/* Mounted whenever the feature is on and only hidden when closed, so a
+              run in progress is not abandoned by toggling the panel. */}
+          {judgeOn && (
+            <div hidden={!judgeOpen}>
+              <JudgeScenarios onClose={() => setJudgeOpen(false)} />
+            </div>
           )}
           {error && <div className="banner bad">{error}</div>}
           {runNote && (

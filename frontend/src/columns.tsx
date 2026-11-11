@@ -84,8 +84,7 @@ export const columns: ColDef<ExceptionRow>[] = [
   {
     colId: "status",
     headerName: "Certainty",
-    headerTooltip:
-      "Confirmed: the records agree on what happened. Suspected: the link between records was inferred, so check it.",
+    headerTooltip: COLUMN_HINTS.certainty,
     valueGetter: (p) =>
       p.data ? (p.data.certainty === "confirmed" ? "Confirmed" : "Suspected") : "",
     enableRowGroup: true,
@@ -135,7 +134,7 @@ export const columns: ColDef<ExceptionRow>[] = [
   {
     colId: "impact",
     headerName: "Difference",
-    headerTooltip: "The size of the gap, in the currency of the record.",
+    headerTooltip: COLUMN_HINTS.difference,
     // The amount string, ordered and filtered by the grid. Display uses the
     // record's own currency; no arithmetic happens in this file.
     valueGetter: (p) => p.data?.impact.amount ?? null,
@@ -209,7 +208,7 @@ export const columns: ColDef<ExceptionRow>[] = [
   {
     colId: "investigation",
     headerName: "AI result",
-    headerTooltip: "What the AI found when it looked into this exception.",
+    headerTooltip: COLUMN_HINTS.aiResult,
     valueGetter: (p) => (p.data ? verdictText(p.data) : ""),
     enableRowGroup: true,
     filter: "agSetColumnFilter",

@@ -205,7 +205,7 @@ export default function QueueView({
           onChange={(e) => setQuick(e.target.value)}
         />
         <Segmented<Certainty>
-          label="Status"
+          label="Certainty"
           value={certainty}
           onChange={setCertainty}
           options={[

@@ -112,6 +112,10 @@ export const typeTitle = (code: string): string => typeCopy(code).title;
 // ---- Column hints -----------------------------------------------------------
 
 export const COLUMN_HINTS = {
+  certainty:
+    "Confirmed: the records agree on what happened. Suspected: the link between records was inferred, so check it.",
+  difference: "The size of the gap, in the currency of the record.",
+  aiResult: "What the AI found when it looked into this exception.",
   issue:
     "What is wrong with this order, in plain words. Hover a row's issue to read what it means.",
   order: "The marketplace's own reference for the order.",

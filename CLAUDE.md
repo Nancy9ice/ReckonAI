@@ -82,7 +82,14 @@ moves to `/service`). Things not to re-derive:
 - **Local UI work needs the worker running** for Run reconciliation and
   Investigate (`WORKER_TICK_SECONDS=3` locally; the default is 30). **A seeded dev
   database breaks the suite** (`test_migrations` downgrades the schema): run
-  `python -m reckonai.demo_data --reset` before `pytest`.
+  `python -m reckonai.demo_data --reset` before `pytest`. **The app does not read
+  the local settings file** (Render supplies the environment in service), so a
+  server started from a shell sees no PayPal or model credentials: run it as
+  `uv run python scripts/with_local_env.py uv run uvicorn reckonai.app:app` (and
+  the same for the worker), which loads them for that one command and prints
+  nothing. **Docker Desktop must be running**, and the `reckonai-postgres`
+  container started, or the app answers `database_unreachable`. After rebuilding
+  the frontend a browser may keep the old page; reload with a query string.
 
 **Block G was skipped** (operator decision, 2026-11-11), so there is no next
 block to start. Do not begin one unprompted, and do not write a spec for it

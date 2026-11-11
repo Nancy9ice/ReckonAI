@@ -3,6 +3,8 @@ name = "reckonai"
 version = "0.1.0"
 description = "AI-powered financial reconciliation and investigation agent for marketplace operators using PayPal"
 readme = "readme.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.12,<3.13"
 
 # Runtime dependencies are locked by specs/tech-stack.md section 1. Adding one

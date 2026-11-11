@@ -570,6 +570,8 @@ details.tech { margin: 6px 0 10px; font-size: 12.5px; }
 .conf { padding: 2px 10px; border-radius: 999px; background: var(--good-bg); color: var(--good); font-size: 12px; font-weight: 650; white-space: nowrap; }
 
 @media (max-width: 1280px) { .kcards { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+/* The open drawer takes about 520px, so six cards in what is left overlap: use three. */
+.page.with-drawer .kcards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 @media (max-width: 640px) {
   .kcards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .trow { grid-template-columns: 1fr; gap: 4px; }

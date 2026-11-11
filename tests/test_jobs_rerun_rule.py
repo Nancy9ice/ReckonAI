@@ -181,3 +181,17 @@ def test_an_explicit_null_watermark_is_not_recomputed(
     """Null means no run had completed; an absent key means an older payload."""
     payload = reconcile_job.payload_for(DAY)
     assert "evidence_since" in payload and payload["evidence_since"] is None
+
+
+def test_evidence_dated_in_the_future_has_not_arrived(
+    session: Session, tenant: Tenant
+) -> None:
+    """The seeded dataset is dated up to a week ahead; counting those payloads
+    as new made every same-day run look permitted (found running it locally)."""
+    run(session, tenant, DAY)
+    session.add(
+        make_payload(tenant.id, retrieved_at=datetime.now(UTC) + timedelta(days=3))
+    )
+    session.flush()
+
+    assert decide(session, tenant, DAY).verdict is RunVerdict.NOTHING_NEW

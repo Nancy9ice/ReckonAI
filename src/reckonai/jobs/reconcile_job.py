@@ -156,7 +156,7 @@ def decide_run(
     ):
         return RunDecision(RunVerdict.PERMITTED, keyed)
 
-    if not window.has_new_evidence(session, tenant_id, watermark):
+    if not window.has_new_evidence(session, tenant_id, watermark, until=now):
         return RunDecision(RunVerdict.NOTHING_NEW, keyed)
 
     last_finished = session.scalars(

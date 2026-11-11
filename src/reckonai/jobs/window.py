@@ -130,18 +130,28 @@ def last_completed_watermark(
 
 
 def has_new_evidence(
-    session: Session, tenant_id: uuid.UUID, since: datetime | None
+    session: Session,
+    tenant_id: uuid.UUID,
+    since: datetime | None,
+    *,
+    until: datetime | None = None,
 ) -> bool:
-    """Whether any payload was retrieved after `since`.
+    """Whether any payload was retrieved after `since` (and not after `until`).
 
-    **This is clause 2's own test**, asked as a yes or no, so the question
-    "may a same-day run happen" and the selection that run performs cannot
-    disagree about what counts as new. `since=None` means no completed run
-    exists, so any payload at all is new.
+    **This is clause 2's test**, asked as a yes or no, with one deliberate
+    difference: `until` bounds it at the present. A payload dated in the future
+    has not been retrieved yet, and counting it would make every same-day run
+    look permitted. The seeded dataset is exactly that case: its orders are
+    dated up to a week ahead, found by running the rule locally. The bound makes
+    the gate stricter than the selection, never looser, so it can refuse a run
+    but cannot permit one that clause 2 would not use. `since=None` means no
+    completed run exists, so any payload at all is new.
     """
     query = select(RawPayload.id).where(RawPayload.tenant_id == tenant_id)
     if since is not None:
         query = query.where(RawPayload.retrieved_at > since)
+    if until is not None:
+        query = query.where(RawPayload.retrieved_at <= until)
     return session.scalars(query.limit(1)).first() is not None
 
 

@@ -93,3 +93,33 @@ for a connected seller, that capture events carry `payee.merchant_id` (routing
 depends on it), the events-list's retention, and that the new cron variables
 and `PAYPAL_WEBHOOK_ID` are set. The worker and cron now need PayPal credentials
 the Blueprint declares but only the operator can set.
+
+## 7. Local run through the real stack, 2026-11-11
+
+Web service and worker started locally with the real credentials
+(`scripts/with_local_env.py`), the dashboard driven in a browser. All against
+the PayPal sandbox.
+
+- **Verification against real PayPal.** A forged signature and a delivery with
+  no signature headers were both refused `401`; non-JSON `400`. This exercised
+  the real verify call with the real webhook id. It did **not** exercise a
+  genuine signed delivery, which needs a public URL.
+- **Write side guard.** `403` without the secret, `201` with it, placing a real
+  sandbox order.
+- **Worker.** A routed event was queued, and the worker, on its own process
+  with its own credentials, re-fetched the order as the seller and ingested it.
+- **Run rule.** First run permitted; a repeat with nothing new `nothing_new`;
+  new evidence inside the cooldown `cooling_down`; permitted after it.
+- **Dashboard.** A second live order planted with a duplicate credit appeared
+  as a sixth open exception, `Same payment booked twice`, $80.00, after
+  "Run reconciliation".
+
+**Found by running it, fixed:** the seeded dataset's payloads are dated up to
+Nov 19, in the future, so every same-day run looked permitted. A payload dated
+after now has not arrived; `has_new_evidence` is bounded at `now`
+(`test_evidence_dated_in_the_future_has_not_arrived`). No unit test could have
+found it, because the tests build their own evidence.
+
+**Not done:** a genuine signed delivery. No tunnel tool is installed, and
+pointing the registered webhook at a tunnel would change the operator's PayPal
+app.

@@ -72,6 +72,11 @@ class ExceptionOut(BaseModel):
     seller_count: int
     #: `None` if the order row is absent, never a guessed date.
     order_placed_at: datetime | None
+    #: When the first check reported this fault, over every run: the start of
+    #: the earliest run holding a row for this order and type. Not this row's
+    #: own run, which is only the latest. A fault that disappeared from the
+    #: reports and came back would keep its original date here.
+    first_found_at: datetime
     evidence_refs: list[str]
     evidence_basis: str
     priority: PriorityOut

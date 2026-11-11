@@ -274,7 +274,7 @@ export default function QueueView({
               deployed site it did not, so every row opened stayed blue. A rule
               that names one row cannot go stale. */}
           {selectedId !== null && (
-            <style>{`.ag-row[row-id="${CSS.escape(selectedId)}"] { background: #e3f0fb !important; }`}</style>
+            <style>{`.ag-row[row-id="${CSS.escape(selectedId)}"] { background: var(--row-open-bg); box-shadow: inset 4px 0 0 var(--row-open-bar); }`}</style>
           )}
           <AgGridReact<ExceptionRow>
             theme={gridTheme}

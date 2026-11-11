@@ -73,7 +73,10 @@ def window_ending(now: datetime, *, days: int) -> window.Window:
 
 
 def enqueue_runs(session: Session, *, days: int) -> list[uuid.UUID]:
-    """Enqueue one run per tenant, skipping any window already reconciled.
+    """Enqueue one run per tenant, unless `decide_run` says not to.
+
+    A window already reconciled is skipped unless evidence has arrived since
+    (the same-day re-run rule, `reconcile_job.decide_run`).
 
     **One job per tenant, committed per tenant**, rather than one job that
     loops over tenants: a tenant whose reconciliation fails must not stop
@@ -89,10 +92,18 @@ def enqueue_runs(session: Session, *, days: int) -> list[uuid.UUID]:
         # handler would refuse. Enqueueing regardless would be correct but
         # noisy: every hourly tick would add a job that fails on the
         # constraint, and a queue full of expected failures hides a real one.
-        if _already_reconciled(session, tenant_id, win):
+        decision = reconcile_job.decide_run(
+            session,
+            tenant_id,
+            win,
+            now=datetime.now(UTC),
+            cooldown_seconds=get_settings().run_cooldown_seconds,
+        )
+        if decision.verdict is not reconcile_job.RunVerdict.PERMITTED:
             logger.info(
                 event(
                     "reckonai.jobs.schedule.skipped",
+                    reason=str(decision.verdict),
                     tenant_id=str(tenant_id),
                     window_start=win.start.date().isoformat(),
                     window_end=win.end.date().isoformat(),
@@ -104,13 +115,9 @@ def enqueue_runs(session: Session, *, days: int) -> list[uuid.UUID]:
             session,
             tenant_id=tenant_id,
             job_type=reconcile_job.JOB_TYPE,
-            payload={
-                "window_start": win.start.isoformat(),
-                "window_end": win.end.isoformat(),
-                # The nightly run investigates what it finds, within the cap
-                # `settings.auto_investigate_max` (see `investigation_job`).
-                "auto_investigate": True,
-            },
+            # The nightly run investigates what it finds, within the cap
+            # `settings.auto_investigate_max` (see `investigation_job`).
+            payload=reconcile_job.payload_for(decision.window, auto_investigate=True),
         )
         # **Committed per tenant, and that is the point of the loop.** Code
         # review found the isolation claim below false at enqueue time: one
@@ -131,27 +138,37 @@ def enqueue_runs(session: Session, *, days: int) -> list[uuid.UUID]:
     return enqueued
 
 
-def _already_reconciled(
-    session: Session, tenant_id: uuid.UUID, win: window.Window
-) -> bool:
-    """Whether this tenant's window already has its dedupe marker.
+def _recover(session: Session, *, hours: int) -> bool:
+    """Missed-delivery recovery, which must never stop the nightly run.
 
-    A read, so it races: two cron invocations could both see no marker. That
-    is safe rather than tolerated - the handler inserts the marker inside its
-    own transaction, so the second job fails on the constraint and writes
-    nothing. This check keeps the queue readable; the constraint is what keeps
-    it correct.
+    Returns whether it worked. A failure is logged at error level and `main`
+    exits non-zero after the run is enqueued, so a recovery that quietly never
+    runs shows as a failed cron job instead of a green one.
     """
-    from reckonai.models import ProcessedEvent
+    from reckonai.jobs import recover
+    from reckonai.paypal import live
 
-    key = reconcile_job.idempotency_key(tenant_id, win)
-    existing = session.scalars(
-        select(ProcessedEvent.id).where(
-            ProcessedEvent.tenant_id == tenant_id,
-            ProcessedEvent.event_id == key,
+    client = None
+    try:
+        client = live.LiveClient(live.credentials())
+        now = datetime.now(UTC)
+        recover.recover(
+            session, client, since=now - timedelta(hours=hours), until=now
         )
-    ).first()
-    return existing is not None
+        return True
+    except Exception as exc:  # noqa: BLE001 - deliberate: the run goes ahead
+        session.rollback()
+        logger.error(
+            event(
+                "reckonai.jobs.schedule.recover_failed",
+                error=type(exc).__name__,
+                detail=str(exc)[:200],
+            )
+        )
+        return False
+    finally:
+        if client is not None:
+            client.close()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -168,6 +185,16 @@ def main(argv: list[str] | None = None) -> int:
             "How many days the window covers, ending at midnight after today. "
             f"Default {DEFAULT_WINDOW_DAYS}, because the reporting APIs run "
             "about a day behind."
+        ),
+    )
+    parser.add_argument(
+        "--recover-hours",
+        type=int,
+        default=0,
+        help=(
+            "Before enqueueing, recover webhook events PayPal recorded in the "
+            "last N hours that were not delivered (live-ingestion F9). 0 skips "
+            "it. A failure here is logged and never blocks the run."
         ),
     )
     args = parser.parse_args(argv)
@@ -189,9 +216,14 @@ def main(argv: list[str] | None = None) -> int:
             # and the second job's handler meets the `processed_event`
             # constraint, which `reconcile_job.AlreadyReconciled` now reports
             # as work already done rather than as a failure to retry.
+            recovered = True
+            if args.recover_hours > 0:
+                recovered = _recover(session, hours=args.recover_hours)
             enqueued = enqueue_runs(session, days=args.window_days)
 
         logger.info(event("reckonai.jobs.schedule.done", enqueued=len(enqueued)))
+        if not recovered:
+            return 1
     finally:
         engine.dispose()
 

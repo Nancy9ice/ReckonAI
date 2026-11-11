@@ -34,6 +34,7 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
@@ -76,6 +77,13 @@ class SeedResult:
     refund_ids: dict[str, uuid.UUID] = field(default_factory=dict)
 
 
+#: The `endpoint` stamped on a marketplace payload. `None` for the seed, which
+#: has no read path. The live write side sets it for the duration of a call, so
+#: a record it created is labelled simulated at the record level
+#: (`specs/2026-11-11-live-ingestion/requirements.md` F14, D4).
+ENDPOINT_MARKER: ContextVar[str | None] = ContextVar("seed_endpoint", default=None)
+
+
 def _digest(body: dict) -> str:
     canonical = json.dumps(body, sort_keys=True, separators=(",", ":"), default=str)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
@@ -109,7 +117,7 @@ def _payload(
         source="marketplace",
         source_record_type=record_type,
         source_record_id=record_id,
-        endpoint=None,
+        endpoint=ENDPOINT_MARKER.get(),
         retrieved_at=retrieved_at,
         body=full,
         body_sha256=_digest(full),

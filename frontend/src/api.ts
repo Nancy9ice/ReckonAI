@@ -153,7 +153,13 @@ export interface Coverage {
 }
 
 export interface RunRequest {
-  status: "queued" | "in_flight" | "already_done" | "no_orders";
+  status:
+    | "queued"
+    | "in_flight"
+    | "already_done"
+    | "nothing_new"
+    | "cooling_down"
+    | "no_orders";
   window_start: string | null;
   window_end: string | null;
   job: Job | null;

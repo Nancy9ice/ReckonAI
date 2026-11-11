@@ -82,6 +82,19 @@ class Settings(BaseSettings):
     paypal_bn_code: str | None = None
     paypal_api_base: str = "https://api-m.sandbox.paypal.com"
 
+    #: The id of the webhook registered with PayPal for this service. The
+    #: signature check is made against it, and **without it every delivery is
+    #: refused**: an unverifiable event is never accepted on a guess
+    #: (`specs/2026-11-11-live-ingestion/requirements.md` F2).
+    paypal_webhook_id: str | None = None
+
+    #: The simulated marketplace's write side (live-ingestion F10 to F15). Off
+    #: unless enabled, and a shared secret is required when it is: the read
+    #: endpoints are public, and a public write endpoint would let anyone plant
+    #: orders and ledger entries in a deployed demo.
+    sim_write_enabled: bool = False
+    sim_write_secret: SecretStr | None = None
+
     # ---- The investigation agent (Block E) --------------------------------
     #
     # **The model lives here rather than in code**, by the dated 2026-11-10
@@ -104,6 +117,13 @@ class Settings(BaseSettings):
     # investigates by itself.
     auto_investigate_max: int = Field(default=25, ge=0)
 
+    #: Minimum seconds between two runs over the same dates. The same-day
+    #: re-run rule (`specs/2026-11-11-live-ingestion/requirements.md` section
+    #: 4) permits a run when new evidence has arrived; this stops a burst of
+    #: events from producing a run per event. Evidence that arrives during the
+    #: cooldown is not lost, the first run after it examines it. 0 disables.
+    run_cooldown_seconds: int = Field(default=300, ge=0)
+
     # Both optional, and the service runs without either - the same shape as
     # `marketplace_base_url`, and for the same reason: the web service and the
     # worker both read this object and neither makes a model call. The agent
@@ -121,6 +141,14 @@ class Settings(BaseSettings):
     # dashboard - which is what makes the deployed checks in this phase's
     # validation.md section 4 readable straight from the log stream.
     render_external_url: str | None = None
+
+    @field_validator("sim_write_enabled", mode="before")
+    @classmethod
+    def _empty_means_off(cls, value: object) -> object:
+        """An unset prompted variable can arrive as an empty string, which is off."""
+        if isinstance(value, str) and not value.strip():
+            return False
+        return value
 
     @field_validator("database_url")
     @classmethod

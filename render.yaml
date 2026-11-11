@@ -129,6 +129,19 @@ services:
         sync: false
       - key: PAYPAL_BN_CODE
         sync: false
+      # The id of the webhook registered with PayPal for this service. Without
+      # it every delivery is refused (live-ingestion F2).
+      - key: PAYPAL_WEBHOOK_ID
+        sync: false
+      # The simulated marketplace's write side: off unless enabled, and a
+      # secret is required when it is (live-ingestion F15). `sync: false`, not
+      # a fixed value, so switching it on is a dashboard edit that a later
+      # Blueprint sync will not reset. Enter `true` to enable; empty or `false`
+      # leaves it off.
+      - key: SIM_WRITE_ENABLED
+        sync: false
+      - key: SIM_WRITE_SECRET
+        sync: false
       - key: LOG_LEVEL
         value: INFO
 
@@ -168,6 +181,16 @@ services:
       # off. Skipped, with a warning, if no model credential is set here.
       - key: AUTO_INVESTIGATE_MAX
         value: "25"
+
+      # The worker re-fetches an order when a webhook event names it
+      # (live-ingestion F4, F6), so it reads PayPal. Sandbox only; the client
+      # refuses any other host. `sync: false`: never in the repository.
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_BN_CODE
+        sync: false
 
       # The investigation agent runs here, as a queued job (Block F D2), so
       # the credential belongs on the worker and nowhere else. `sync: false`:
@@ -247,6 +270,7 @@ services:
     # installs at container start.
     startCommand: >
       uv run --no-sync python -m reckonai.jobs.schedule --window-days 2
+      --recover-hours 72
 
     envVars:
       - key: DATABASE_URL
@@ -257,6 +281,17 @@ services:
         value: production
       - key: LOG_LEVEL
         value: INFO
+
+      # Missed-delivery recovery lists PayPal's recorded webhook events before
+      # the nightly run (live-ingestion F9; PayPal retries a failed delivery for
+      # days, so 72 hours). Sandbox only. Absent, recovery logs a warning and the
+      # run goes ahead.
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_BN_CODE
+        sync: false
 
 # No static site yet. The frontend is Phase 14 (requirements.md D1).
 

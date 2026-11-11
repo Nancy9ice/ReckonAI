@@ -175,7 +175,7 @@ proposed one is:
 > populate an `fx_conversion` field. Where a PayPal figure is unreachable, the
 > gap is a limitation, not a fixture.
 
-Not adopted until confirmed. Without it, "where necessary" is the opening P3
+**Adopted 2026-11-11** by `specs/2026-11-11-live-ingestion/requirements.md` D4, enforced in data by a record-level simulated marker. (Originally: not adopted until confirmed.) Without it, "where necessary" is the opening P3
 exists to close.
 
 ## 8. Verification still needed — Phase 0b

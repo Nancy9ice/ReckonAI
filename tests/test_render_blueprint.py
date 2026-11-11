@@ -236,6 +236,9 @@ def test_every_paypal_variable_is_declared_without_a_value(
         "PAYPAL_CLIENT_ID",
         "PAYPAL_CLIENT_SECRET",
         "PAYPAL_BN_CODE",
+        # Live ingestion: the registered webhook's id, which the signature
+        # check is made against (specs/2026-11-11-live-ingestion F2).
+        "PAYPAL_WEBHOOK_ID",
     }, declared
 
 
@@ -313,3 +316,42 @@ def test_the_worker_states_the_automatic_investigation_cap(
     worker = next(s for s in services if s["name"] == "reckonai-worker")
     keys = {v["key"]: v for v in worker["envVars"]}
     assert keys["AUTO_INVESTIGATE_MAX"]["value"].isdigit()
+
+
+def test_the_simulator_write_side_is_prompted_and_never_pinned_on(
+    services: list[dict[str, Any]],
+) -> None:
+    """It is `sync: false`, so enabling it is a dashboard edit a Blueprint sync
+    will not reset, and the file can never carry it switched on."""
+    web = next(s for s in services if s["type"] == "web")
+    keys = {var["key"]: var for var in web["envVars"]}
+    assert keys["SIM_WRITE_ENABLED"].get("sync") is False
+    assert "value" not in keys["SIM_WRITE_ENABLED"]
+    assert keys["SIM_WRITE_SECRET"].get("sync") is False
+
+
+@pytest.mark.parametrize("raw", ["", "  ", "false", "False"])
+def test_an_empty_or_false_write_flag_is_off(
+    monkeypatch: pytest.MonkeyPatch, raw: str
+) -> None:
+    from reckonai.config import get_settings
+
+    monkeypatch.setenv("SIM_WRITE_ENABLED", raw)
+    get_settings.cache_clear()
+    try:
+        assert get_settings().sim_write_enabled is False
+    finally:
+        get_settings.cache_clear()
+
+
+def test_the_write_flag_turns_on_only_when_told_to(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from reckonai.config import get_settings
+
+    monkeypatch.setenv("SIM_WRITE_ENABLED", "true")
+    get_settings.cache_clear()
+    try:
+        assert get_settings().sim_write_enabled is True
+    finally:
+        get_settings.cache_clear()

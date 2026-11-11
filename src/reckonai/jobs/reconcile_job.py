@@ -18,14 +18,21 @@ financial conclusion, which specs/mission.md section 4 forbids.
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from enum import StrEnum
+from typing import NamedTuple
 
+from sqlalchemy import ColumnElement, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from reckonai import reconcile
 from reckonai.jobs import investigation_job, queue, window
-from reckonai.models import ReconciliationException, ReconciliationRun
+from reckonai.models import (
+    ProcessedEvent,
+    ReconciliationException,
+    ReconciliationRun,
+)
 from reckonai.recon.classifier import Finding, exceptions_only
 
 JOB_TYPE = "reconciliation_run"
@@ -47,18 +54,146 @@ class AlreadyReconciled(Exception):
     """
 
 
-def idempotency_key(tenant_id: uuid.UUID, win: window.Window) -> str:
-    """The key that makes one window reconcilable once.
-
-    Composed from the tenant and the window bounds, which is what a provider
-    event id would be if there were one (D5). Dates rather than full
-    timestamps: a window is a date range, and two runs over the same dates
-    are the same piece of work however their bounds were spelled.
-    """
+def _dates_prefix(tenant_id: uuid.UUID, win: window.Window) -> str:
     return (
         f"recon:{tenant_id}:{win.start.date().isoformat()}"
         f":{win.end.date().isoformat()}"
     )
+
+
+def idempotency_key(tenant_id: uuid.UUID, win: window.Window) -> str:
+    """The key that makes one window, in one state of the evidence, run once.
+
+    Composed from the tenant, the window's dates and the watermark the run
+    reads (`win.evidence_since`, or `none` before any run has completed).
+    Dates rather than full timestamps for the window: a window is a date
+    range, and two runs over the same dates are the same piece of work however
+    their bounds were spelled.
+
+    **The watermark is what lets a second run on the same dates exist at all**
+    (`specs/2026-11-11-live-ingestion/requirements.md` section 4). Two requests
+    that see the same watermark build the same key and the second is refused at
+    the constraint; once a run completes the watermark moves, so the key
+    changes. That alone would allow an endless chain of runs, because every
+    completed run moves the watermark, which is why `decide_run` gates a
+    repeat on new evidence as well. Both are required.
+    """
+    mark = win.evidence_since.isoformat() if win.evidence_since else "none"
+    return f"{_dates_prefix(tenant_id, win)}:{mark}"
+
+
+class RunVerdict(StrEnum):
+    """Whether a run over these dates may be queued now."""
+
+    PERMITTED = "permitted"
+
+    #: This exact key already ran: the same dates in the same state of the
+    #: evidence. The backstop; the constraint is what decides.
+    ALREADY_DONE = "already_done"
+
+    #: The dates have a run and nothing has been retrieved since it started.
+    NOTHING_NEW = "nothing_new"
+
+    #: The dates have a run, there is new evidence, and the last run finished
+    #: inside the cooldown.
+    COOLING_DOWN = "cooling_down"
+
+
+class RunDecision(NamedTuple):
+    """The verdict, and the window to enqueue with its watermark stamped in.
+
+    The watermark is read once, here, and travels in the job payload. Were it
+    read again at execution, two jobs queued against the same state of the
+    evidence would build different keys once the first completed, and both
+    would run.
+    """
+
+    verdict: RunVerdict
+    window: window.Window
+
+
+def decide_run(
+    session: Session,
+    tenant_id: uuid.UUID,
+    win: window.Window,
+    *,
+    now: datetime,
+    cooldown_seconds: int,
+) -> RunDecision:
+    """The same-day re-run rule.
+
+    A run over dates that already have a run is permitted only if evidence has
+    been retrieved since the last completed run started; dates with no run are
+    always permitted, which keeps the nightly re-evaluation of
+    `awaiting_evidence` working with no new evidence at all. A key in the
+    pre-watermark format counts as a run over those dates.
+
+    One function for the cron and for run-now, so there is one definition.
+    """
+    watermark = window.last_completed_watermark(session, tenant_id)
+    keyed = window.Window(start=win.start, end=win.end, evidence_since=watermark)
+    key = idempotency_key(tenant_id, keyed)
+
+    def marker_exists(*conditions: ColumnElement[bool]) -> bool:
+        return (
+            session.scalars(
+                select(ProcessedEvent.id)
+                .where(ProcessedEvent.tenant_id == tenant_id, *conditions)
+                .limit(1)
+            ).first()
+            is not None
+        )
+
+    if marker_exists(ProcessedEvent.event_id == key):
+        return RunDecision(RunVerdict.ALREADY_DONE, keyed)
+
+    prefix = _dates_prefix(tenant_id, win)
+    if not marker_exists(
+        or_(
+            ProcessedEvent.event_id == prefix,
+            ProcessedEvent.event_id.like(f"{prefix}:%"),
+        )
+    ):
+        return RunDecision(RunVerdict.PERMITTED, keyed)
+
+    if not window.has_new_evidence(session, tenant_id, watermark, until=now):
+        return RunDecision(RunVerdict.NOTHING_NEW, keyed)
+
+    last_finished = session.scalars(
+        select(func.max(ReconciliationRun.finished_at)).where(
+            ReconciliationRun.tenant_id == tenant_id,
+            ReconciliationRun.status == "completed",
+            # This window's own runs: a run over other dates finishing a minute
+            # ago must not hold this one back.
+            ReconciliationRun.window_start == win.start,
+            ReconciliationRun.window_end == win.end,
+        )
+    ).first()
+    if (
+        cooldown_seconds > 0
+        and last_finished is not None
+        and now - last_finished < timedelta(seconds=cooldown_seconds)
+    ):
+        return RunDecision(RunVerdict.COOLING_DOWN, keyed)
+
+    return RunDecision(RunVerdict.PERMITTED, keyed)
+
+
+def payload_for(win: window.Window, **extra: object) -> dict[str, object]:
+    """A job payload for a window, carrying the watermark `decide_run` read.
+
+    `evidence_since` is written even when it is `None`: an explicit null means
+    "no run had completed", and an absent key means "an older payload, read the
+    watermark at execution". Those are different claims.
+    """
+    return {
+        "window_start": win.start.isoformat(),
+        "window_end": win.end.isoformat(),
+        "evidence_since": (
+            win.evidence_since.isoformat() if win.evidence_since else None
+        ),
+        **extra,
+    }
 
 
 def run_window(
@@ -143,7 +278,7 @@ def execute(
     transaction back and leaves the first run's rows untouched.
     """
     win = _window_from(payload)
-    if win.evidence_since is None:
+    if "evidence_since" not in payload:
         win = window.Window(
             start=win.start,
             end=win.end,
@@ -174,9 +309,11 @@ def _window_from(payload: dict[str, object]) -> window.Window:
     and dates, and the amounts are read from the canonical tables by the
     engine. So `datetime.fromisoformat` is all the parsing this needs.
     """
+    stamped = payload.get("evidence_since")
     return window.Window(
         start=datetime.fromisoformat(str(payload["window_start"])),
         end=datetime.fromisoformat(str(payload["window_end"])),
+        evidence_since=datetime.fromisoformat(str(stamped)) if stamped else None,
     )
 
 

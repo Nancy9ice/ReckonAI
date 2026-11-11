@@ -81,10 +81,14 @@ export default function App() {
     try {
       const result = await api.requestRun();
       if (!result.job) {
-        // "Already done today" is information, not success: new data may be
-        // waiting for tomorrow, and a green banner would read as "up to date".
+        // A refused request is information, not success, and not a failure: a
+        // green banner would read as "up to date" and a red one as broken.
         setRunNote({
-          tone: result.status === "already_done" ? "info" : "bad",
+          tone: ["already_done", "nothing_new", "cooling_down"].includes(
+            result.status,
+          )
+            ? "info"
+            : "bad",
           text: result.message,
         });
         return;

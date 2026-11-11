@@ -39,7 +39,7 @@ from reckonai.models.lifecycle import state_check
 #:
 #: Two members: Block F registered `investigation` here (requirements.md D7),
 #: a one-line change by design plus the migration that widens the `CHECK`.
-JOB_TYPES: tuple[str, ...] = ("reconciliation_run", "investigation")
+JOB_TYPES: tuple[str, ...] = ("reconciliation_run", "investigation", "paypal_event")
 
 #: Where a job is in its life.
 #:

@@ -84,6 +84,7 @@ as a limitation is a false claim about the product**, which P3 and P5 forbid in
 reconciliation output and which the readme should not make either.
 
 **R6. PayPal is replayed from captured sandbox responses, rather than the
+*(Partly superseded 2026-11-11: the run still never calls PayPal, but ingestion now may; replay stays as an input mode.)*
 reconciliation run depending on a call made during the demo.** Sandbox
 throughout, as always; nothing production, ever. A capture script writes real
 sandbox responses to fixtures; a replay ingester normalizes them through the
@@ -126,7 +127,7 @@ Render Cron Job. Retry becomes the simplest correct form — attempt count,
 policy. [[tech-stack]] §4's decisive argument, that the dedupe marker and the
 financial write share one `COMMIT`, is untouched. **~2 hours, not half a day.**
 
-**R8. Event-driven ingestion is cut; [[mission]] §4 is amended.** No webhook
+**R8. Event-driven ingestion is cut; [[mission]] §4 is amended.** *(Superseded for ingestion 2026-11-11 by `specs/2026-11-11-live-ingestion/`; reconciliation stays windowed.)* No webhook
 endpoints, no signature verification, no backfill of missed deliveries.
 
 The constitutional content of §4 is **one engine over one canonical model, with

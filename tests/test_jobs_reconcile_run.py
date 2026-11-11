@@ -229,10 +229,10 @@ def test_the_same_window_cannot_be_reconciled_twice(
     the duplicate-delivery property proven on real work rather than on a
     synthetic event id.
     """
-    payload = {
-        "window_start": WINDOW.start.isoformat(),
-        "window_end": WINDOW.end.isoformat(),
-    }
+    # Stamped, as the enqueuers do: both jobs were queued against the same state
+    # of the evidence, so they share a key even though the first completing moves
+    # the watermark. An unstamped payload would read the watermark at execution.
+    payload = reconcile_job.payload_for(WINDOW)
 
     first = reconcile_job.execute(session, tenant_id=tenant.id, payload=payload)
     assert first.status == "completed"

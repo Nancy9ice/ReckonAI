@@ -134,6 +134,13 @@ parking machinery, never the classification.
 Three of three §6 demo scenarios are state comparisons over a seeded dataset, so
 none of them is affected.
 
+**Amended 2026-11-11 - ingestion is event-fed; reconciliation stays windowed.**
+`specs/2026-11-11-live-ingestion/requirements.md` closes the deferral above for
+ingestion only: PayPal webhooks, live retrieval and missed-event recovery feed
+the canonical model, and a date-windowed run examines what arrived. There is
+still no second code path for live events, and reconciliation is still not
+per-event.
+
 ## 5. Principles
 
 These are non-negotiable and exist to be cited in code review.

@@ -40,14 +40,22 @@ oversight:
 
 | Deferred | Reason |
 |---|---|
-| **Webhook ingestion**, signature verification, and recovery of missed deliveries | Reconciliation is triggered on demand and on a schedule instead. The architectural claim that mattered — one engine over one canonical model, no second code path for live events — holds and is in fact stronger, because the engine is pure functions that know nothing about what invoked them. `specs/mission.md` §4 is amended accordingly |
-| **Live PayPal calls during the reconciliation run** | PayPal records are replayed from captured **sandbox** responses, retained as raw payloads. Sandbox throughout; nothing production is ever called. A replayed response is PayPal's own data, not an estimate, so `mission.md` P3 is intact. This removes three documented live failure modes from a demo: sandbox availability, the reporting APIs' roughly one-day lag, and a `5xx` that is not reliably transient. The capture script is a real client and is run live, once, to open the demo — nothing depends on it succeeding |
 | **LLM-suggested field mapping** | Field mapping is deterministic: exact match, then a curated synonym table, then human review. An unmatched field is mapped by hand. This does **not** affect the investigation agent, which is kept entire — see below |
 | **Seller financial position view** in the dashboard | The investigation detail carries the underpaid-seller story better, with evidence attached. The exception queue, investigation detail, run summary and approve/reject all ship |
 | **Tuned retry backoff** on the job queue | Attempt count, `run_after` and a terminal failed state with the error recorded. The `jobs` table, `FOR UPDATE SKIP LOCKED` claiming, the `processed_events` unique constraint and the scheduled Cron Job all ship |
 | **Platform fee settlement reconciliation** | Unchanged from `mission.md` §7: this is settlement-account reconciliation, and PayPal's partner fee cost detail arrives only as a monthly, SFTP-delivered report for approved partners. Blocked on data we do not ingest. The per-transaction check — the platform fee PayPal recorded against the commission the marketplace's rules specify — is in scope and ships |
 | **Dispute matching** | No sandbox fixture carries a disputed capture, so the dispute path is unverified against real provider data. The rule it needs *is* implemented and unit-tested: a capture whose `seller_receivable_breakdown` is absent - which an open dispute causes - is classified `awaiting_evidence`, never "no fee charged" and never a discrepancy. A quoted FX rate is never substituted for a conversion record (`mission.md` P3) |
 | **Bryntum** | Below the cutline by definition |
+
+**Built after the first MVP cut (live ingestion, `specs/2026-11-11-live-ingestion/`).** PayPal events and records can now reach the database as they happen: a signed webhook route (`POST /webhooks/paypal`) verifies each delivery with PayPal and queues a job that re-fetches the order as the seller and writes it through the same normalizer the fixtures use; a nightly step recovers events that were never delivered; and the simulated marketplace has a guarded write side that places real sandbox orders and refunds and can plant a fault. **Reconciliation is still date-windowed, not per-event.** Replay of the captured fixtures remains as an input mode. Its limits, stated so they are not found later:
+
+| Limitation | Reason |
+|---|---|
+| **A genuine signed delivery has not been seen** | Verified against PayPal with forged deliveries and by a real sandbox end-to-end run, but no webhook has been delivered to a deployed service. Whether capture events carry the merchant id routing depends on, and whether verification succeeds for a connected seller, are unverified until the first real delivery |
+| **An order first seen after a refund is not ingested** | Its capture-time platform fee cannot be established, and a later read may carry the reversal amount. If a refund event is handled before its capture event, neither can be ingested |
+| **Dispute events are not handled** | They are announced by PayPal, but no provider-side dispute normalizer exists |
+| **A live DELAYED release is not fetched** | No event announces one, so a released live DELAYED order would read as held |
+| **The marketplace is still a simulator** | The write side writes the canonical tables directly, as the seed does, and bypasses the connector and its mapping. Every record it creates is labelled simulated |
 
 **Not reduced, under any pressure.** Every monetary figure comes from the
 deterministic engine and never from a language model; no financial value is ever
@@ -77,7 +85,7 @@ decision rather than an omission (`specs/tech-stack.md` §5, amended
 |---|---|
 | **No authentication; the approver is a free-text name** | Decisions record what was typed, not a verified identity. Real sign-in is the first thing to add before this handles real approvals |
 | **"Reconciled clean" means no newest finding** | A run records how many orders it covered, not which, so an order no run has reached reads as clean. The Coverage page states this |
-| **A reconciliation run is date-grained** | Its window and its dedupe key are dates, so a second "Run reconciliation" on the same day is answered rather than queued |
+| **A run is date-grained, but a same-day re-run needs new evidence** | A run over dates that already have one is permitted only if something was retrieved since the last run started (`reconcile_job.decide_run`), and a cooldown (`RUN_COOLDOWN_SECONDS`, default 5 minutes) spaces them. Otherwise the answer is "nothing new". A new day always starts a run, which is what re-evaluates anything waiting for evidence |
 | **Priority ranks impact within a currency, never across** | Comparing USD with EUR would need an exchange rate, which the product does not invent |
 | **The queue cannot retract an exception a later run stops emitting** | Same cause as above: runs do not record which orders they covered |
 | **The nightly run investigates at most 25 open exceptions** (`AUTO_INVESTIGATE_MAX`), chosen by order reference, not by priority, and may spend a call on one that has since been fixed | Each investigation is a paid model call. A person's own "Run reconciliation" never investigates; the queue has "Investigate all" and "Investigate selected" for that |
@@ -387,11 +395,12 @@ Example workflow:
 
 Historical reconciliation may be initiated manually or through a scheduled reconciliation run.
 
-## 5.2 Event-driven reconciliation — deferred past the MVP
+## 5.2 Event-driven reconciliation — ingestion built, per-event reconciliation not
 
-> **Not built in the MVP** (see §0). Kept here as the product design. The MVP
-> triggers reconciliation on demand and on a schedule; there are no webhook
-> endpoints. `specs/mission.md` §4 is amended to match.
+> **Built for ingestion, not for reconciliation** (see §0, live ingestion).
+> Webhooks, live retrieval and missed-event recovery feed the database as
+> events happen, and a date-windowed run examines what arrived. Reconciliation
+> is not triggered per event. `specs/mission.md` §4 is amended to match.
 
 Event-driven reconciliation processes new financial events as they occur.
 

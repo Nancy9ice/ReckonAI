@@ -42,8 +42,23 @@ unproven.
 
 ## 3. Spike results
 
-*To be filled by task 0.* Event types; partner verification; events-list
-retention; buyer-approval automation.
+Run 2026-11-11 by `scripts/probe_webhooks.py` against the sandbox with the
+platform credential (read-only; registered no webhook, simulated no event).
+
+| Question | Result |
+|---|---|
+| Event types available | **Verified.** 205 in the catalogue, including `PAYMENT.CAPTURE.{COMPLETED,DECLINED,DENIED,PENDING,REFUNDED,REVERSED}`, `CUSTOMER.DISPUTE.{CREATED,UPDATED,RESOLVED}`, `CHECKOUT.ORDER.*`, `PAYMENT.PAYOUTS-ITEM.*`. **No event type names a referenced payout**, so a DELAYED release is not announced by a listed event |
+| Webhooks registered for the app | **None.** Nothing has ever been delivered, so there is no sample event in the repo |
+| Events-list endpoint readable | **Verified reachable** (200) with the platform credential. It returned zero events, so retention, ordering and what a connected seller's events look like are **unverified** |
+| Verification endpoint reachable | **Verified.** An invalid body returns `200 {"verification_status": "FAILURE"}`. Note it answers 200 for a failure, so the handler must read the body, never the status |
+| Verification succeeds for a connected seller's event | **Unverified.** Needs a real delivery, which needs a registered webhook and a deployed endpoint |
+| Sandbox buyer approval can be automated | **Verified by the existing capture** (`scripts/capture_paypal.py`: card-funded, runs unattended) |
+
+**Consequence.** The handler fails closed: anything the verification call does
+not answer `SUCCESS` is rejected, so an unverified assumption can only reject
+good events, never accept bad ones. The unverified rows move to the post-deploy
+checklist in section 2, and the first real delivery settles them. Registering
+the sandbox webhook points PayPal at the deployed app, so it is the operator's.
 
 ## 4. Stated as unproven if nothing above shows otherwise
 

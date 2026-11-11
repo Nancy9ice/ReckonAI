@@ -83,6 +83,24 @@ finished, try again in a few seconds. Foreign currency and disbursement shortfal
 orders (ORD-0015, ORD-0008, ORD-0018). The same thing is available from a
 terminal: `python3 scripts/judge_scenarios.py --name yourname`.
 
+Then explore what the queue offers:
+
+- **Open any exception** to see the figures from each side ("PayPal settled"
+  against "Marketplace recorded"), what it means, and what to do about it.
+- **Evidence**, from the same drawer: the PayPal and marketplace records behind
+  the finding, including the raw payload.
+- **Investigate**, then read the report: ranked causes, each citing the records
+  it rests on. Click a cited reference to open that record.
+- **Approve or reject** a finding. The approver is a typed name, not a sign-in,
+  and the decision stays in a history that is never edited.
+- **Ask the queue** in plain English (for example "confirmed FX issues" or
+  "group by seller"). It only changes the view; no record or amount is sent to
+  the model.
+- **Filter, group, save a view, or export** the queue and the decision log as CSV.
+- **Coverage** shows what the checks have and have not examined, and what is
+  waiting on a record that has not arrived. **Past checks** lists every run;
+  open one to see the queue as that run left it.
+
 ## What was measured
 
 - The test suite (2089 tests), `ruff`, strict `mypy` and the frontend build pass.

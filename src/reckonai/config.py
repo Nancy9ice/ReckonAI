@@ -142,6 +142,14 @@ class Settings(BaseSettings):
     # validation.md section 4 readable straight from the log stream.
     render_external_url: str | None = None
 
+    @field_validator("sim_write_enabled", mode="before")
+    @classmethod
+    def _empty_means_off(cls, value: object) -> object:
+        """An unset prompted variable can arrive as an empty string, which is off."""
+        if isinstance(value, str) and not value.strip():
+            return False
+        return value
+
     @field_validator("database_url")
     @classmethod
     def _normalise_driver(cls, value: SecretStr) -> SecretStr:

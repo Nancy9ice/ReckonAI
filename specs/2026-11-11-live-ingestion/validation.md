@@ -64,3 +64,32 @@ the sandbox webhook points PayPal at the deployed app, so it is the operator's.
 
 Behaviour on Render; anything real beyond a simulated marketplace; delivery
 ordering and burst volume.
+
+## 5. Results, 2026-11-11
+
+Branch `spec-live-ingestion`. Items 1 to 11 of section 1:
+
+| # | Result |
+|---|---|
+| 1 | **Pass.** After `demo_data --reset`: `pytest` 2028 passed, `mypy` clean, `ruff` clean, `python -m reckonai.eval` GATE: PASS (false positives 0 of 12, F1-F6 all found) |
+| 2 | **Pass.** `test_a_second_delivery_of_one_event_has_one_effect` |
+| 3 | **Pass.** `test_a_bad_signature_stores_nothing`; verifier tests for FAILURE, missing id, missing headers |
+| 4 | **Pass.** Every row of the case table has a test (`test_webhook.py`, `test_paypal_live.py`). The unrouted and unhandled rows are logged, not stored (requirements.md section 5) |
+| 5 | **Pass.** `test_jobs_rerun_rule.py` (11 tests) |
+| 6 | **Pass.** `scripts/e2e_live.py` against the sandbox: three real orders and one real refund through the write side; one order ingested through the webhook job's own code path with a real re-fetch as the seller |
+| 7 | **Pass.** Planted duplicate -> `duplicate_ledger_entry`; unrecorded refund -> `missing_ledger_adjustment`, on live transactions |
+| 8 | **Pass for the shapes tried.** A clean live order -> 0 exceptions. Not tried live: a half-ingested order |
+| 9 | **Pass.** Hidden (404) unless enabled; 503 if enabled with no secret; 403 on a missing or wrong secret |
+| 10 | **Pass.** Every write-side payload is `source = marketplace` with `endpoint = SIMULATED POST /sim/marketplace/live`; the seed's stay `NULL` |
+| 11 | **Pass, partly.** Section 3 recorded; the unverified rows moved to section 2 |
+
+The run examined the three live orders and reported the two planted faults, and
+a repeat with nothing new was refused as `nothing_new`.
+
+## 6. Still unproven
+
+Everything in section 2, on Render. Specifically: that a real delivery verifies
+for a connected seller, that capture events carry `payee.merchant_id` (routing
+depends on it), the events-list's retention, and that the new cron variables
+and `PAYPAL_WEBHOOK_ID` are set. The worker and cron now need PayPal credentials
+the Blueprint declares but only the operator can set.

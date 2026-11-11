@@ -99,13 +99,20 @@ window) have different date components and do not collide.
 |---|---|
 | Bad or missing signature | Rejected |
 | Duplicate | Acknowledged, no second effect |
-| Unknown event type | Stored, acknowledged, no records, logged |
-| Unknown merchant | Stored, recorded as unrouted |
+| Unhandled event type | Acknowledged and logged; **not stored** (see below) |
+| Unknown or ambiguous merchant | Acknowledged and logged as unrouted; **not stored** (see below) |
 | Re-fetch `403` | Job fails, error recorded; never an absent field |
 | Re-fetch `5xx` | No blind retry in the call; bounded queue retry |
 
-Event types are *unverified*; task 0 produces the list and the registry is
-closed over it.
+**Built differently from the first draft, and why.** An event names a merchant,
+not a tenant, and every row needs a tenant, so an unrouted event has nowhere to
+be stored; it is logged and acknowledged. An unhandled type is likewise only
+logged, because routing it just to store it would be a cross-tenant lookup for
+no effect. Handled types are the six `PAYMENT.CAPTURE.*` events (all visible on
+the order). Dispute events exist in the catalogue and are **announced but not
+handled**: no provider-side dispute normalizer exists, so claiming to handle
+them would be false. Routing needs `resource.payee.merchant_id` on the event,
+which is *unverified* until a real delivery (validation.md section 2).
 
 ## 6. Live retrieval and recovery
 
@@ -115,9 +122,17 @@ closed over it.
 - **F7** its output goes through `paypal/replay.py`. No second normalizer.
 - **F8** lag: an incomplete live record is `awaiting_evidence` via the existing
   path (P4), never an exception.
-- **F9** recovery job re-lists recent events or, failing that, re-fetches
-  orders in the window; `processed_event` makes repeats no-ops. *Unverified:*
-  the events-list endpoint's retention and partner access.
+- **F9** recovery lists recent events and feeds them through the same
+  `ingest_event`; `processed_event` makes repeats no-ops. It runs inside the
+  nightly cron (`--recover-hours 72`), not as a fifth Render service. **No
+  fallback**: if the list is refused it raises `LiveDenied` and is logged, since
+  a quiet fallback would hide that recovery did not run. *Unverified:* the
+  list's retention and partner access beyond "readable, empty".
+- **Two live limits.** An order first seen after a refund is not ingested
+  (`SnapshotUnavailable`): its capture-time platform fee cannot be established,
+  and the later read may carry the reversal amount. And no live read fetches a
+  DELAYED release, since no event announces one, so a released live DELAYED
+  order would read as held.
 - `retrieved_at` of a live record is our fetch time, already documented as
   such (`window.payload_times`).
 
@@ -125,7 +140,9 @@ closed over it.
 
 The `/sim` endpoints are public and read-only today.
 
-- **F10** place an order: real sandbox transaction plus the marketplace order,
+- **F10** place an order (**direct**: the write side writes the canonical
+  tables as the seed does and bypasses the connector and its mapping): real
+  sandbox transaction plus the marketplace order,
   items, payment and ledger credit together. *Unverified:* automating sandbox
   buyer approval (`scripts/probe_card_capture.py` suggests a card path).
 - **F11** refund: PayPal refund plus marketplace refund and ledger debit.

@@ -192,6 +192,16 @@ operator. Do not assume any of these; ask or check.
    (`validation.md` section 8, finding 3). It relaxes "a webhook is a
    notification, never the record", so it is a decision, not a fix.
 
+**Judge scenarios: `specs/2026-11-11-judge-scenarios/`.** `scripts/judge_scenarios.py
+--name X` creates a judge's own six live sandbox orders through `sim/judge.py`
+(routes under `/sim/judge`, hidden unless `JUDGE_SCENARIOS_ENABLED`, name-only,
+capped by `JUDGE_MAX_SETS` and per-client). Idempotent per name and never
+cleared. **A real signed webhook was seen on Render, 2026-11-11 18:31 UTC**
+(probe order `PROBE-FE4A14`, whose PayPal side is ingested with no marketplace
+order; it reads `awaiting_evidence`), which closes open item 6 for orders; refund
+events over the webhook are still unseen, so refunds are read back directly.
+Results in that directory's `validation.md`.
+
 **Live ingestion is built, merged and deployed (PR #29, 2026-11-11; Render
 deployed `d4b8231`, and the `d7e1f3a9c2b4` migration ran on the web service); read
 `specs/2026-11-11-live-ingestion/` first, and its `validation.md` sections 5 to 8

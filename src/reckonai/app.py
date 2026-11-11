@@ -30,6 +30,7 @@ from reckonai.api import router as api_router
 from reckonai.config import get_settings
 from reckonai.db import check_connection, create_app_engine
 from reckonai.logging import configure_logging, event
+from reckonai.sim import judge as sim_judge
 from reckonai.sim import live as sim_live
 from reckonai.sim import router as sim_router
 from reckonai.webhooks import router as webhooks_router
@@ -93,6 +94,9 @@ app.include_router(sim_router, prefix="/sim")
 # Its write side (live-ingestion F10 to F15): hidden unless enabled, and a shared
 # secret is required when it is.
 app.include_router(sim_live.router, prefix="/sim")
+
+# The judge scenarios: fixed, name-only, hidden unless enabled.
+app.include_router(sim_judge.router, prefix="/sim")
 
 # The product's own read API (Block F). Distinct from `/sim`, which feeds data in.
 app.include_router(api_router)

@@ -95,6 +95,13 @@ class Settings(BaseSettings):
     sim_write_enabled: bool = False
     sim_write_secret: SecretStr | None = None
 
+    #: The judge scenarios (specs/2026-11-11-judge-scenarios). Off unless
+    #: enabled; no secret, because the endpoint accepts only a name. Each set
+    #: places real sandbox orders that cannot be deleted, hence the two caps.
+    judge_scenarios_enabled: bool = False
+    judge_max_sets: int = 25
+    judge_sets_per_client_per_day: int = 2
+
     # ---- The investigation agent (Block E) --------------------------------
     #
     # **The model lives here rather than in code**, by the dated 2026-11-10
@@ -142,7 +149,7 @@ class Settings(BaseSettings):
     # validation.md section 4 readable straight from the log stream.
     render_external_url: str | None = None
 
-    @field_validator("sim_write_enabled", mode="before")
+    @field_validator("sim_write_enabled", "judge_scenarios_enabled", mode="before")
     @classmethod
     def _empty_means_off(cls, value: object) -> object:
         """An unset prompted variable can arrive as an empty string, which is off."""

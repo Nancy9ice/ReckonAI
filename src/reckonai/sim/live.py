@@ -64,7 +64,14 @@ class Gateway(Protocol):
     """The PayPal calls the write side makes. Replaced in tests."""
 
     def create_order(
-        self, *, order_ref: str, merchant_id: str, gross: str, fee: str, currency: str
+        self,
+        *,
+        order_ref: str,
+        merchant_id: str,
+        gross: str,
+        fee: str,
+        currency: str,
+        disbursement_mode: str,
     ) -> capture.LiveOrder: ...
 
     def refund(
@@ -78,10 +85,20 @@ class SandboxGateway:
     """The real sandbox. Every call refuses a non-sandbox host."""
 
     def create_order(
-        self, *, order_ref: str, merchant_id: str, gross: str, fee: str, currency: str
+        self,
+        *,
+        order_ref: str,
+        merchant_id: str,
+        gross: str,
+        fee: str,
+        currency: str,
+        disbursement_mode: str,
     ) -> capture.LiveOrder:
         return capture.capture_live_order(
-            payees=[(merchant_id, gross, fee)], currency=currency, order_ref=order_ref
+            payees=[(merchant_id, gross, fee)],
+            currency=currency,
+            order_ref=order_ref,
+            disbursement_mode=disbursement_mode,
         )
 
     def refund(
@@ -116,6 +133,9 @@ class PlaceOrderIn(BaseModel):
     #: rounding of its own.
     fee: str
     currency: str = "USD"
+    #: `DELAYED` holds the seller's funds at PayPal until a release, which is a
+    #: healthy state and must not be flagged.
+    disbursement_mode: Literal["INSTANT", "DELAYED"] = "INSTANT"
     #: Plants F2: the commission the marketplace books where it differs from
     #: PayPal's fee.
     ledger_commission: str | None = None
@@ -134,6 +154,14 @@ class RefundIn(BaseModel):
     amount: str
     #: Plants F1 when false: the refund exists and the ledger never hears of it.
     reflect_in_ledger: bool = True
+    #: Book the refund in the marketplace and its ledger but make no PayPal
+    #: refund yet: PayPal's record is late, not absent. The later PayPal refund
+    #: is a second, separate call without this flag.
+    marketplace_only: bool = False
+    #: The reverse: make the PayPal refund and book nothing, because the
+    #: marketplace recorded it earlier (`marketplace_only`). This is the late
+    #: evidence arriving.
+    paypal_only: bool = False
     ingest_now: bool = False
 
 
@@ -221,6 +249,7 @@ def place_order(
         gross=str(gross),
         fee=str(fee),
         currency=req.currency,
+        disbursement_mode=req.disbursement_mode,
     )
 
     now = datetime.now(UTC)
@@ -240,6 +269,7 @@ def place_order(
         ),
         expected_commission=str(booked),
         expected_entitlements={req.seller_ref: str(gross - booked)},
+        disbursement_mode=req.disbursement_mode,
         duplicate_ledger_entry=req.duplicate_credit,
     )
     with _labelled():
@@ -271,6 +301,15 @@ def refund_order(
     if order is None:
         raise WriteError(f"no order {req.order_ref!r}")
     amount = _dec(req.amount, "amount")
+    if req.marketplace_only and (
+        req.paypal_only or req.ingest_now or not req.reflect_in_ledger
+    ):
+        raise WriteError(
+            "marketplace_only books the refund and its ledger entries and makes "
+            "no PayPal refund, so there is nothing to ingest and no fault to plant"
+        )
+    if req.paypal_only and not req.reflect_in_ledger:
+        raise WriteError("paypal_only books nothing, so reflect_in_ledger is moot")
     gross = order.total.amount
     if amount > gross:
         raise WriteError("a refund cannot exceed the order total")
@@ -319,12 +358,14 @@ def refund_order(
         else None
     )
 
-    refund = gateway.refund(
-        capture_id=req.paypal_capture_id,
-        merchant_id=str(seller.paypal_merchant_id),
-        currency=order.total.currency,
-        amount=str(amount),
-    )
+    refund: dict[str, Any] = {}
+    if not req.marketplace_only:
+        refund = gateway.refund(
+            capture_id=req.paypal_capture_id,
+            merchant_id=str(seller.paypal_merchant_id),
+            currency=order.total.currency,
+            amount=str(amount),
+        )
 
     now = datetime.now(UTC)
     n = uuid.uuid4().hex[:6]
@@ -344,10 +385,11 @@ def refund_order(
         expected_commission_reversal=str(reversal),
         reflected_in_ledger=req.reflect_in_ledger,
     )
-    with _labelled():
-        seed._build_refund(
-            session, _result(session, tenant_id), spec, refund_spec, order.id
-        )
+    if not req.paypal_only:
+        with _labelled():
+            seed._build_refund(
+                session, _result(session, tenant_id), spec, refund_spec, order.id
+            )
 
     # The refund now exists at PayPal and in the marketplace's books. Reading it
     # back is a convenience, so its failure is reported and must not roll the
@@ -367,7 +409,8 @@ def refund_order(
     return {
         "order_ref": req.order_ref,
         "paypal_refund_id": refund.get("id"),
-        "marketplace_refund": refund_spec.ref,
+        "marketplace_only": req.marketplace_only,
+        "marketplace_refund": None if req.paypal_only else refund_spec.ref,
         "reflected_in_ledger": req.reflect_in_ledger,
         "ingested": req.ingest_now and ingest_error is None,
         "ingest_error": ingest_error,

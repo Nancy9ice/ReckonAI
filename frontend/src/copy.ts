@@ -109,6 +109,19 @@ const FALLBACK: TypeCopy = {
 export const typeCopy = (code: string): TypeCopy => TYPE_COPY[code] ?? FALLBACK;
 export const typeTitle = (code: string): string => typeCopy(code).title;
 
+// ---- Column hints -----------------------------------------------------------
+
+export const COLUMN_HINTS = {
+  issue:
+    "What is wrong with this order, in plain words. Hover a row's issue to read what it means.",
+  order: "The marketplace's own reference for the order.",
+  seller:
+    "The seller this problem affects. If it concerns the whole order, this shows how many sellers are on it.",
+  currency: "The currency the difference is in.",
+  decision:
+    "Whether a person has approved or rejected this finding. It only records a decision; it moves no money.",
+} as const;
+
 // ---- Dates ----------------------------------------------------------------
 
 export const ORDER_DATE_HINT = "When the customer placed the order.";

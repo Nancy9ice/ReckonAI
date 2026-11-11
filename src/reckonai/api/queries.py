@@ -288,7 +288,10 @@ def exceptions(
                     Decimal(
                         str(
                             (
-                                now - found[(r.order_external_ref, r.code)]
+                                now
+                                - found.get(
+                                    (r.order_external_ref, r.code), r.created_at
+                                )
                             ).total_seconds()
                         )
                     )
@@ -319,7 +322,12 @@ def exceptions(
                 seller_name=sellers.get(r.seller_id) if r.seller_id else None,
                 seller_count=_seller_count(r, order, seller_counts),
                 order_placed_at=None if order is None else order.placed_at,
-                first_found_at=found[(r.order_external_ref, r.code)],
+                # Every row has a key (the query reads the same rows), so the
+                # fallback is for a future caller that does not; it is the row's
+                # own write time, never an exception on the queue page.
+                first_found_at=found.get(
+                    (r.order_external_ref, r.code), r.created_at
+                ),
                 evidence_refs=list(r.evidence_refs),
                 evidence_basis=r.evidence_basis,
                 priority=_priority_out(priorities[str(r.id)]),

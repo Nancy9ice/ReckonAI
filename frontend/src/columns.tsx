@@ -38,6 +38,24 @@ function factorsText(row: ExceptionRow): string {
     .join("\n");
 }
 
+// AG Grid's date filter hands this the date the user chose, at local midnight,
+// and the cell's value. Our values are ISO strings with a time of day, not Date
+// objects, so without this the comparison is between unlike things and "equals",
+// "before" and "after" return the wrong rows. Compared by calendar day, in the
+// reader's own time zone, which is how they pick a date. A missing value sorts
+// below everything and matches no date.
+const byCalendarDay = (filterDate: Date, cellValue: string | null): number => {
+  if (!cellValue) return -1;
+  const cell = new Date(cellValue);
+  const day = new Date(cell.getFullYear(), cell.getMonth(), cell.getDate());
+  return day < filterDate ? -1 : day > filterDate ? 1 : 0;
+};
+
+const dateFilter: Pick<ColDef<ExceptionRow>, "filter" | "filterParams"> = {
+  filter: "agDateColumnFilter",
+  filterParams: { comparator: byCalendarDay },
+};
+
 export const columns: ColDef<ExceptionRow>[] = [
   {
     colId: "priority",
@@ -138,7 +156,7 @@ export const columns: ColDef<ExceptionRow>[] = [
     valueGetter: (p) => p.data?.order_placed_at ?? null,
     valueFormatter: (p) =>
       p.node?.group ? "" : p.value ? formatDate(p.value) : "unknown",
-    filter: "agDateColumnFilter",
+    ...dateFilter,
     width: 150,
   },
   {
@@ -148,7 +166,7 @@ export const columns: ColDef<ExceptionRow>[] = [
     valueGetter: (p) => p.data?.first_found_at ?? null,
     valueFormatter: (p) =>
       p.node?.group ? "" : p.value ? formatDate(p.value) : "unknown",
-    filter: "agDateColumnFilter",
+    ...dateFilter,
     width: 155,
   },
   {
@@ -206,7 +224,7 @@ export const columns: ColDef<ExceptionRow>[] = [
     valueGetter: (p) => p.data?.decision?.decided_at ?? null,
     valueFormatter: (p) =>
       p.node?.group ? "" : p.value ? formatDate(p.value) : "Not decided",
-    filter: "agDateColumnFilter",
+    ...dateFilter,
     width: 150,
   },
 ];

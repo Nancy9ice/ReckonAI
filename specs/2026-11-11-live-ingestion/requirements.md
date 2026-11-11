@@ -3,8 +3,9 @@
 > Entry: replan R6 and R8, which this partly reverses. Read
 > `specs/2026-11-09-queue-scheduled-run/validation.md` §7b before touching
 > `jobs/`. Companions: `plan.md` (task groups), `validation.md` (merge gate).
-> **Nothing here is built.** Items marked *unverified* may not be designed
-> around until task 0 records them (`multiparty-direction.md` §8).
+> **Built (PR #29).** Results and the code review are in `validation.md`
+> sections 5 to 8; where the build differs from this text, the text says so.
+> Items marked *unverified* are still unverified until a real delivery.
 
 ## 1. Scope
 

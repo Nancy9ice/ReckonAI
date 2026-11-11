@@ -12,7 +12,8 @@ avoidable cost — read a section when a block points at it, not by default.
 The specs in `specs/` are the constitution. Read them before implementing:
 
 - `specs/mission.md` — what we are building, and principles P1–P7. §4 is
-  amended: event-driven ingestion is deferred past the MVP (R8)
+  amended: event-driven ingestion was deferred past the MVP (R8) and has since
+  been built for ingestion only; reconciliation stays windowed (live ingestion)
 - `specs/tech-stack.md` — locked technology decisions. §4, §5, §6, §8 and §9.2
   carry dated MVP amendments
 - `specs/roadmap.md` — exit criteria, which **all still bind**. Its sequencing
@@ -67,8 +68,9 @@ moves to `/service`). Things not to re-derive:
 - **The approver is free text, unauthenticated** (D5). Do not describe it as an
   identity.
 - **"Clean" means "no newest finding"**; a run records how many orders it covered,
-  not which. A run is date-grained, so a second run-now the same day is answered,
-  not queued.
+  not which. A run is date-grained, but a second run over the same dates the same
+  day is permitted only if evidence arrived since the last one (`nothing_new`
+  otherwise, `cooling_down` inside the cooldown).
 - **The grid assistant is display-only**: no record or amount is sent, and
   aggregation and pivot are excluded from its schema. It runs on the **web**
   service, so the model credential is declared there as well as on the worker.
@@ -143,9 +145,21 @@ operator. Do not assume any of these; ask or check.
    known: the web service has a working model key (an assistant call succeeded) and
    so does the worker (an investigation completed); whether the AG Grid variable
    is set on Render is unknown.
+6. **Live ingestion needs the operator, after PR #29 merges:** set
+   `PAYPAL_WEBHOOK_ID`, `SIM_WRITE_SECRET` and `SIM_WRITE_ENABLED` on
+   `reckonai-api`, and `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET` and
+   `PAYPAL_BN_CODE` on `reckonai-worker` and `reckonai-recon`; register the
+   sandbox webhook at `/webhooks/paypal`. Then place a real sandbox order from
+   the deployed app, which is the first real signed delivery and settles what
+   `validation.md` section 6 lists as unproven.
+7. **Decided by nobody yet:** whether out-of-order webhook events should be
+   rescued by using the stored `COMPLETED` event as the capture-time snapshot
+   (`validation.md` section 8, finding 3). It relaxes "a webhook is a
+   notification, never the record", so it is a decision, not a fix.
 
-**Live ingestion is built on branch `spec-live-ingestion` (not merged as of
-writing); read `specs/2026-11-11-live-ingestion/` first.** Reconciliation is
+**Live ingestion is built (PR #29, check whether it has merged); read
+`specs/2026-11-11-live-ingestion/` first, and its `validation.md` sections 5 to 8
+for results and the code review.** Reconciliation is
 still date-windowed; ingestion is now event-fed. Things not to re-derive:
 
 - **A run over dates that already have one needs new evidence** (`reconcile_job.
@@ -302,7 +316,7 @@ PR #22's merge triggered created it on 2026-11-10 14:27 UTC (`reckonai-recon`,
 first tick is 01:00 UTC on 2026-11-11, and Phase 8's fourth criterion stays
 unproven until its logs show a run (`render logs -r crn-dbpijkmi0phs73aa406g`).
 It runs **daily**, not hourly: the window bounds and the idempotency key are
-both date-grained, so every tick in a UTC day is the same piece of work. **The
+both date-grained (the key now also carries a watermark; see live ingestion), so every tick in a UTC day is the same piece of work unless new evidence arrives. **The
 first tick covers 2 of the 18 seeded orders** - the window is `[11-10, 11-12)`
 and the seed is fixed-date (Nov 2-19) - so the full set of faults appears only
 as the calendar advances, unless a wide initial run is enqueued by hand.
@@ -372,11 +386,13 @@ by the capture, 4 was settled by Block B, and 5 is Block F's; **debt 4's
 warning still binds** — the suite is order-dependent and must not be
 randomised.
 
-**What the MVP does not include**, so it is not half-built by accident: webhook
-ingestion (R8), live PayPal calls during the reconciliation run — records are
-replayed from captured sandbox responses (R6, whose capture now runs early per
-R16), LLM-suggested field mapping (R11), and the dashboard's seller financial
-position view (R13). The AI
+**What the MVP does not include**, so it is not half-built by accident:
+LLM-suggested field mapping (R11), the dashboard's seller financial position
+view (R13), per-event reconciliation, a real marketplace backend, and
+production PayPal. Webhook ingestion (R8) and live PayPal retrieval (R6) were
+cut and then built for ingestion; see the live-ingestion paragraph above. The
+reconciliation run itself still never calls PayPal, and replay of the captured
+fixtures (R16) remains an input mode. The AI
 investigation agent is kept **entire** (Phase 12) and the zero-false-positive
 gate (Phase 11) is the last thing to compromise.
 

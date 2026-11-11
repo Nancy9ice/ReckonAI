@@ -1,6 +1,6 @@
 # Live ingestion — plan
 
-> One PR, spike first. Groups run straight through, each validated before the
+> **All groups built; see `validation.md` sections 5 to 8.** One PR, spike first. Groups run straight through, each validated before the
 > next (`validation.md`). Scope and decisions: `requirements.md`.
 
 **0. Verification spike.** Record in `validation.md`: event types a multiparty

@@ -42,12 +42,14 @@ class FakeGateway:
     def __init__(self, *, fail: bool = False) -> None:
         self.fail = fail
         self.created = 0
+        self.orders: list[dict[str, Any]] = []
         self.refunds: list[dict[str, Any]] = []
 
     def create_order(self, **kwargs: Any) -> capture.LiveOrder:
         if self.fail:
             raise capture.CaptureUnavailable("sandbox down")
         self.created += 1
+        self.orders.append(kwargs)
         fixture = _fixture()
         before = copy.deepcopy(fixture["order"])
         for unit in before["purchase_units"]:
@@ -242,6 +244,83 @@ def test_a_refund_the_ledger_never_heard_of_is_found(
     session.flush()
 
     assert _codes(session, tenant_id) == {"missing_ledger_adjustment"}
+
+
+def test_a_marketplace_only_refund_is_awaiting_evidence_not_an_exception(
+    session: Session, tenant_id: uuid.UUID
+) -> None:
+    """F5 on a live transaction: PayPal's refund is late, not absent."""
+    gateway = FakeGateway()
+    placed = _place(session, tenant_id, gateway)
+    session.flush()
+
+    out = live.refund_order(
+        session,
+        tenant_id,
+        live.RefundIn(
+            order_ref=REF,
+            paypal_capture_id=placed["paypal_capture_ids"][0],
+            amount="30.00",
+            marketplace_only=True,
+        ),
+        gateway,
+    )
+    session.flush()
+
+    assert gateway.refunds == [], "no PayPal refund is made"
+    assert out["paypal_refund_id"] is None and out["marketplace_only"] is True
+    assert _codes(session, tenant_id) == set()
+    assert "awaiting_evidence" in {
+        str(f.code) for f in reconcile.run(session, tenant_id)
+    }
+
+
+@pytest.mark.parametrize(
+    "overrides", [{"ingest_now": True}, {"reflect_in_ledger": False}]
+)
+def test_marketplace_only_refuses_what_it_cannot_honour(
+    session: Session, tenant_id: uuid.UUID, overrides: dict[str, Any]
+) -> None:
+    gateway = FakeGateway()
+    placed = _place(session, tenant_id, gateway)
+    session.flush()
+    with pytest.raises(live.WriteError, match="marketplace_only"):
+        live.refund_order(
+            session,
+            tenant_id,
+            live.RefundIn(
+                order_ref=REF,
+                paypal_capture_id=placed["paypal_capture_ids"][0],
+                amount="30.00",
+                marketplace_only=True,
+                **overrides,
+            ),
+            gateway,
+        )
+    assert gateway.refunds == []
+
+
+def test_a_delayed_order_is_requested_and_recorded_as_delayed(
+    session: Session, tenant_id: uuid.UUID
+) -> None:
+    gateway = FakeGateway()
+    _place(session, tenant_id, gateway, disbursement_mode="DELAYED")
+    session.flush()
+    assert gateway.orders[0]["disbursement_mode"] == "DELAYED"
+    order = session.scalars(select(Order).where(Order.tenant_id == tenant_id)).one()
+    assert order.disbursement_mode == "DELAYED"
+
+
+def test_an_unknown_disbursement_mode_is_refused() -> None:
+    with pytest.raises(ValueError):
+        live.PlaceOrderIn(
+            order_ref="X", seller_ref=SELLER, gross="10.00", fee="1.00",
+            disbursement_mode="SOON",  # type: ignore[arg-type]
+        )
+    with pytest.raises(capture.CaptureUnavailable, match="disbursement mode"):
+        capture.capture_live_order(
+            payees=[("M", "10.00", "1.00")], disbursement_mode="SOON"
+        )
 
 
 def test_a_refund_cannot_exceed_the_order(

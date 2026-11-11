@@ -42,6 +42,10 @@ TEST_CARD = "4111111111111111"
 
 DEFAULT_TIMEOUT = 20.0
 
+#: The two modes PayPal's Complete Payments Platform offers. `DELAYED` holds the
+#: seller's funds until a release; the capture still reads COMPLETED.
+DISBURSEMENT_MODES = ("INSTANT", "DELAYED")
+
 
 class CaptureUnavailable(RuntimeError):
     """The live call could not be made or did not complete."""
@@ -92,6 +96,7 @@ def capture_live_order(
     payees: list[tuple[str, str, str]],
     currency: str = "USD",
     order_ref: str | None = None,
+    disbursement_mode: str = "INSTANT",
     timeout: float = DEFAULT_TIMEOUT,
 ) -> LiveOrder:
     """Create and capture one order. Raises on any failure.
@@ -102,6 +107,8 @@ def capture_live_order(
 
     Use `try_live_order` unless you want the exception.
     """
+    if disbursement_mode not in DISBURSEMENT_MODES:
+        raise CaptureUnavailable(f"unknown disbursement mode {disbursement_mode!r}")
     resolved = _settings_or_none()
     if resolved is None:
         raise CaptureUnavailable(
@@ -127,7 +134,7 @@ def capture_live_order(
                 "amount": {"currency_code": currency, "value": gross},
                 "payee": {"merchant_id": merchant},
                 "payment_instruction": {
-                    "disbursement_mode": "INSTANT",
+                    "disbursement_mode": disbursement_mode,
                     "platform_fees": [
                         {"amount": {"currency_code": currency, "value": fee}}
                     ],
@@ -196,7 +203,7 @@ def capture_live_order(
         document={
             "order_ref": ref,
             "note": "created live during the demo",
-            "disbursement_mode": "INSTANT",
+            "disbursement_mode": disbursement_mode,
             "captured_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "endpoint": f"GET /v2/checkout/orders/{order_id}",
             # Authoritative for the platform fee: a later read is unreliable

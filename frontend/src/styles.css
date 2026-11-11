@@ -210,7 +210,7 @@ input, select {
 /* ---- Grid --------------------------------------------------------------- */
 
 .grid-wrap { margin-top: 4px; }
-.row-open { background: #e3f0fb !important; }
+/* The open row is highlighted by a style `QueueView` writes for its id. */
 
 .pill {
   display: inline-block;

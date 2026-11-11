@@ -218,7 +218,13 @@ export default function DetailDrawer({ id, onChanged, onClose }: Props) {
 
         <p className="muted hint">Select a record to open it.</p>
 
-        <h3>AI investigation</h3>
+        <section className="aicard">
+        <h3>
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true">
+            <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z" />
+          </svg>
+          AI investigation
+        </h3>
         {!inv && !inFlight && (
           <p className="muted">
             The AI has not looked at this yet.
@@ -273,7 +279,12 @@ export default function DetailDrawer({ id, onChanged, onClose }: Props) {
             )}
             {top && (
               <div className="callout accent">
-                <strong>Most likely cause</strong>
+                <div className="callout-head">
+                  <strong>Probable cause</strong>
+                  <span className="conf" title="The AI's own stated confidence, not a measured accuracy.">
+                    {formatFraction(top.confidence)} confidence
+                  </span>
+                </div>
                 <p>{top.description}</p>
               </div>
             )}
@@ -317,6 +328,7 @@ export default function DetailDrawer({ id, onChanged, onClose }: Props) {
             )}
           </div>
         )}
+        </section>
 
         <h3>Your decision</h3>
         <p className="muted">{DECISION_EXPLAINED}</p>

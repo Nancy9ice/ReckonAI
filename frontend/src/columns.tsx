@@ -1,4 +1,5 @@
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
+import type { CSSProperties } from "react";
 import type { ExceptionRow } from "./api";
 import { formatDate, label } from "./labels";
 import {
@@ -24,6 +25,11 @@ export function verdictText(row: ExceptionRow): string {
   if (!row.investigation) return "Not investigated";
   return VERDICT_TEXT[row.investigation.verdict] ?? "Investigation failed";
 }
+
+// Spreads issue types over a few tints so neighbours read apart. Only the
+// colour depends on it; the label is the plain-language title.
+const tint = (code: string): number =>
+  [...code].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 6, 0);
 
 const Pill = ({ text, tone }: { text: string; tone: string }) => (
   <span className={`pill ${tone}`}>{text}</span>
@@ -103,6 +109,12 @@ export const columns: ColDef<ExceptionRow>[] = [
     headerName: "Issue",
     headerTooltip: COLUMN_HINTS.issue,
     valueGetter: (p) => (p.data ? label(p.data.code) : ""),
+    cellRenderer: (p: ICellRendererParams<ExceptionRow>) =>
+      p.data && !p.node?.group ? (
+        <span className={`itype t${tint(p.data.code)}`}>{p.value}</span>
+      ) : (
+        p.value
+      ),
     // The cell is cut off at narrow widths, so the full meaning is on hover.
     tooltipValueGetter: (p) =>
       p.data ? `${label(p.data.code)}. ${typeCopy(p.data.code).meaning}` : undefined,
@@ -145,8 +157,22 @@ export const columns: ColDef<ExceptionRow>[] = [
     // An explicit cellClass replaces the type's own, so the alignment class
     // is restated here.
     cellClass: ["ag-right-aligned-cell", "money"],
+    // The bar is this row's share of the largest difference in the same
+    // currency, which the server computes (priority factor "impact"); CSS draws
+    // it from the string, so nothing here converts or divides.
+    // No factor means no bar, never an empty one: that would read as zero.
     cellRenderer: (p: ICellRendererParams<ExceptionRow>) =>
-      p.data ? formatMoney(p.data.impact) : null,
+      p.data ? (
+        <span
+          className="valcell"
+          style={
+            { "--s": p.data.priority.factors.impact ?? undefined } as CSSProperties
+          }
+        >
+          {p.data.priority.factors.impact != null && <span className="valbar" />}
+          <span className="valtext">{formatMoney(p.data.impact)}</span>
+        </span>
+      ) : null,
   },
   {
     colId: "currency",

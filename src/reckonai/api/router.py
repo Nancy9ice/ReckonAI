@@ -38,6 +38,14 @@ def exceptions(
     return queries.exceptions(session, tenant_id, run_id)
 
 
+@router.get("/summary", response_model=schemas.SummaryOut)
+def summary(
+    session: SessionDep, tenant_id: TenantDep, run_id: uuid.UUID | None = None
+) -> schemas.SummaryOut:
+    """Count and value at risk of the open queue, per currency, never mixed."""
+    return queries.summary(session, tenant_id, run_id)
+
+
 @router.get("/exceptions/{exception_id}", response_model=schemas.ExceptionDetail)
 def exception_detail(
     exception_id: uuid.UUID, session: SessionDep, tenant_id: TenantDep

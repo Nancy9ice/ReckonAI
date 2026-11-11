@@ -249,3 +249,31 @@ class BulkInvestigateOut(BaseModel):
     skipped: int
     not_found: int
     jobs: list[JobOut]
+
+
+class SummaryBucket(BaseModel):
+    """A count and the value at risk, one entry per currency.
+
+    There is no grand total: amounts in different currencies are never added
+    (specs/mission.md P3). An empty `at_risk` means the bucket is empty.
+    """
+
+    count: int
+    at_risk: list[MoneyOut]
+
+
+class SummaryType(SummaryBucket):
+    code: str
+    #: Per currency, this type's value at risk as a share of the largest type
+    #: in the same currency, in [0, 1]. Drives bar length; unitless, so no
+    #: currencies are compared.
+    shares: dict[str, str]
+
+
+class SummaryOut(BaseModel):
+    open: SummaryBucket
+    confirmed: SummaryBucket
+    suspected: SummaryBucket
+    undecided: SummaryBucket
+    decided: SummaryBucket
+    by_type: list[SummaryType]

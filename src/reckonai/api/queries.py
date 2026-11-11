@@ -767,3 +767,66 @@ def request_run(session: Session, tenant_id: uuid.UUID) -> schemas.RunRequestOut
         job=job_out(job),
         message="Run queued. The worker picks it up within its poll interval.",
     )
+
+
+def _bucket(rows: list[schemas.ExceptionOut]) -> schemas.SummaryBucket:
+    totals: dict[str, Money] = {}
+    for row in rows:
+        impact = row.impact.to_money()
+        totals[impact.currency] = totals.get(
+            impact.currency, Money.zero(impact.currency)
+        ) + impact
+    return schemas.SummaryBucket(
+        count=len(rows),
+        at_risk=[MoneyOut.from_money(totals[c]) for c in sorted(totals)],
+    )
+
+
+def summary(
+    session: Session, tenant_id: uuid.UUID, run_id: uuid.UUID | None = None
+) -> schemas.SummaryOut:
+    """Volume and value of the open queue, summed per currency.
+
+    Built from the same rows as `exceptions`, so the two cannot disagree.
+    """
+    rows = exceptions(session, tenant_id, run_id)
+    codes = sorted({r.code for r in rows})
+    buckets = {c: _bucket([r for r in rows if r.code == c]) for c in codes}
+    largest: dict[str, Decimal] = {}
+    for b in buckets.values():
+        for m in b.at_risk:
+            seen = largest.get(m.currency, Decimal(0))
+            largest[m.currency] = max(seen, Decimal(m.amount))
+    by_type = [
+        schemas.SummaryType(
+            code=c,
+            count=b.count,
+            at_risk=b.at_risk,
+            shares={
+                m.currency: str(
+                    (Decimal(m.amount) / largest[m.currency]).quantize(
+                        Decimal("0.0001")
+                    )
+                )
+                for m in b.at_risk
+                if largest[m.currency] > 0
+            },
+        )
+        for c, b in buckets.items()
+    ]
+    # Largest share first, so the client draws the order it is given.
+    by_type.sort(
+        key=lambda t: (
+            -max((Decimal(v) for v in t.shares.values()), default=Decimal(0)),
+            -t.count,
+            t.code,
+        )
+    )
+    return schemas.SummaryOut(
+        open=_bucket(rows),
+        confirmed=_bucket([r for r in rows if r.certainty == "confirmed"]),
+        suspected=_bucket([r for r in rows if r.certainty == "suspected"]),
+        undecided=_bucket([r for r in rows if r.decision is None]),
+        decided=_bucket([r for r in rows if r.decision is not None]),
+        by_type=by_type,
+    )

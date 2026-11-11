@@ -189,7 +189,7 @@ def test_a_network_error_keeps_the_orders_already_placed(
 
     gw.create_order = flaky  # type: ignore[method-assign]
     out = _ensure(session, tenant_id, gw)
-    assert out["complete"] is False and "ReadTimeout" in out["error"] + "ReadTimeout"
+    assert out["complete"] is False and out["error"] == "slow"
     assert _orders(session, tenant_id) == 2, "what was placed stays"
     gw.create_order = real  # type: ignore[method-assign]
     _ensure(session, tenant_id, gw)

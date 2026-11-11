@@ -1036,7 +1036,7 @@ model.
 > **Kept as its own block, 2026-11-08 (R5).** The cutline below names this as
 > the first thing to drop, folding a minimal approve/reject into Phase 14. That
 > was considered and **reversed** by the operator: the phase keeps prioritisation
-> scoring over all four `readme.md` §9.3 factors, an append-only decision record
+> scoring over all four `product_idea.md` §9.3 factors, an append-only decision record
 > carrying approver and outcome, and the visible confirmed-vs-suspected
 > distinction. P6 is the point of this phase, not a constraint on it.
 >
@@ -1075,7 +1075,7 @@ recorded.
 > happened and what changed, and because [[tech-stack]] §10 requires runs to be
 > append-only and timestamped, so the data exists either way.
 >
-> Runs with Phase 13 as Block F. AG Grid stays — `readme.md` §12 makes it a
+> Runs with Phase 13 as Block F. AG Grid stays — `product_idea.md` §12 makes it a
 > sponsor technology doing real grouping and drill-down work.
 
 **Goal:** The interface the demo is given through.

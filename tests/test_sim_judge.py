@@ -16,6 +16,7 @@ from collections.abc import Iterator
 from types import SimpleNamespace
 from typing import Any
 
+import httpx2 as httpx
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
@@ -173,6 +174,26 @@ def test_a_failure_keeps_progress_and_the_next_call_resumes(
     _ensure(session, tenant_id, gw)
     assert _orders(session, tenant_id) == 6
     assert len(gw.created) == 6 and len(set(gw.created)) == 6, "none placed twice"
+
+
+def test_a_network_error_keeps_the_orders_already_placed(
+    session: Session, tenant_id: uuid.UUID
+) -> None:
+    gw = Gateway()
+    real = gw.create_order
+
+    def flaky(**kw: Any) -> capture.LiveOrder:
+        if len(gw.created) == 2:
+            raise httpx.ReadTimeout("slow")
+        return real(**kw)
+
+    gw.create_order = flaky  # type: ignore[method-assign]
+    out = _ensure(session, tenant_id, gw)
+    assert out["complete"] is False and "ReadTimeout" in out["error"] + "ReadTimeout"
+    assert _orders(session, tenant_id) == 2, "what was placed stays"
+    gw.create_order = real  # type: ignore[method-assign]
+    _ensure(session, tenant_id, gw)
+    assert _orders(session, tenant_id) == 6
 
 
 def test_no_paypal_refund_is_made_before_the_order_has_arrived(

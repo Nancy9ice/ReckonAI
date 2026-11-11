@@ -243,8 +243,14 @@ def ensure(
     try:
         for sc in SCENARIOS:
             _advance(session, tenant_id, name, sc, gateway)
-    except (write_side.WriteError, capture.CaptureUnavailable) as exc:
-        error = str(exc)
+    except (
+        write_side.WriteError,
+        capture.CaptureUnavailable,
+        httpx.HTTPError,
+    ) as exc:
+        # A network error mid-way keeps what was already placed: the caller
+        # commits, and the next call resumes.
+        error = str(exc) or type(exc).__name__
     out = status(session, tenant_id, name)
     if error:
         out["error"] = error

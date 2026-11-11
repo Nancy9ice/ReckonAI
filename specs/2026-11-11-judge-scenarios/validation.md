@@ -46,3 +46,22 @@ The script's output formatting, and the readme wording beyond being accurate.
   covers both.
 - Stays unproven if not seen: `PAYMENT.CAPTURE.REFUNDED` over the webhook;
   several judges truly at once.
+
+## 4. Results, 2026-11-11 (local stack, real sandbox)
+
+Web and worker local with the real credentials; webhooks cannot reach a local
+server, so every order took the fallback path. The webhook path was seen on
+Render separately (probe order, 18:31 UTC).
+
+| # | Result |
+|---|---|
+| 2 | **Pass.** After the script and a run: S2 `commission_mismatch`, S5 `missing_ledger_adjustment`, S6 `duplicate_ledger_entry`, S4 `awaiting_evidence` (`is_exception` false), S1 and S3 no finding. |
+| 3 | **Pass** (unit tests, and a second script run created nothing). Concurrent calls tested only by the advisory lock, not by two real clients. |
+| 4 | **Pass, and found a bug.** A DNS failure mid-run left the earlier orders in place and the next run resumed. It also showed `ingest_missing` was all-or-nothing and that a raw HTTP error became a 500; both fixed (per-order savepoints, `httpx` errors become 502) with a test. |
+| 5 | **Pass.** `--late-refund` delivered PayPal's refund; the next run no longer reported S4, and raised no exception. |
+| 8 | **Pass.** A PayPal order with no marketplace order (the production probe) reads `awaiting_evidence`, not an exception: it does not change the exception count. It will show as a non-exception finding keyed by its PayPal order id. |
+| 9 | **Pass** locally (fallback path reported per order). |
+| - | Investigations on S2, S5, S6 (OpenAI `gpt-4.1`) all `reported`, ranked causes naming the right fault, every cited ref resolved. Anthropic failed with a 400 (no credit) and is unexercised, as before. |
+
+Run cooldown observed: a run inside five minutes of the last answers
+`cooling_down`; the script's wording covers it.

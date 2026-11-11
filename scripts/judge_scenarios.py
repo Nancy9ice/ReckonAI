@@ -78,7 +78,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--name", required=True, help="1 to 12 letters or digits")
     parser.add_argument("--url", default=DEFAULT_URL)
-    parser.add_argument("--wait", type=int, default=60, help="seconds to wait for webhooks")
+    parser.add_argument(
+        "--wait", type=int, default=60, help="seconds to wait for webhooks"
+    )
     parser.add_argument("--late-refund", action="store_true")
     args = parser.parse_args()
     base = args.url.rstrip("/")
@@ -101,7 +103,7 @@ def main() -> int:
         if state["complete"]:
             break
         if time.monotonic() >= deadline:
-            print(f"Not everything arrived by webhook in {args.wait}s; fetching it directly.")
+            print(f"Not all arrived by webhook in {args.wait}s; fetching directly.")
             call(base, "POST", f"/sim/judge/scenarios/{name}/ingest-missing")
             state = call(base, "POST", "/sim/judge/scenarios", {"name": name})
             break

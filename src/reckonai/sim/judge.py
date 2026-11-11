@@ -27,6 +27,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Annotated, Any
 
+import httpx2 as httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func, select, text
@@ -372,24 +373,42 @@ def ingest_missing(
     name: str,
     gateway: write_side.Gateway,
 ) -> dict[str, Any]:
-    """Fetch PayPal's side of any placed order whose webhook has not arrived."""
+    """Fetch PayPal's side of any placed order whose webhook has not arrived.
+
+    One order failing (PayPal is reachable intermittently) does not undo the
+    others: each is ingested in its own savepoint, and `error` names what is
+    still missing so the caller can ask again.
+    """
     name = normalise(name)
     _lock(session, name)
+    errors: list[str] = []
     for sc in SCENARIOS:
         ref = ref_for(name, sc)
         placed = _marker(session, tenant_id, ORDER_MARKER, ref)
         if placed is None or _paypal_side_in(session, tenant_id, ref):
             continue
-        fetched = gateway.read_order(
-            str(placed["paypal_order_id"]), str(placed["merchant_id"])
-        )
-        document = paypal_live.build_document(session, tenant_id, fetched)
-        replay.ingest_document(session, document, tenant_id=tenant_id)
-        _write_marker(
-            session, tenant_id, STEP_MARKER, f"{ref}:fallback", {"done": True}
-        )
-        session.flush()
-    return status(session, tenant_id, name)
+        try:
+            with session.begin_nested():
+                fetched = gateway.read_order(
+                    str(placed["paypal_order_id"]), str(placed["merchant_id"])
+                )
+                document = paypal_live.build_document(session, tenant_id, fetched)
+                replay.ingest_document(session, document, tenant_id=tenant_id)
+                _write_marker(
+                    session, tenant_id, STEP_MARKER, f"{ref}:fallback", {"done": True}
+                )
+        except (
+            write_side.WriteError,
+            paypal_live.LiveFetchError,
+            paypal_live.SnapshotUnavailable,
+            replay.ReplayError,
+            httpx.HTTPError,
+        ) as exc:
+            errors.append(f"{ref}: {exc or type(exc).__name__}")
+    out = status(session, tenant_id, name)
+    if errors:
+        out["error"] = "; ".join(errors)
+    return out
 
 
 def deliver_late_refund(
@@ -487,9 +506,12 @@ def _run(session: Session, call: Any) -> dict[str, Any]:
         paypal_live.LiveFetchError,
         paypal_live.SnapshotUnavailable,
         replay.ReplayError,
+        httpx.HTTPError,
     ) as exc:
         session.rollback()
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=502, detail=str(exc) or type(exc).__name__
+        ) from exc
     # Commit even when `ensure` reports an error: progress already made stays,
     # and the next call resumes.
     session.commit()

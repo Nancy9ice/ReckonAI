@@ -25,6 +25,7 @@ from reckonai.app import app
 from reckonai.config import get_settings
 from reckonai.models import Order, RawPayload
 from reckonai.paypal import capture
+from reckonai.paypal import live as paypal_live
 from reckonai.sim import data, judge, seed
 from reckonai.sim import live as write_side
 
@@ -207,6 +208,26 @@ def test_ingest_missing_only_reads_what_has_not_arrived(
     reads = gw.reads
     judge.ingest_missing(session, tenant_id, "alice", gw)
     assert gw.reads == reads
+
+
+def test_one_failed_fetch_does_not_undo_the_others(
+    session: Session, tenant_id: uuid.UUID
+) -> None:
+    gw = Gateway()
+    _ensure(session, tenant_id, gw)
+    real = gw.read_order
+    gw.read_order = lambda order_id, merchant_id: (  # type: ignore[method-assign]
+        (_ for _ in ()).throw(paypal_live.LiveFetchError("timeout"))
+        if order_id == "PPORD3"
+        else real(order_id, merchant_id)
+    )
+    out = judge.ingest_missing(session, tenant_id, "alice", gw)
+    arrived = [r["paypal_side_ingested"] for r in out["scenarios"]]
+    assert arrived == [True, True, False, True, True, True]
+    assert "S3-HELD" in out["error"]
+    gw.read_order = real  # type: ignore[method-assign]
+    assert judge.ingest_missing(session, tenant_id, "alice", gw)["complete"] is False
+    assert "error" not in judge.ingest_missing(session, tenant_id, "alice", gw)
 
 
 def test_the_late_refund_needs_the_order_and_happens_once(

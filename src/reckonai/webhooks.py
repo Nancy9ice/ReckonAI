@@ -11,6 +11,8 @@ and an inability to ask PayPal is `503` (redelivery will).
 from __future__ import annotations
 
 import json
+import logging
+from collections.abc import Iterator
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -19,15 +21,32 @@ from sqlalchemy.orm import Session
 
 from reckonai.api.deps import get_session
 from reckonai.config import get_settings
+from reckonai.logging import event as log_event
 from reckonai.paypal import live, webhook
 
 router = APIRouter()
+logger = logging.getLogger("reckonai.webhooks")
 
 
-def get_verifier() -> webhook.Verifier:
-    """Overridden in tests; in service, built from settings on each request."""
+def get_verifier() -> Iterator[webhook.Verifier]:
+    """Overridden in tests; in service, built from settings on each request.
+
+    Unconfigured is a refusal with a reason, not a `500`: the route is public,
+    and a delivery cannot be verified without credentials.
+    """
     settings = get_settings()
-    return webhook.Verifier(live.credentials(), settings.paypal_webhook_id)
+    try:
+        credentials = live.credentials()
+    except live.LiveFetchError:
+        logger.error(log_event("reckonai.webhook.not_configured"))
+        raise HTTPException(
+            status_code=503, detail="webhook verification is not configured"
+        ) from None
+    verifier = webhook.Verifier(credentials, settings.paypal_webhook_id)
+    try:
+        yield verifier
+    finally:
+        verifier.close()
 
 
 SessionDep = Annotated[Session, Depends(get_session)]
@@ -51,7 +70,9 @@ async def receive_paypal(
         raise HTTPException(status_code=400, detail="not a PayPal event")
 
     try:
-        genuine = await run_in_threadpool(verifier.verify, dict(request.headers), event)
+        genuine = await run_in_threadpool(
+            verifier.verify, dict(request.headers), event, raw
+        )
     except webhook.VerifierUnavailable:
         raise HTTPException(status_code=503, detail="cannot verify right now") from None
     if not genuine:

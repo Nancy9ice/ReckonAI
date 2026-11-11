@@ -183,8 +183,10 @@ def _dec(value: str, what: str) -> Decimal:
         amount = Decimal(value)
     except ArithmeticError:
         raise WriteError(f"{what} is not a decimal amount: {value!r}") from None
-    if amount <= 0:
-        raise WriteError(f"{what} must be positive")
+    # NaN and Infinity both construct, and NaN then raises on comparison, which
+    # would surface as a 500 rather than a refusal.
+    if not amount.is_finite() or amount <= 0:
+        raise WriteError(f"{what} must be a positive, finite amount")
     return amount
 
 
@@ -309,6 +311,14 @@ def refund_order(
         raise WriteError(f"order {req.order_ref!r} has no ledger entry for a seller")
     seller = _seller(session, tenant_id, seller_ref)
 
+    # Everything that can still refuse is checked before PayPal is touched: a
+    # refund made at PayPal and then abandoned here would be made twice on retry.
+    paypal_order_id = (
+        _paypal_order_id(session, tenant_id, req.paypal_capture_id)
+        if req.ingest_now
+        else None
+    )
+
     refund = gateway.refund(
         capture_id=req.paypal_capture_id,
         merchant_id=str(seller.paypal_merchant_id),
@@ -339,17 +349,28 @@ def refund_order(
             session, _result(session, tenant_id), spec, refund_spec, order.id
         )
 
-    if req.ingest_now:
-        order_id = _paypal_order_id(session, tenant_id, req.paypal_capture_id)
-        fetched = gateway.read_order(order_id, str(seller.paypal_merchant_id))
-        document = live.build_document(session, tenant_id, fetched)
-        replay.ingest_document(session, document, tenant_id=tenant_id)
+    # The refund now exists at PayPal and in the marketplace's books. Reading it
+    # back is a convenience, so its failure is reported and must not roll the
+    # booking back (a savepoint keeps a half-written ingestion out).
+    ingest_error: str | None = None
+    if paypal_order_id is not None:
+        try:
+            with session.begin_nested():
+                fetched = gateway.read_order(
+                    paypal_order_id, str(seller.paypal_merchant_id)
+                )
+                document = live.build_document(session, tenant_id, fetched)
+                replay.ingest_document(session, document, tenant_id=tenant_id)
+        except (WriteError, live.LiveFetchError, replay.ReplayError) as exc:
+            ingest_error = str(exc)
 
     return {
         "order_ref": req.order_ref,
         "paypal_refund_id": refund.get("id"),
         "marketplace_refund": refund_spec.ref,
         "reflected_in_ledger": req.reflect_in_ledger,
+        "ingested": req.ingest_now and ingest_error is None,
+        "ingest_error": ingest_error,
         "simulated": True,
     }
 

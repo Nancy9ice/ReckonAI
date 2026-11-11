@@ -123,3 +123,20 @@ found it, because the tests build their own evidence.
 **Not done:** a genuine signed delivery. No tunnel tool is installed, and
 pointing the registered webhook at a tunnel would change the operator's PayPal
 app.
+
+## 8. Code review (medium), 2026-11-11
+
+Ten findings. Each was checked against the code before anything was changed.
+
+| # | Finding | Result |
+|---|---|---|
+| 1 | A refund was made at PayPal before checks that could still fail | **Real, fixed.** The order id is resolved before PayPal is called, and a failed read-back after the refund is reported and cannot roll the booking back (savepoint) |
+| 2 | `NaN` and `Infinity` amounts gave a 500; refunds not bounded cumulatively | **NaN and Infinity: real, fixed.** Cumulative refunds: **not fixed**; PayPal itself rejects an over-refund and that refusal happens before anything is booked |
+| 3 | An order whose events arrive out of order (refund before completion) is never ingested | **Real, not fixed.** An order first seen after a refund has no trustworthy capture-time fee (the known limit). Out-of-order delivery makes that permanent. A candidate fix: use the stored `COMPLETED` event's capture resource as the capture-time snapshot. Left for a decision because it relaxes "a webhook is a notification, never the record" |
+| 4 | A new client and token per event, fetched inside the transaction | **Real, not changed.** Harmless at this volume; revisit if events burst |
+| 5 | A stored webhook event counted as new evidence | **Real, fixed.** Webhook rows are excluded from `has_new_evidence`; a test pins the record type to the one the receiver stores |
+| 6 | The cooldown looked at every run, not this window's | **Real, fixed.** Scoped to the same window. The naive-versus-aware datetime claim is not real (both sides are timezone-aware) |
+| 7 | Verification used re-serialized JSON, not the received bytes | **Real, fixed.** The raw body is spliced into the verify request unparsed. Confirmed against the real sandbox: PayPal accepts the request and answers `FAILURE` for a forged event. The dedupe-by-hash point is not a defect (the event id is inside the body) |
+| 8 | Missing credentials gave a 500; a client was built per request and never closed | **Real, fixed.** 503 with a logged reason; the client is closed |
+| 9 | A recovery failure was swallowed at warning level | **Real, fixed.** Logged at error level, the nightly run is still enqueued, and the cron job exits non-zero so the failure shows |
+| 10 | `.env.example` had a typo and angle-bracket placeholders | **Real, fixed.** Note that this edit was the operator's; placeholders now follow the file's `replace-with-` convention |

@@ -43,6 +43,11 @@ from sqlalchemy.orm import Session
 from reckonai.models import Order, Payment, RawPayload, ReconciliationRun
 from reckonai.recon.classifier import OrderCase
 
+#: The `source_record_type` `paypal.webhook` stores a delivered event under.
+#: Not imported from there, to keep this module free of the provider package;
+#: `tests/test_jobs_rerun_rule.py` pins the two to the same string.
+WEBHOOK_EVENT_RECORD_TYPE = "webhook_event"
+
 
 @dataclass(frozen=True, slots=True)
 class Window:
@@ -147,7 +152,13 @@ def has_new_evidence(
     but cannot permit one that clause 2 would not use. `since=None` means no
     completed run exists, so any payload at all is new.
     """
-    query = select(RawPayload.id).where(RawPayload.tenant_id == tenant_id)
+    query = select(RawPayload.id).where(
+        RawPayload.tenant_id == tenant_id,
+        # A stored webhook event is a notification that evidence is coming, not
+        # evidence: counting it would permit a run before the order it names
+        # has been fetched, spending the watermark on a run that finds nothing.
+        RawPayload.source_record_type != WEBHOOK_EVENT_RECORD_TYPE,
+    )
     if since is not None:
         query = query.where(RawPayload.retrieved_at > since)
     if until is not None:

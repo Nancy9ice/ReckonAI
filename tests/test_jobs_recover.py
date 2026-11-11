@@ -132,6 +132,7 @@ def test_recovery_failing_never_stops_the_nightly_run(
 
     monkeypatch.setattr(live, "credentials", boom)
 
-    # Logs a warning and returns. (`main` goes on to enqueue the run; the
-    # rollback inside would undo this test's own fixtures, so it is not chained.)
-    schedule._recover(session, hours=72)
+    # Logs an error and reports it. (`main` goes on to enqueue the run and then
+    # exits non-zero; the rollback inside would undo this test's own fixtures, so
+    # it is not chained.)
+    assert schedule._recover(session, hours=72) is False

@@ -92,9 +92,28 @@ class Verifier:
     ) -> None:
         self._creds = creds
         self._webhook_id = webhook_id
+        self._owns_http = http is None
         self._http = http or httpx.Client(timeout=live.DEFAULT_TIMEOUT)
 
-    def verify(self, headers: Mapping[str, str], event: dict[str, Any]) -> bool:
+    def close(self) -> None:
+        if self._owns_http:
+            self._http.close()
+
+    def verify(
+        self,
+        headers: Mapping[str, str],
+        event: dict[str, Any],
+        raw: bytes | None = None,
+    ) -> bool:
+        """Whether PayPal says this delivery is genuine.
+
+        **`raw` is the body exactly as received, and is spliced into the request
+        unparsed.** PayPal checks the signature against the bytes it sent;
+        parsing and re-serializing can change key order, spacing, escapes or
+        number formatting, and a genuine event would then fail verification and
+        be refused for good (PayPal does not retry a `401`). `event` is the
+        parsed form, used only when no raw body exists.
+        """
         if not self._webhook_id:
             return False
         lowered = {k.lower(): v for k, v in headers.items()}
@@ -112,18 +131,30 @@ class Verifier:
             )
             if token.status_code != 200:
                 raise VerifierUnavailable(f"token request returned {token.status_code}")
-            response = self._http.post(
-                f"{self._creds.base}/v1/notifications/verify-webhook-signature",
-                headers={
-                    "Authorization": f"Bearer {token.json()['access_token']}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    **{key: lowered[name] for key, name in SIGNATURE_HEADERS.items()},
-                    "webhook_id": self._webhook_id,
-                    "webhook_event": event,
-                },
-            )
+            fields = {
+                **{key: lowered[name] for key, name in SIGNATURE_HEADERS.items()},
+                "webhook_id": self._webhook_id,
+            }
+            request_headers = {
+                "Authorization": f"Bearer {token.json()['access_token']}",
+                "Content-Type": "application/json",
+            }
+            url = f"{self._creds.base}/v1/notifications/verify-webhook-signature"
+            if raw is not None:
+                try:
+                    text = raw.decode("utf-8")
+                except UnicodeDecodeError:
+                    return False
+                body = f'{json.dumps(fields)[:-1]}, "webhook_event": {text}}}'
+                response = self._http.post(
+                    url, headers=request_headers, content=body.encode("utf-8")
+                )
+            else:
+                response = self._http.post(
+                    url,
+                    headers=request_headers,
+                    json={**fields, "webhook_event": event},
+                )
         except httpx.HTTPError as exc:
             raise VerifierUnavailable(type(exc).__name__) from exc
         if response.status_code >= 500:

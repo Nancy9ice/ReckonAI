@@ -163,6 +163,10 @@ def decide_run(
         select(func.max(ReconciliationRun.finished_at)).where(
             ReconciliationRun.tenant_id == tenant_id,
             ReconciliationRun.status == "completed",
+            # This window's own runs: a run over other dates finishing a minute
+            # ago must not hold this one back.
+            ReconciliationRun.window_start == win.start,
+            ReconciliationRun.window_end == win.end,
         )
     ).first()
     if (

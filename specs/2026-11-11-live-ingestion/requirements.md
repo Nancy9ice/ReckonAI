@@ -130,7 +130,9 @@ which is *unverified* until a real delivery (validation.md section 2).
   list's retention and partner access beyond "readable, empty".
 - **Two live limits.** An order first seen after a refund is not ingested
   (`SnapshotUnavailable`): its capture-time platform fee cannot be established,
-  and the later read may carry the reversal amount. And no live read fetches a
+  and the later read may carry the reversal amount. **Out-of-order delivery
+  makes this permanent**: if a refund event is handled before the capture event,
+  neither can be ingested. And no live read fetches a
   DELAYED release, since no event announces one, so a released live DELAYED
   order would read as held.
 - `retrieved_at` of a live record is our fetch time, already documented as

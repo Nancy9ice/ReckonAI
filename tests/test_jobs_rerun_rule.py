@@ -195,3 +195,52 @@ def test_evidence_dated_in_the_future_has_not_arrived(
     session.flush()
 
     assert decide(session, tenant, DAY).verdict is RunVerdict.NOTHING_NEW
+
+
+def test_a_stored_webhook_event_is_not_evidence(
+    session: Session, tenant: Tenant
+) -> None:
+    """The event says evidence is coming. A run before the order is fetched would
+    find nothing and spend the watermark."""
+    run(session, tenant, DAY)
+    session.add(
+        make_payload(
+            tenant.id,
+            source_record_type=window.WEBHOOK_EVENT_RECORD_TYPE,
+            retrieved_at=datetime.now(UTC),
+        )
+    )
+    session.flush()
+
+    assert decide(session, tenant, DAY).verdict is RunVerdict.NOTHING_NEW
+
+
+def test_the_webhook_record_type_is_the_one_the_receiver_stores(
+    session: Session, tenant: Tenant
+) -> None:
+    from reckonai.paypal import webhook
+
+    row = webhook._store(session, tenant.id, "WH-T", {"id": "WH-T"})
+    assert row.source_record_type == window.WEBHOOK_EVENT_RECORD_TYPE
+
+
+def test_a_run_over_other_dates_does_not_hold_this_one_in_cooldown(
+    session: Session, tenant: Tenant
+) -> None:
+    run(session, tenant, DAY)
+    arrive(session, tenant)
+    # A different window finishes just now. It says nothing about DAY.
+    other = window.Window(
+        start=datetime(2026, 11, 1, tzinfo=UTC), end=datetime(2026, 11, 3, tzinfo=UTC)
+    )
+    run(session, tenant, other)
+    arrive(session, tenant)
+    from reckonai.models import ReconciliationRun
+
+    for r in session.query(ReconciliationRun).filter(
+        ReconciliationRun.window_start == DAY.start
+    ):
+        r.finished_at = datetime.now(UTC) - timedelta(hours=2)
+    session.flush()
+
+    assert decide(session, tenant, DAY, cooldown=300).verdict is RunVerdict.PERMITTED

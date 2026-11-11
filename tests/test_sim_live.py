@@ -24,6 +24,7 @@ from reckonai.app import app
 from reckonai.config import get_settings
 from reckonai.models import Order, RawPayload, SellerLedgerEntry
 from reckonai.paypal import capture
+from reckonai.paypal import live as paypal_live
 from reckonai.sim import data, live, seed
 
 FIXTURES = pathlib.Path(__file__).resolve().parent.parent / "fixtures" / "paypal"
@@ -370,3 +371,77 @@ def test_a_refused_request_is_unprocessable_not_a_server_error(
         headers={"X-Sim-Secret": "right"},
     )
     assert response.status_code == 422
+
+
+# --- review findings ---------------------------------------------------------
+
+
+@pytest.mark.parametrize("amount", ["NaN", "Infinity", "-Infinity", "sNaN"])
+def test_a_non_finite_amount_is_refused_not_a_server_error(
+    session: Session, tenant_id: uuid.UUID, amount: str
+) -> None:
+    with pytest.raises(live.WriteError):
+        _place(session, tenant_id, FakeGateway(), gross=amount, ingest_now=False)
+
+
+def test_a_refund_that_cannot_be_read_back_is_not_made_at_paypal(
+    session: Session, tenant_id: uuid.UUID
+) -> None:
+    """The capture was never ingested, so the read-back would fail. That is
+    discovered before PayPal is touched, not after a refund has been made."""
+    gateway = FakeGateway()
+    placed = _place(session, tenant_id, gateway, ingest_now=False)
+    session.flush()
+
+    with pytest.raises(live.WriteError, match="has not been ingested"):
+        live.refund_order(
+            session,
+            tenant_id,
+            live.RefundIn(
+                order_ref=REF,
+                paypal_capture_id=placed["paypal_capture_ids"][0],
+                amount="30.00",
+                ingest_now=True,
+            ),
+            gateway,
+        )
+
+    assert gateway.refunds == []
+
+
+def test_a_failed_read_back_after_the_refund_keeps_the_booking(
+    session: Session, tenant_id: uuid.UUID
+) -> None:
+    gateway = FakeGateway()
+    placed = _place(session, tenant_id, gateway)
+    session.flush()
+
+    def refused(order_id: str, merchant_id: str) -> dict[str, Any]:
+        raise paypal_live.LiveDenied("403")
+
+    gateway.read_order = refused  # type: ignore[method-assign]
+
+    out = live.refund_order(
+        session,
+        tenant_id,
+        live.RefundIn(
+            order_ref=REF,
+            paypal_capture_id=placed["paypal_capture_ids"][0],
+            amount="30.00",
+            ingest_now=True,
+        ),
+        gateway,
+    )
+    session.flush()
+
+    assert gateway.refunds, "the refund was made at PayPal"
+    assert out["ingested"] is False and "403" in out["ingest_error"]
+    from reckonai.models import Refund
+
+    booked = session.scalars(
+        select(Refund).where(
+            Refund.tenant_id == tenant_id,
+            Refund.external_id == out["marketplace_refund"],
+        )
+    ).first()
+    assert booked is not None, "and it is booked, so a retry would not refund twice"

@@ -44,7 +44,7 @@ class FakeVerifier:
         self.answer = answer
         self.calls = 0
 
-    def verify(self, headers: object, event: object) -> bool:
+    def verify(self, headers: object, event: object, raw: object = None) -> bool:
         self.calls += 1
         if isinstance(self.answer, Exception):
             raise self.answer
@@ -393,3 +393,40 @@ def test_a_refused_or_failed_refetch_fails_the_job_and_writes_nothing(
         )
     )
     assert after == before
+
+
+def test_the_verification_request_carries_the_body_byte_for_byte() -> None:
+    """PayPal checks the signature against the bytes it sent. Parsing and
+    re-serializing can change spacing, key order and escapes, and a genuine event
+    would then be refused for good."""
+    seen: list[bytes] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1/oauth2/token":
+            return httpx.Response(200, json={"access_token": "t"})
+        seen.append(request.content)
+        return httpx.Response(200, json={"verification_status": "SUCCESS"})
+
+    verifier = webhook.Verifier(
+        CREDS, "WH-ID", http=httpx.Client(transport=httpx.MockTransport(handler))
+    )
+    raw = b'{"id": "WH-1",   "event_type":"PAYMENT.CAPTURE.COMPLETED", "n": 1.50}'
+
+    assert verifier.verify(HEADERS, json.loads(raw), raw)
+
+    body = seen[0].decode()
+    assert raw.decode() in body, "the delivered text is spliced in untouched"
+    parsed = json.loads(body)
+    assert parsed["webhook_id"] == "WH-ID"
+    assert parsed["webhook_event"]["id"] == "WH-1"
+
+
+def test_an_unconfigured_service_refuses_with_a_reason_not_a_500(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def missing() -> live.Credentials:
+        raise live.LiveFetchError("not set")
+
+    monkeypatch.setattr(live, "credentials", missing)
+    response = _post(client, _event(order_id="O", merchant="M"))
+    assert response.status_code == 503

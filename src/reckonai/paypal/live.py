@@ -92,8 +92,14 @@ class LiveClient:
         self, creds: Credentials, *, http: httpx.Client | None = None
     ) -> None:
         self._creds = creds
+        self._owns_http = http is None
         self._http = http or httpx.Client(timeout=DEFAULT_TIMEOUT)
         self._bearer: str | None = None
+
+    def close(self) -> None:
+        """Release the connection pool, if this client made it."""
+        if self._owns_http:
+            self._http.close()
 
     def _token(self) -> str:
         if self._bearer is not None:

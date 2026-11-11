@@ -138,26 +138,37 @@ def enqueue_runs(session: Session, *, days: int) -> list[uuid.UUID]:
     return enqueued
 
 
-def _recover(session: Session, *, hours: int) -> None:
-    """Missed-delivery recovery, which must never stop the nightly run."""
+def _recover(session: Session, *, hours: int) -> bool:
+    """Missed-delivery recovery, which must never stop the nightly run.
+
+    Returns whether it worked. A failure is logged at error level and `main`
+    exits non-zero after the run is enqueued, so a recovery that quietly never
+    runs shows as a failed cron job instead of a green one.
+    """
     from reckonai.jobs import recover
     from reckonai.paypal import live
 
+    client = None
     try:
         client = live.LiveClient(live.credentials())
         now = datetime.now(UTC)
         recover.recover(
             session, client, since=now - timedelta(hours=hours), until=now
         )
+        return True
     except Exception as exc:  # noqa: BLE001 - deliberate: the run goes ahead
         session.rollback()
-        logger.warning(
+        logger.error(
             event(
                 "reckonai.jobs.schedule.recover_failed",
                 error=type(exc).__name__,
                 detail=str(exc)[:200],
             )
         )
+        return False
+    finally:
+        if client is not None:
+            client.close()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -205,11 +216,14 @@ def main(argv: list[str] | None = None) -> int:
             # and the second job's handler meets the `processed_event`
             # constraint, which `reconcile_job.AlreadyReconciled` now reports
             # as work already done rather than as a failure to retry.
+            recovered = True
             if args.recover_hours > 0:
-                _recover(session, hours=args.recover_hours)
+                recovered = _recover(session, hours=args.recover_hours)
             enqueued = enqueue_runs(session, days=args.window_days)
 
         logger.info(event("reckonai.jobs.schedule.done", enqueued=len(enqueued)))
+        if not recovered:
+            return 1
     finally:
         engine.dispose()
 

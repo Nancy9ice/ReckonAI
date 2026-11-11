@@ -88,6 +88,13 @@ class Settings(BaseSettings):
     #: (`specs/2026-11-11-live-ingestion/requirements.md` F2).
     paypal_webhook_id: str | None = None
 
+    #: The simulated marketplace's write side (live-ingestion F10 to F15). Off
+    #: unless enabled, and a shared secret is required when it is: the read
+    #: endpoints are public, and a public write endpoint would let anyone plant
+    #: orders and ledger entries in a deployed demo.
+    sim_write_enabled: bool = False
+    sim_write_secret: SecretStr | None = None
+
     # ---- The investigation agent (Block E) --------------------------------
     #
     # **The model lives here rather than in code**, by the dated 2026-11-10

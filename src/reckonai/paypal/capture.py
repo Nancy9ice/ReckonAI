@@ -208,6 +208,54 @@ def capture_live_order(
     )
 
 
+def refund_capture(
+    *,
+    capture_id: str,
+    merchant_id: str,
+    currency: str,
+    amount: str,
+    timeout: float = DEFAULT_TIMEOUT,
+) -> dict[str, Any]:
+    """Refund part of a sandbox capture, as the seller. Raises on any failure.
+
+    Sandbox only (the credentials resolver refuses any other host). Creating a
+    sandbox refund moves no real money, and this is a test-data generator for
+    the simulated marketplace's write side, not a path ReckonAI uses on its own
+    authority (P6).
+    """
+    resolved = _settings_or_none()
+    if resolved is None:
+        raise CaptureUnavailable("PAYPAL_CLIENT_ID / PAYPAL_CLIENT_SECRET are not set")
+    client_id, secret, base, bn = resolved
+
+    with httpx.Client(timeout=timeout) as http:
+        basic = base64.b64encode(f"{client_id}:{secret}".encode()).decode()
+        auth = http.post(
+            f"{base}/v1/oauth2/token",
+            headers={"Authorization": f"Basic {basic}"},
+            data={"grant_type": "client_credentials"},
+        )
+        if auth.status_code != 200:
+            raise CaptureUnavailable(f"token request returned {auth.status_code}")
+        response = http.post(
+            f"{base}/v2/payments/captures/{capture_id}/refund",
+            headers={
+                "Authorization": f"Bearer {auth.json()['access_token']}",
+                "Content-Type": "application/json",
+                "PayPal-Partner-Attribution-Id": bn,
+                "PayPal-Request-Id": uuid.uuid4().hex,
+                "PayPal-Auth-Assertion": _assertion(client_id, merchant_id),
+            },
+            json={"amount": {"currency_code": currency, "value": amount}},
+        )
+        if response.status_code not in (200, 201):
+            raise CaptureUnavailable(f"refund returned {response.status_code}")
+        body = response.json()
+        if not isinstance(body, dict):
+            raise CaptureUnavailable("refund returned a non-object body")
+        return body
+
+
 def _assertion(client_id: str, payer_id: str) -> str:
     """The PayPal-Auth-Assertion header for reading as a seller.
 

@@ -133,6 +133,12 @@ services:
       # it every delivery is refused (live-ingestion F2).
       - key: PAYPAL_WEBHOOK_ID
         sync: false
+      # The simulated marketplace's write side: off unless enabled, and a
+      # secret is required when it is (live-ingestion F15).
+      - key: SIM_WRITE_ENABLED
+        value: "false"
+      - key: SIM_WRITE_SECRET
+        sync: false
       - key: LOG_LEVEL
         value: INFO
 

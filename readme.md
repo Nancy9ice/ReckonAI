@@ -73,7 +73,10 @@ is something to find.
    which), and tells you when it is done. A different name gets a fresh set;
    the same name again creates nothing.
 3. Click **Run reconciliation**, then search the queue for `JUDGE-YOURNAME`.
-4. Open each order and **Investigate** the exceptions.
+   This finds and classifies the exceptions. It does not investigate them.
+4. Investigate them yourself: open an exception and press **Ask the AI to
+   investigate**, or tick several rows and use **Investigate selected**. Each
+   takes a few seconds, and the report appears in the same drawer.
 
 | Order | What it is | Expected |
 |---|---|---|

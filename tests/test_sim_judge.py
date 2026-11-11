@@ -387,3 +387,13 @@ def test_the_existing_write_routes_still_need_their_secret(
     get_settings.cache_clear()
     response = http.post("/sim/marketplace/live/orders", json={})
     assert response.status_code == 403
+
+
+def test_the_enabled_probe_answers_either_way(
+    http: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _enable(monkeypatch, on=False)
+    off = http.get("/sim/judge/enabled")
+    assert off.status_code == 200 and off.json() == {"enabled": False}
+    _enable(monkeypatch)
+    assert http.get("/sim/judge/enabled").json() == {"enabled": True}

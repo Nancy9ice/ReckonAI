@@ -32,3 +32,13 @@ including the probe-order question.
 
 **7. Deploy and prove.** Merge, operator sets the flag, run the script against
 Render once, record results in `validation.md`.
+
+**8. UI button.** `GET /sim/judge/enabled`; `api.ts` methods; a
+`JudgeScenarios` panel and header button in `App.tsx`; wording in `copy.ts`;
+styles. Typecheck and build.
+
+**9. Judge instructions, again.** Readme leads with the button; the script is
+the alternative.
+
+**10. Prove in a browser.** Local stack, button clicked, panel reaches done;
+then on Render once the operator has enabled the flag.

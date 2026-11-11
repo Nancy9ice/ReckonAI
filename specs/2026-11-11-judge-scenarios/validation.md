@@ -65,3 +65,12 @@ Render separately (probe order, 18:31 UTC).
 
 Run cooldown observed: a run inside five minutes of the last answers
 `cooling_down`; the script's wording covers it.
+
+## 5. The UI button (D7)
+
+Before merge: `GET /sim/judge/enabled` answers 200 whether on or off and never
+404; the frontend typechecks and builds; in a browser the button is absent when
+the feature is off, and when on one click reaches "done" with six rows and no
+console errors; a second click on the same name creates nothing; a missing
+worker or an error shows a message and a retry, not a frozen panel.
+After merge: the same on Render, which needs the flag and is the operator's.

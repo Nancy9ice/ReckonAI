@@ -518,6 +518,13 @@ def _run(session: Session, call: Any) -> dict[str, Any]:
     return out
 
 
+@router.get("/enabled")
+def get_enabled() -> dict[str, bool]:
+    """Whether the feature is on. Always answers, so the UI can decide to show
+    its button without reading a 404 as an error."""
+    return {"enabled": get_settings().judge_scenarios_enabled}
+
+
 @router.post("/scenarios")
 def post_scenarios(
     body: NameIn,

@@ -49,8 +49,8 @@ boundary is adopted (D4).
   and the daily cron. A trigger is a separate later change.
 - **D10. Mapping unchanged.** The write side emits the fields the read endpoints
   already serve, so `sim_mapping.py` is untouched. Any new simulator field goes
-  through `validate.py`'s gate. `mapping_version` is stored per canonical
-  record (`tech-stack.md` §9.1); whether it exists today is unchecked.
+  through `validate.py`'s gate. `mapping_version` already exists on
+  `raw_payload`, which every canonical record links to; no migration.
 
 ## 4. The same-day re-run rule
 

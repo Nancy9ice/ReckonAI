@@ -176,6 +176,10 @@ narrowings, neither structural:
   first read, and is what re-evaluates an exception parked as
   `awaiting_evidence`.
 
+**Amended 2026-11-11** (`specs/2026-11-11-live-ingestion/`): recovery of missed
+events is reinstated, because webhook ingestion is back (R8 superseded for
+ingestion). The scheduled run still does the work described above.
+
 Nothing above weakens the `COMMIT` argument below, which is the reason the queue
 lives in Postgres at all.
 
@@ -508,8 +512,8 @@ Five client rules, all of them non-obvious enough to be worth locking here:
 Each rests on evidence in `specs/paypal-fields.md` and the Phase 0 notes.
 
 Webhook handling — **deferred past the MVP, 2026-11-08**
-(`specs/2026-11-08-replan/requirements.md` R8), and kept here as the design for
-when it lands: verify signatures where supported, dedupe on event id via the
+(`specs/2026-11-08-replan/requirements.md` R8); **reinstated 2026-11-11**
+(`specs/2026-11-11-live-ingestion/requirements.md`). The design: verify signatures where supported, dedupe on event id via the
 unique constraint in §4, process idempotently, and backfill on a schedule to
 recover anything missed.
 

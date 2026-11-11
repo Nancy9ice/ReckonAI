@@ -8,9 +8,8 @@ sandbox delivers; partner signature verification; events-list retention and
 partner access; whether sandbox buyer approval can be automated. Gates 3-6.
 
 **1. Documents and prerequisites.** Apply the amendments in `requirements.md`
-§2. Adopt the simulated-data boundary. Check `mapping_version` per record; add
-it with a migration if missing (and register any new model in
-`models/__init__.py`).
+§2. Adopt the simulated-data boundary. `mapping_version` already exists on
+`raw_payload`; no migration for it.
 
 **2. Same-day re-run rule.** `window.has_new_evidence`; watermark in
 `idempotency_key`; `schedule.enqueue_runs` and `queries.request_run` use it;

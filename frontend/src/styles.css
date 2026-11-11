@@ -570,7 +570,23 @@ details.tech { margin: 6px 0 10px; font-size: 12.5px; }
 .conf { padding: 2px 10px; border-radius: 999px; background: var(--good-bg); color: var(--good); font-size: 12px; font-weight: 650; white-space: nowrap; }
 
 @media (max-width: 1280px) { .kcards { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+/* The open drawer takes about 520px, so six cards in what is left overlap: use three. */
+.page.with-drawer .kcards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 @media (max-width: 640px) {
   .kcards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .trow { grid-template-columns: 1fr; gap: 4px; }
 }
+
+/* ---- Test transactions panel -------------------------------------------- */
+
+.head-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.judge-form { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 12px; }
+.judge-form label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+.judge-form input { padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 8px; min-width: 200px; }
+.judge-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13.5px; }
+.judge-table th, .judge-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+.judge-table th { color: var(--muted); font-weight: 600; font-size: 12px; }
+.judge-table .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+.judge-late { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.judge-late p { margin: 4px 0 8px; }
+@media (max-width: 720px) { .judge-table { display: block; overflow-x: auto; } }

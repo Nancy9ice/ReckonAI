@@ -65,3 +65,33 @@ Render separately (probe order, 18:31 UTC).
 
 Run cooldown observed: a run inside five minutes of the last answers
 `cooling_down`; the script's wording covers it.
+
+## 5. The UI button (D7)
+
+Before merge: `GET /sim/judge/enabled` answers 200 whether on or off and never
+404; the frontend typechecks and builds; in a browser the button is absent when
+the feature is off, and when on one click reaches "done" with six rows and no
+console errors; a second click on the same name creates nothing; a missing
+worker or an error shows a message and a retry, not a frozen panel.
+After merge: the same on Render, which needs the flag and is the operator's.
+
+### 5a. Results, the UI button (local stack, real sandbox, Chrome)
+
+| Check | Result |
+|---|---|
+| Absent when off | **Pass.** With the flag unset `/sim/judge/enabled` answered `false` and the button was not on the page. |
+| One click to done | **Pass.** The panel showed "Placing your orders...", then "fetched directly" (no webhook locally), then "Done. All six are in", with the six rows in plain wording. The first request takes about 40s, so the panel shows busy for that long. |
+| Findings in the queue | **Pass.** After Run reconciliation: `JUDGE-...-S2`, `S5`, `S6` appeared; `S1`, `S3` did not; `S4` is not an exception so is not in the queue. |
+| Console | Only AG Grid's licence notice, which is this local build having no licence key; unrelated. |
+| Not exercised in the browser | A second click on the same name (covered by tests); the late-refund button (covered through the API earlier); an error state; a phone-width layout. |
+
+### 5b. The refund button and the cooldown (local stack, real sandbox, Chrome)
+
+| Check | Result |
+|---|---|
+| First run | **Pass.** S4 read `awaiting_evidence`; S2, S5, S6 were exceptions. |
+| Deliver PayPal's refund | **Pass.** Panel showed "PayPal's refund is in. Run reconciliation again; that order should clear." |
+| Second run | **Pass, after a fix.** With the 5-minute cooldown it answered "a check finished a moment ago" and the judge would have had to wait. Cooldown default lowered to 10s (requirements section 5); the next click ran at once and S4 cleared, leaving only the three exceptions. |
+| Second press | **Pass.** "PayPal's refund was already delivered for this name." No second PayPal refund. |
+| Name memory | A name saved in the browser was offered again on a fresh database and worked. |
+Not tested: a phone-width layout, and an error state in the panel.

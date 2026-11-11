@@ -116,6 +116,10 @@ def capture_live_order(
         )
     client_id, secret, base, bn = resolved
     ref = order_ref or f"LIVE-{uuid.uuid4().hex[:8].upper()}"
+    # Random when the caller names no order; fixed per named order. For a named
+    # order, a retry after a timeout must return the order already created, not
+    # make a second one matching the same marketplace reference.
+    request_id = f"reckonai-{ref}"[:100] if order_ref else uuid.uuid4().hex
 
     with httpx.Client(timeout=timeout) as http:
         basic = base64.b64encode(f"{client_id}:{secret}".encode()).decode()
@@ -150,7 +154,8 @@ def capture_live_order(
             # **Unique per request.** PayPal treats this as an idempotency
             # key, and a repeated value replays the cached first response -
             # which during a demo would silently show the same order twice.
-            "PayPal-Request-Id": uuid.uuid4().hex,
+            # (A caller-named order is the exception: see `request_id`.)
+            "PayPal-Request-Id": request_id,
         }
         created = http.post(
             f"{base}/v2/checkout/orders",
@@ -180,14 +185,28 @@ def capture_live_order(
 
         order_id = order["id"]
         first = payees[0][0]
-        readback = http.get(
-            f"{base}/v2/checkout/orders/{order_id}",
-            headers={
-                "Authorization": f"Bearer {bearer}",
-                "PayPal-Partner-Attribution-Id": bn,
-                "PayPal-Auth-Assertion": _assertion(client_id, first),
-            },
-        )
+        # The order exists now, so a slow read must not abandon it: try the
+        # readback three times before giving up, and name the order if it fails.
+        readback = None
+        for attempt in range(3):
+            try:
+                readback = http.get(
+                    f"{base}/v2/checkout/orders/{order_id}",
+                    headers={
+                        "Authorization": f"Bearer {bearer}",
+                        "PayPal-Partner-Attribution-Id": bn,
+                        "PayPal-Auth-Assertion": _assertion(client_id, first),
+                    },
+                )
+                break
+            except httpx.HTTPError as exc:
+                if attempt == 2:
+                    raise CaptureUnavailable(
+                        f"order {order_id} was created but could not be read "
+                        f"back: {type(exc).__name__}"
+                    ) from exc
+                time.sleep(1.0)
+        assert readback is not None
         # The readback carries the payee, which the creation response omits -
         # and the payee is the join the reconciliation rests on.
         final = readback.json() if readback.status_code == 200 else order

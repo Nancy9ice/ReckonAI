@@ -200,7 +200,42 @@ export interface GridAssistantResult {
   explanation: string;
 }
 
+export interface JudgeRow {
+  ref: string;
+  case: string;
+  expected: string;
+  placed: boolean;
+  paypal_side_ingested: boolean;
+  path: "webhook" | "fallback" | null;
+  refund_step_done: boolean;
+}
+
+export interface JudgeState {
+  name: string;
+  scenarios: JudgeRow[];
+  complete: boolean;
+  error?: string;
+  late_refund?: string;
+}
+
 export const api = {
+  judgeEnabled: () =>
+    request<{ enabled: boolean }>("/sim/judge/enabled").then((r) => r.enabled),
+  judgeCreate: (name: string) =>
+    request<JudgeState>("/sim/judge/scenarios", {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    }),
+  judgeIngest: (name: string) =>
+    request<JudgeState>(
+      `/sim/judge/scenarios/${encodeURIComponent(name)}/ingest-missing`,
+      { method: "POST" },
+    ),
+  judgeLateRefund: (name: string) =>
+    request<JudgeState>(
+      `/sim/judge/scenarios/${encodeURIComponent(name)}/late-refund`,
+      { method: "POST" },
+    ),
   investigateMany: (exceptionIds: string[], skipSettled: boolean) =>
     request<BulkInvestigate>("/api/investigations", {
       method: "POST",

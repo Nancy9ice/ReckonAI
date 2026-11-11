@@ -16,6 +16,7 @@ from collections.abc import Iterator
 from types import SimpleNamespace
 from typing import Any
 
+import httpx2 as httpx
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
@@ -173,6 +174,26 @@ def test_a_failure_keeps_progress_and_the_next_call_resumes(
     _ensure(session, tenant_id, gw)
     assert _orders(session, tenant_id) == 6
     assert len(gw.created) == 6 and len(set(gw.created)) == 6, "none placed twice"
+
+
+def test_a_network_error_keeps_the_orders_already_placed(
+    session: Session, tenant_id: uuid.UUID
+) -> None:
+    gw = Gateway()
+    real = gw.create_order
+
+    def flaky(**kw: Any) -> capture.LiveOrder:
+        if len(gw.created) == 2:
+            raise httpx.ReadTimeout("slow")
+        return real(**kw)
+
+    gw.create_order = flaky  # type: ignore[method-assign]
+    out = _ensure(session, tenant_id, gw)
+    assert out["complete"] is False and out["error"] == "slow"
+    assert _orders(session, tenant_id) == 2, "what was placed stays"
+    gw.create_order = real  # type: ignore[method-assign]
+    _ensure(session, tenant_id, gw)
+    assert _orders(session, tenant_id) == 6
 
 
 def test_no_paypal_refund_is_made_before_the_order_has_arrived(
@@ -387,3 +408,29 @@ def test_the_existing_write_routes_still_need_their_secret(
     get_settings.cache_clear()
     response = http.post("/sim/marketplace/live/orders", json={})
     assert response.status_code == 403
+
+
+def test_the_enabled_probe_answers_either_way(
+    http: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _enable(monkeypatch, on=False)
+    off = http.get("/sim/judge/enabled")
+    assert off.status_code == 200 and off.json() == {"enabled": False}
+    _enable(monkeypatch)
+    assert http.get("/sim/judge/enabled").json() == {"enabled": True}
+
+
+def test_a_spoofed_forwarded_header_does_not_mint_a_new_client(
+    http: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _enable(monkeypatch, JUDGE_SETS_PER_CLIENT_PER_DAY="1")
+    first = http.post(
+        "/sim/judge/scenarios", json={"name": "one"},
+        headers={"X-Forwarded-For": "1.1.1.1"},
+    )
+    assert first.status_code == 200
+    second = http.post(
+        "/sim/judge/scenarios", json={"name": "two"},
+        headers={"X-Forwarded-For": "2.2.2.2"},
+    )
+    assert second.status_code == 429, "the same caller, however the header reads"

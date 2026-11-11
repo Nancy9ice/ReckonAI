@@ -243,8 +243,14 @@ def ensure(
     try:
         for sc in SCENARIOS:
             _advance(session, tenant_id, name, sc, gateway)
-    except (write_side.WriteError, capture.CaptureUnavailable) as exc:
-        error = str(exc)
+    except (
+        write_side.WriteError,
+        capture.CaptureUnavailable,
+        httpx.HTTPError,
+    ) as exc:
+        # A network error mid-way keeps what was already placed: the caller
+        # commits, and the next call resumes.
+        error = str(exc) or type(exc).__name__
     out = status(session, tenant_id, name)
     if error:
         out["error"] = error
@@ -477,11 +483,14 @@ def _session(request: Request) -> Iterator[Session]:
 
 
 def _client(request: Request) -> str | None:
-    """A short hash of the caller's address; the address itself is not stored."""
-    forwarded = request.headers.get("x-forwarded-for", "")
-    host = forwarded.split(",")[0].strip() or (
-        request.client.host if request.client else ""
-    )
+    """A short hash of the caller's address; the address itself is not stored.
+
+    `request.client.host` only: uvicorn's proxy-headers handling has already
+    resolved it from the forwarded chain. Reading `X-Forwarded-For` here would
+    trust its leftmost entry, which the caller writes, so a changed header would
+    be a fresh client and the per-client cap would mean nothing.
+    """
+    host = request.client.host if request.client else ""
     return hashlib.sha256(host.encode()).hexdigest()[:16] if host else None
 
 
@@ -516,6 +525,13 @@ def _run(session: Session, call: Any) -> dict[str, Any]:
     # and the next call resumes.
     session.commit()
     return out
+
+
+@router.get("/enabled")
+def get_enabled() -> dict[str, bool]:
+    """Whether the feature is on. Always answers, so the UI can decide to show
+    its button without reading a 404 as an error."""
+    return {"enabled": get_settings().judge_scenarios_enabled}
 
 
 @router.post("/scenarios")

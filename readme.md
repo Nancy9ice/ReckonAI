@@ -59,36 +59,66 @@ agent runs on OpenAI (`gpt-4.1`) or Anthropic, selectable by setting.
 
 ## Try it yourself
 
-Create your own live transactions and watch ReckonAI handle each. Needs only
-Python 3 and `scripts/judge_scenarios.py` from this repository:
+Create your own live transactions on the demo and watch ReckonAI handle each.
+The PayPal side is real: each order is a real PayPal sandbox order (no real
+money moves). The marketplace side is simulated: ReckonAI books the matching
+marketplace records, and for some orders deliberately gets them wrong, so there
+is something to find.
 
-```
-python3 scripts/judge_scenarios.py --name yourname
-```
-
-It places six real PayPal sandbox orders under your name and waits for them to
-arrive (by webhook, or fetched directly if one is slow; it says which). Then, on
-the live demo, filter the queue by `JUDGE-YOURNAME`, click **Run
-reconciliation**, and **Investigate** any exception. A different name gets a
-new set; the same name again creates nothing.
+1. Click **Create test transactions** (top right). Keep the name offered or pick
+   your own (letters and digits, up to 12), then press **Create my test
+   transactions**.
+2. Wait about a minute. The panel places six orders, waits for each to reach
+   ReckonAI (by webhook, or fetched directly if one is slow; the table says
+   which), and tells you when it is done. A different name gets a fresh set;
+   the same name again creates nothing.
+3. Click **Run reconciliation**, then search the queue for `JUDGE-YOURNAME`.
+   This finds and classifies the exceptions. It does not investigate them.
+4. Investigate them yourself: open an exception and press **Ask the AI to
+   investigate**, or tick several rows and use **Investigate selected**. Each
+   takes a few seconds, and the report appears in the same drawer.
 
 | Order | What it is | Expected |
 |---|---|---|
 | `S1-CLEAN` | Correct 10% commission | no finding |
-| `S2-COMMISSION` | Marketplace books 15.00 where PayPal's fee is 10.00 | commission mismatch |
+| `S2-COMMISSION` | Marketplace books 15.00 where PayPal's fee is 10.00 | commission differs from the rule |
 | `S3-HELD` | Delayed disbursement, funds held | no finding |
-| `S4-LATE-REFUND` | Marketplace refund recorded, PayPal's not yet available | awaiting evidence, not an exception |
-| `S5-NO-LEDGER` | Refund made at PayPal, ledger never adjusted | missing ledger adjustment |
-| `S6-DUPLICATE` | Sale credited twice | duplicate ledger entry |
+| `S4-LATE-REFUND` | Marketplace refund recorded, PayPal's not yet available | waiting for PayPal's record, not an exception |
+| `S5-NO-LEDGER` | Refund made at PayPal, ledger never adjusted | refund not booked to the seller |
+| `S6-DUPLICATE` | Sale credited twice | same payment booked twice |
 
-Run `--late-refund` after a reconciliation, then reconcile again: S4's finding
-clears. If Run reconciliation says nothing is new or a run is cooling down
-(five minutes), an earlier run already covers your orders. Foreign currency and
-disbursement shortfalls are on the seeded orders (ORD-0015, ORD-0008, ORD-0018).
+**To see a finding wait and then clear (S4):** after your first reconciliation,
+press **Deliver PayPal's refund** in the same panel, then click **Run
+reconciliation** again. S4's waiting finding disappears. Pressing the button
+before the first run is harmless, but S4 then never shows as waiting.
+
+If Run reconciliation says nothing is new, an earlier run already covers your
+orders. If it says a check just finished, try again shortly.
+
+Foreign currency and disbursement shortfalls are on the seeded orders
+(ORD-0015, ORD-0008, ORD-0018).
+
+Then explore what the queue offers:
+
+- **Open any exception** to see the figures from each side ("PayPal settled"
+  against "Marketplace recorded"), what it means, and what to do about it.
+- **Evidence**, from the same drawer: the PayPal and marketplace records behind
+  the finding, including the raw payload.
+- **Investigate**, then read the report: ranked causes, each citing the records
+  it rests on. Click a cited reference to open that record.
+- **Approve or reject** a finding. The approver is a typed name, not a sign-in,
+  and the decision stays in a history that is never edited.
+- **Ask the queue** in plain English (for example "confirmed FX issues" or
+  "group by seller"). It only changes the view; no record or amount is sent to
+  the model.
+- **Filter, group, save a view, or export** the queue and the decision log as CSV.
+- **Coverage** shows what the checks have and have not examined, and what is
+  waiting on a record that has not arrived. **Past checks** lists every run;
+  open one to see the queue as that run left it.
 
 ## What was measured
 
-- The test suite (2088 tests), `ruff`, strict `mypy` and the frontend build pass.
+- The test suite (2089 tests), `ruff`, strict `mypy` and the frontend build pass.
 - `uv run python -m reckonai.eval` (free): the six seeded faults are all found
   with exact impacts, and none of the 12 clean orders is flagged.
 - The AI's root-cause accuracy was scored **once, on one model, and is not a

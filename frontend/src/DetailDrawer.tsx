@@ -129,6 +129,31 @@ export default function DetailDrawer({ id, onChanged, onClose }: Props) {
     }
     const inv = detail.investigation_detail;
     const top = inv?.causes.find((c) => c.rank === 1);
+    // The top cause is shown once, in the "Probable cause" box with its
+    // citations; the list below it is only the alternatives.
+    const others = inv?.causes.filter((c) => c !== top) ?? [];
+    const refs = (c: { cited_refs: string[]; unresolved_refs: string[] }) => (
+      <div className="refs">
+        {c.cited_refs.map((r) =>
+          c.unresolved_refs.includes(r) ? (
+            <code key={r} className="unresolved">
+              <span title="The AI cited an id that is not in the records, so do not rely on it.">
+                {r} (not found in the records)
+              </span>
+            </code>
+          ) : (
+            <button
+              key={r}
+              className="ref"
+              title="Open this record"
+              onClick={() => setOpenRef(r)}
+            >
+              {r}
+            </button>
+          ),
+        )}
+      </div>
+    );
     const copy = typeCopy(detail.code);
 
     return (
@@ -286,40 +311,27 @@ export default function DetailDrawer({ id, onChanged, onClose }: Props) {
                   </span>
                 </div>
                 <p>{top.description}</p>
+                {refs(top)}
               </div>
             )}
-            <ol className="causes">
-              {inv.causes.map((c) => (
-                <li key={c.rank}>
-                  <div>
-                    {c.description}{" "}
-                    <span className="muted">
-                      ({formatFraction(c.confidence)} sure)
-                    </span>
-                  </div>
-                  <div className="refs">
-                    {c.cited_refs.map((r) =>
-                      c.unresolved_refs.includes(r) ? (
-                        <code key={r} className="unresolved">
-                          <span title="The AI cited an id that is not in the records, so do not rely on it.">
-                            {r} (not found in the records)
-                          </span>
-                        </code>
-                      ) : (
-                        <button
-                          key={r}
-                          className="ref"
-                          title="Open this record"
-                          onClick={() => setOpenRef(r)}
-                        >
-                          {r}
-                        </button>
-                      ),
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ol>
+            {others.length > 0 && (
+              <>
+                {top && <p className="muted">Other possible causes</p>}
+                <ol className="causes">
+                  {others.map((c) => (
+                    <li key={c.rank}>
+                      <div>
+                        {c.description}{" "}
+                        <span className="muted">
+                          ({formatFraction(c.confidence)} sure)
+                        </span>
+                      </div>
+                      {refs(c)}
+                    </li>
+                  ))}
+                </ol>
+              </>
+            )}
             {inv.summarized_reasoning && inv.verdict !== "failed" && (
               <details>
                 <summary>How the AI reasoned</summary>

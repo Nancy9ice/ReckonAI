@@ -52,6 +52,16 @@ reassesses it (new evidence, then the finding clears).
   scenarios in place; the next call completes the rest. PayPal is called
   first, so nothing is booked for an order PayPal refused.
 
+- **D7. The judge path is a button in the deployed UI, not the script.** Judges
+  test the deployed version and will not run anything locally. A header button
+  ("Create test transactions") opens a panel with a name field (a random
+  default, remembered in the browser). One click calls the same routes, polls
+  until the set is in, falls back to `ingest-missing` after 60s, and reports
+  done with the six refs and what each should show. A second button delivers
+  S4's PayPal refund. The button is shown only when `GET /sim/judge/enabled`
+  says the feature is on. The script stays for scripted use; the readme leads
+  with the button. All wording is in `copy.ts`.
+
 ## 3. Context
 
 - Webhook proven on Render, 2026-11-11 18:31 UTC: signed delivery verified,
@@ -73,3 +83,13 @@ reassesses it (new evidence, then the finding clears).
 - A live `DELAYED` order for a connected seller classifies as clean.
 - S4 reads `awaiting_evidence` from live data, not only from the seed.
 - Held by the operator: setting `JUDGE_SCENARIOS_ENABLED` on Render.
+
+## 5. Amendment: the run cooldown (found in the browser test)
+
+Live-ingestion D8 set a five-minute `RUN_COOLDOWN_SECONDS`. With several judges
+it blocks the main flow, not only the refund step: a run by one judge held back
+the next judge's click on new orders, and "run, deliver the refund, run again"
+hit it every time. D9 says no automatic run trigger exists, so the cooldown only
+ever guarded the person's button, and the `nothing_new` rule already refuses a
+run without new evidence. **Default lowered to 10 seconds**, enough to absorb a
+double-click, not enough to make anyone wait. The cron is unaffected.

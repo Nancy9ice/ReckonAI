@@ -129,6 +129,22 @@ def last_completed_watermark(
     ).first()
 
 
+def has_new_evidence(
+    session: Session, tenant_id: uuid.UUID, since: datetime | None
+) -> bool:
+    """Whether any payload was retrieved after `since`.
+
+    **This is clause 2's own test**, asked as a yes or no, so the question
+    "may a same-day run happen" and the selection that run performs cannot
+    disagree about what counts as new. `since=None` means no completed run
+    exists, so any payload at all is new.
+    """
+    query = select(RawPayload.id).where(RawPayload.tenant_id == tenant_id)
+    if since is not None:
+        query = query.where(RawPayload.retrieved_at > since)
+    return session.scalars(query.limit(1)).first() is not None
+
+
 def orders_in_window(
     session: Session, tenant_id: uuid.UUID, win: Window
 ) -> frozenset[str]:

@@ -97,8 +97,15 @@ def test_the_job_payload_carries_the_window_and_one_flag_and_no_money(
     job = session.scalars(select(Job)).one()
 
     # The window, and `auto_investigate` (Block F, D17): a boolean asking the
-    # worker to queue investigations afterwards. Still nothing monetary.
-    assert set(job.payload) == {"window_start", "window_end", "auto_investigate"}
+    # worker to queue investigations afterwards, and `evidence_since`, the
+    # watermark the run will read (a timestamp or null; live-ingestion section
+    # 4). Still nothing monetary.
+    assert set(job.payload) == {
+        "window_start",
+        "window_end",
+        "evidence_since",
+        "auto_investigate",
+    }
     assert job.payload["auto_investigate"] is True
     parsed = reconcile_job._window_from(job.payload)
     assert parsed.end - parsed.start == timedelta(days=2)

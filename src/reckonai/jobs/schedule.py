@@ -73,7 +73,10 @@ def window_ending(now: datetime, *, days: int) -> window.Window:
 
 
 def enqueue_runs(session: Session, *, days: int) -> list[uuid.UUID]:
-    """Enqueue one run per tenant, skipping any window already reconciled.
+    """Enqueue one run per tenant, unless `decide_run` says not to.
+
+    A window already reconciled is skipped unless evidence has arrived since
+    (the same-day re-run rule, `reconcile_job.decide_run`).
 
     **One job per tenant, committed per tenant**, rather than one job that
     loops over tenants: a tenant whose reconciliation fails must not stop
@@ -89,10 +92,18 @@ def enqueue_runs(session: Session, *, days: int) -> list[uuid.UUID]:
         # handler would refuse. Enqueueing regardless would be correct but
         # noisy: every hourly tick would add a job that fails on the
         # constraint, and a queue full of expected failures hides a real one.
-        if _already_reconciled(session, tenant_id, win):
+        decision = reconcile_job.decide_run(
+            session,
+            tenant_id,
+            win,
+            now=datetime.now(UTC),
+            cooldown_seconds=get_settings().run_cooldown_seconds,
+        )
+        if decision.verdict is not reconcile_job.RunVerdict.PERMITTED:
             logger.info(
                 event(
                     "reckonai.jobs.schedule.skipped",
+                    reason=str(decision.verdict),
                     tenant_id=str(tenant_id),
                     window_start=win.start.date().isoformat(),
                     window_end=win.end.date().isoformat(),
@@ -104,13 +115,9 @@ def enqueue_runs(session: Session, *, days: int) -> list[uuid.UUID]:
             session,
             tenant_id=tenant_id,
             job_type=reconcile_job.JOB_TYPE,
-            payload={
-                "window_start": win.start.isoformat(),
-                "window_end": win.end.isoformat(),
-                # The nightly run investigates what it finds, within the cap
-                # `settings.auto_investigate_max` (see `investigation_job`).
-                "auto_investigate": True,
-            },
+            # The nightly run investigates what it finds, within the cap
+            # `settings.auto_investigate_max` (see `investigation_job`).
+            payload=reconcile_job.payload_for(decision.window, auto_investigate=True),
         )
         # **Committed per tenant, and that is the point of the loop.** Code
         # review found the isolation claim below false at enqueue time: one
@@ -129,29 +136,6 @@ def enqueue_runs(session: Session, *, days: int) -> list[uuid.UUID]:
         )
 
     return enqueued
-
-
-def _already_reconciled(
-    session: Session, tenant_id: uuid.UUID, win: window.Window
-) -> bool:
-    """Whether this tenant's window already has its dedupe marker.
-
-    A read, so it races: two cron invocations could both see no marker. That
-    is safe rather than tolerated - the handler inserts the marker inside its
-    own transaction, so the second job fails on the constraint and writes
-    nothing. This check keeps the queue readable; the constraint is what keeps
-    it correct.
-    """
-    from reckonai.models import ProcessedEvent
-
-    key = reconcile_job.idempotency_key(tenant_id, win)
-    existing = session.scalars(
-        select(ProcessedEvent.id).where(
-            ProcessedEvent.tenant_id == tenant_id,
-            ProcessedEvent.event_id == key,
-        )
-    ).first()
-    return existing is not None
 
 
 def main(argv: list[str] | None = None) -> int:

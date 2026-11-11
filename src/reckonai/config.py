@@ -104,6 +104,13 @@ class Settings(BaseSettings):
     # investigates by itself.
     auto_investigate_max: int = Field(default=25, ge=0)
 
+    #: Minimum seconds between two runs over the same dates. The same-day
+    #: re-run rule (`specs/2026-11-11-live-ingestion/requirements.md` section
+    #: 4) permits a run when new evidence has arrived; this stops a burst of
+    #: events from producing a run per event. Evidence that arrives during the
+    #: cooldown is not lost, the first run after it examines it. 0 disables.
+    run_cooldown_seconds: int = Field(default=300, ge=0)
+
     # Both optional, and the service runs without either - the same shape as
     # `marketplace_base_url`, and for the same reason: the web service and the
     # worker both read this object and neither makes a model call. The agent

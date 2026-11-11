@@ -76,8 +76,10 @@ one function in `jobs/window.py`, used by `schedule.enqueue_runs` and
 `already_done`. The "not examined until tomorrow's run" wording in
 `queries.py` and `frontend/src/copy.ts` becomes false and changes.
 
-**Known effects.** Old-format keys will not match: one extra run is possible
-once on deploy day (harmless). Run-now (whole dataset) and the cron (2-day
+**Known effects.** A key in the old format counts as a run over those dates,
+so deploy day does not allow an extra run. The job payload carries the
+watermark read at enqueue (`payload_for`), so two jobs queued against one state
+of the evidence share a key even after the first moves the watermark. Run-now (whole dataset) and the cron (2-day
 window) have different date components and do not collide.
 
 ## 5. Webhook receiver

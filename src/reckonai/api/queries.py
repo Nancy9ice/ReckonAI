@@ -19,6 +19,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from reckonai.api import schemas
+from reckonai.config import get_settings
 from reckonai.jobs import investigation_job, queue
 from reckonai.models import (
     ExceptionDecision,
@@ -27,7 +28,6 @@ from reckonai.models import (
     Job,
     Order,
     OrderItem,
-    ProcessedEvent,
     ReconciliationException,
     ReconciliationRun,
     Seller,
@@ -610,6 +610,22 @@ def coverage(session: Session, tenant_id: uuid.UUID) -> schemas.CoverageOut:
     )
 
 
+#: What a refused run request says. Plain words for the reader of the page.
+_RUN_REFUSAL = {
+    "already_done": (
+        "This check has already run over the same records, so nothing was queued."
+    ),
+    "nothing_new": (
+        "Nothing new has arrived since the last check, so nothing was queued. "
+        "A new day starts a new check on its own."
+    ),
+    "cooling_down": (
+        "New records have arrived, but a check finished a moment ago. Try again "
+        "in a few minutes; the next check will include them."
+    ),
+}
+
+
 def request_run(session: Session, tenant_id: uuid.UUID) -> schemas.RunRequestOut:
     """Queue a reconciliation over every order the tenant has.
 
@@ -652,24 +668,20 @@ def request_run(session: Session, tenant_id: uuid.UUID) -> schemas.RunRequestOut
         {"key": f"run:{tenant_id}"},
     )
 
-    key = reconcile_job.idempotency_key(tenant_id, win)
-    done = session.scalar(
-        select(ProcessedEvent.id).where(
-            ProcessedEvent.tenant_id == tenant_id, ProcessedEvent.event_id == key
-        )
+    decision = reconcile_job.decide_run(
+        session,
+        tenant_id,
+        win,
+        now=datetime.now(UTC),
+        cooldown_seconds=get_settings().run_cooldown_seconds,
     )
-    if done is not None:
+    if decision.verdict is not reconcile_job.RunVerdict.PERMITTED:
         return schemas.RunRequestOut(
-            status="already_done",
+            status=str(decision.verdict),
             window_start=win.start,
             window_end=win.end,
             job=None,
-            message=(
-                "This window was already reconciled today, so nothing was "
-                "queued. A run is date-grained by design: anything ingested "
-                "since is not examined until tomorrow's run, and Coverage "
-                "lists it as not yet examined."
-            ),
+            message=_RUN_REFUSAL[decision.verdict],
         )
 
     in_flight = session.scalar(
@@ -695,10 +707,7 @@ def request_run(session: Session, tenant_id: uuid.UUID) -> schemas.RunRequestOut
         session,
         tenant_id=tenant_id,
         job_type=reconcile_job.JOB_TYPE,
-        payload={
-            "window_start": win.start.isoformat(),
-            "window_end": win.end.isoformat(),
-        },
+        payload=reconcile_job.payload_for(decision.window),
     )
     return schemas.RunRequestOut(
         status="queued",

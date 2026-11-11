@@ -220,7 +220,7 @@ class CoverageOut(BaseModel):
 
 
 class RunRequestOut(BaseModel):
-    #: queued, in_flight, already_done or no_orders.
+    #: queued, in_flight, already_done, nothing_new, cooling_down or no_orders.
     status: str
     window_start: datetime | None
     window_end: datetime | None

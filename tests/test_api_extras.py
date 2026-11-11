@@ -198,7 +198,10 @@ def test_once_done_today_a_second_request_is_answered_not_queued(
     job.status = "done"
     session.flush()
     again = client.post("/api/runs").json()
-    assert again["status"] == "already_done"
+    # The same-day re-run rule: nothing has been retrieved since the run, so a
+    # second run over the same dates is answered, not queued. (Before the rule
+    # this was "already_done"; that status now means the exact same key.)
+    assert again["status"] == "nothing_new"
     assert again["job"] is None
 
 

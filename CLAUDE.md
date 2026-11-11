@@ -77,6 +77,13 @@ moves to `/service`). Things not to re-derive:
 - **The grid assistant is display-only**: no record or amount is sent, and
   aggregation and pivot are excluded from its schema. It runs on the **web**
   service, so the model credential is declared there as well as on the worker.
+- **The open row's highlight is a style keyed to its id**, written by `QueueView`
+  from the `--row-open-*` tokens in `styles.css`, not a class from `getRowClass`:
+  on the deployed site the grid did not re-run that class, so every row opened
+  stayed blue (PR #33), though it never reproduced on a local build. Ticked rows
+  keep the grid's own selected shading (`theme.ts`); the open row is a tint with a
+  left bar so the two differ. **Check on the deployed site after PR #33 merges**
+  that opening several rows leaves one highlighted.
 - **`evidence.py` is the one `api/` module allowed to name money tables**, and a
   test holds it to read-only. The P6 guard otherwise forbids them.
 - **AG Grid licence** is the build-time `VITE_AG_GRID_LICENSE_KEY` (local

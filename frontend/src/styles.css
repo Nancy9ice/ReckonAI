@@ -22,6 +22,11 @@
   --radius: 14px;
   --shadow: 0 1px 2px rgba(0, 28, 100, 0.06), 0 6px 20px rgba(0, 28, 100, 0.06);
   --drawer: 480px;
+  /* The row whose details are open: a light tint and a bar on its left edge.
+     Ticked rows keep the grid's own selected shading (see theme.ts), so the two
+     are not the same blue. `QueueView` writes the rule that applies these. */
+  --row-open-bg: #f2f8fd;
+  --row-open-bar: var(--blue);
 }
 
 * {
@@ -210,7 +215,8 @@ input, select {
 /* ---- Grid --------------------------------------------------------------- */
 
 .grid-wrap { margin-top: 4px; }
-.row-open { background: #e3f0fb !important; }
+/* The open row is styled by a rule `QueueView` writes for its id, using the
+   --row-open-* tokens above. */
 
 .pill {
   display: inline-block;

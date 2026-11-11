@@ -268,6 +268,14 @@ export default function QueueView({
         </div>
       ) : (
         <div className="grid-wrap">
+          {/* The open row's highlight is a style keyed to its id, not a class the
+              grid applies. The grid sets `row-id` on every row, and a class from
+              `getRowClass` is only re-evaluated when the grid decides to: on the
+              deployed site it did not, so every row opened stayed blue. A rule
+              that names one row cannot go stale. */}
+          {selectedId !== null && (
+            <style>{`.ag-row[row-id="${CSS.escape(selectedId)}"] { background: var(--row-open-bg); box-shadow: inset 4px 0 0 var(--row-open-bar); }`}</style>
+          )}
           <AgGridReact<ExceptionRow>
             theme={gridTheme}
             rowData={visible}
@@ -295,7 +303,6 @@ export default function QueueView({
             onRowClicked={(e: RowClickedEvent<ExceptionRow>) =>
               e.data && onSelect(e.data.id)
             }
-            getRowClass={(p) => (p.data?.id === selectedId ? "row-open" : "")}
             groupDefaultExpanded={1}
             autoGroupColumnDef={{
               headerName: "Group",

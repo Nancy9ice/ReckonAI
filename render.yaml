@@ -129,6 +129,10 @@ services:
         sync: false
       - key: PAYPAL_BN_CODE
         sync: false
+      # The id of the webhook registered with PayPal for this service. Without
+      # it every delivery is refused (live-ingestion F2).
+      - key: PAYPAL_WEBHOOK_ID
+        sync: false
       - key: LOG_LEVEL
         value: INFO
 
@@ -168,6 +172,16 @@ services:
       # off. Skipped, with a warning, if no model credential is set here.
       - key: AUTO_INVESTIGATE_MAX
         value: "25"
+
+      # The worker re-fetches an order when a webhook event names it
+      # (live-ingestion F4, F6), so it reads PayPal. Sandbox only; the client
+      # refuses any other host. `sync: false`: never in the repository.
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_BN_CODE
+        sync: false
 
       # The investigation agent runs here, as a queued job (Block F D2), so
       # the credential belongs on the worker and nowhere else. `sync: false`:

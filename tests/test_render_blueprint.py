@@ -236,6 +236,9 @@ def test_every_paypal_variable_is_declared_without_a_value(
         "PAYPAL_CLIENT_ID",
         "PAYPAL_CLIENT_SECRET",
         "PAYPAL_BN_CODE",
+        # Live ingestion: the registered webhook's id, which the signature
+        # check is made against (specs/2026-11-11-live-ingestion F2).
+        "PAYPAL_WEBHOOK_ID",
     }, declared
 
 

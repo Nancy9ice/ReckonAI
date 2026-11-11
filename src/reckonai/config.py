@@ -82,6 +82,12 @@ class Settings(BaseSettings):
     paypal_bn_code: str | None = None
     paypal_api_base: str = "https://api-m.sandbox.paypal.com"
 
+    #: The id of the webhook registered with PayPal for this service. The
+    #: signature check is made against it, and **without it every delivery is
+    #: refused**: an unverifiable event is never accepted on a guess
+    #: (`specs/2026-11-11-live-ingestion/requirements.md` F2).
+    paypal_webhook_id: str | None = None
+
     # ---- The investigation agent (Block E) --------------------------------
     #
     # **The model lives here rather than in code**, by the dated 2026-11-10

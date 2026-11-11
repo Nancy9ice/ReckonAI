@@ -31,6 +31,7 @@ from reckonai.config import get_settings
 from reckonai.db import check_connection, create_app_engine
 from reckonai.logging import configure_logging, event
 from reckonai.sim import router as sim_router
+from reckonai.webhooks import router as webhooks_router
 
 # This component's share of the connection budget. The cap it is drawn against
 # is `reckonai.db.USABLE_CONNECTIONS`; see that module and the phase's
@@ -90,6 +91,10 @@ app.include_router(sim_router, prefix="/sim")
 
 # The product's own read API (Block F). Distinct from `/sim`, which feeds data in.
 app.include_router(api_router)
+
+# PayPal webhook deliveries (live-ingestion F1). Public by necessity: PayPal
+# cannot authenticate to us, so the signature check is the only gate.
+app.include_router(webhooks_router)
 
 
 # The dashboard's built assets, when there is a build. The page itself is

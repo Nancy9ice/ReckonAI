@@ -15,7 +15,7 @@ from collections.abc import Callable
 
 from sqlalchemy.orm import Session
 
-from reckonai.jobs import investigation_job, queue, reconcile_job
+from reckonai.jobs import investigation_job, paypal_event_job, queue, reconcile_job
 from reckonai.jobs.reconcile_job import AlreadyReconciled
 from reckonai.logging import event
 from reckonai.models import Job
@@ -40,7 +40,14 @@ def _handle_investigation(
     investigation_job.execute(session, tenant_id=tenant_id, payload=payload)
 
 
+def _handle_paypal_event(
+    session: Session, tenant_id: uuid.UUID, payload: dict[str, object]
+) -> None:
+    paypal_event_job.execute(session, tenant_id=tenant_id, payload=payload)
+
+
 HANDLERS: dict[str, Handler] = {
+    paypal_event_job.JOB_TYPE: _handle_paypal_event,
     reconcile_job.JOB_TYPE: _handle_reconciliation_run,
     investigation_job.JOB_TYPE: _handle_investigation,
 }
@@ -91,7 +98,7 @@ def dispatch(session: Session, job: Job) -> bool:
         handler(session, job.tenant_id, dict(job.payload))
         queue.complete(session, job)
         session.commit()
-    except AlreadyReconciled as exc:
+    except (AlreadyReconciled, paypal_event_job.AlreadyProcessed) as exc:
         # Not a failure: the window is done, so the job is done. Retrying it
         # would hit the same constraint three more times and leave a terminal
         # `failed` row that reads like a defect.

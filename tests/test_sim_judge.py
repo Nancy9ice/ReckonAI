@@ -12,16 +12,21 @@ import copy
 import json
 import pathlib
 import uuid
+from collections.abc import Iterator
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from reckonai.app import app
+from reckonai.config import get_settings
 from reckonai.models import Order, RawPayload
 from reckonai.paypal import capture
 from reckonai.sim import data, judge, seed
+from reckonai.sim import live as write_side
 
 FIXTURE = (
     pathlib.Path(__file__).resolve().parent.parent
@@ -270,3 +275,94 @@ def test_everything_is_labelled_simulated(
     assert marketplace and {p.endpoint for p in marketplace} == {
         "SIMULATED POST /sim/marketplace/live"
     }
+
+
+# --- the HTTP surface -------------------------------------------------------
+
+
+@pytest.fixture
+def http(session: Session, database_url: str) -> Iterator[TestClient]:
+    seed.build(
+        session,
+        data.Dataset(orders=()),
+        tenant_slug=data.TENANT_SLUG,
+        tenant_name="Judge",
+    )
+    session.flush()
+    gateway = Gateway()
+    app.dependency_overrides[judge._session] = lambda: session
+    app.dependency_overrides[write_side.get_gateway] = lambda: gateway
+    with TestClient(app) as client:
+        yield client
+    app.dependency_overrides.clear()
+    get_settings.cache_clear()
+
+
+def _enable(monkeypatch: pytest.MonkeyPatch, on: bool = True, **env: str) -> None:
+    monkeypatch.setenv("JUDGE_SCENARIOS_ENABLED", "true" if on else "false")
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    get_settings.cache_clear()
+
+
+def test_the_routes_are_hidden_unless_enabled(
+    http: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _enable(monkeypatch, on=False)
+    assert http.post("/sim/judge/scenarios", json={"name": "alice"}).status_code == 404
+    assert http.get("/sim/judge/scenarios/alice").status_code == 404
+    assert http.post("/sim/judge/scenarios/alice/ingest-missing").status_code == 404
+    assert http.post("/sim/judge/scenarios/alice/late-refund").status_code == 404
+
+
+def test_the_routes_need_no_secret_and_run_the_set(
+    http: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _enable(monkeypatch)
+    first = http.post("/sim/judge/scenarios", json={"name": "alice"})
+    assert first.status_code == 200 and len(first.json()["scenarios"]) == 6
+    again = http.post("/sim/judge/scenarios", json={"name": "alice"})
+    assert again.json() == first.json(), "a repeat changes nothing"
+    assert http.get("/sim/judge/scenarios/alice").json() == first.json()
+    fallback = http.post("/sim/judge/scenarios/alice/ingest-missing")
+    assert all(r["paypal_side_ingested"] for r in fallback.json()["scenarios"])
+
+
+def test_the_routes_accept_a_name_and_nothing_else(
+    http: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _enable(monkeypatch)
+    for body in (
+        {"name": "alice", "gross": "1.00"},
+        {"name": "alice", "seller_ref": "x"},
+        {},
+    ):
+        assert http.post("/sim/judge/scenarios", json=body).status_code == 422
+
+
+@pytest.mark.parametrize("bad", ["a b", "x" * 13, "al;ce"])
+def test_a_bad_name_is_a_422(
+    http: TestClient, monkeypatch: pytest.MonkeyPatch, bad: str
+) -> None:
+    _enable(monkeypatch)
+    assert http.post("/sim/judge/scenarios", json={"name": bad}).status_code == 422
+
+
+def test_past_the_cap_a_new_name_is_a_429_and_an_old_one_still_works(
+    http: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _enable(monkeypatch, JUDGE_MAX_SETS="1")
+    assert http.post("/sim/judge/scenarios", json={"name": "alice"}).status_code == 200
+    assert http.post("/sim/judge/scenarios", json={"name": "bob"}).status_code == 429
+    assert http.post("/sim/judge/scenarios", json={"name": "alice"}).status_code == 200
+
+
+def test_the_existing_write_routes_still_need_their_secret(
+    http: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _enable(monkeypatch)
+    monkeypatch.setenv("SIM_WRITE_ENABLED", "true")
+    monkeypatch.setenv("SIM_WRITE_SECRET", "s")
+    get_settings.cache_clear()
+    response = http.post("/sim/marketplace/live/orders", json={})
+    assert response.status_code == 403

@@ -19,15 +19,20 @@ here are marketplace-side `raw_payload` rows and move no money.
 
 from __future__ import annotations
 
+import hashlib
 import re
 import uuid
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Annotated, Any
 
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
+from reckonai.config import get_settings
 from reckonai.models import Order, RawPayload, Seller
 from reckonai.paypal import capture, replay
 from reckonai.paypal import live as paypal_live
@@ -426,3 +431,102 @@ def deliver_late_refund(
     out = status(session, tenant_id, name)
     out["late_refund"] = "delivered"
     return out
+
+
+# --- the HTTP surface -------------------------------------------------------
+#
+# Hidden (404) unless JUDGE_SCENARIOS_ENABLED. No secret: every route takes only
+# a name, so there is nothing a caller can aim at anything but their own set.
+
+router = APIRouter(prefix="/judge", tags=["judge scenarios"])
+
+
+class NameIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+
+
+def require_enabled() -> None:
+    if not get_settings().judge_scenarios_enabled:
+        raise HTTPException(status_code=404, detail="Not Found")
+
+
+def _session(request: Request) -> Iterator[Session]:
+    with Session(bind=request.app.state.engine) as session:
+        yield session
+
+
+def _client(request: Request) -> str | None:
+    """A short hash of the caller's address; the address itself is not stored."""
+    forwarded = request.headers.get("x-forwarded-for", "")
+    host = forwarded.split(",")[0].strip() or (
+        request.client.host if request.client else ""
+    )
+    return hashlib.sha256(host.encode()).hexdigest()[:16] if host else None
+
+
+SessionDep = Annotated[Session, Depends(_session)]
+GatewayDep = Annotated[write_side.Gateway, Depends(write_side.get_gateway)]
+EnabledDep = Annotated[None, Depends(require_enabled)]
+
+
+def _run(session: Session, call: Any) -> dict[str, Any]:
+    tenant_id = write_side._tenant(session)
+    try:
+        out: dict[str, Any] = call(tenant_id)
+    except JudgeError as exc:
+        session.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except CapReached as exc:
+        session.rollback()
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+    except (
+        write_side.WriteError,
+        capture.CaptureUnavailable,
+        paypal_live.LiveFetchError,
+        paypal_live.SnapshotUnavailable,
+        replay.ReplayError,
+    ) as exc:
+        session.rollback()
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    # Commit even when `ensure` reports an error: progress already made stays,
+    # and the next call resumes.
+    session.commit()
+    return out
+
+
+@router.post("/scenarios")
+def post_scenarios(
+    body: NameIn,
+    request: Request,
+    _on: EnabledDep,
+    session: SessionDep,
+    gateway: GatewayDep,
+) -> dict[str, Any]:
+    client = _client(request)
+    return _run(
+        session,
+        lambda t: ensure(
+            session, t, body.name, gateway, client=client, settings=get_settings()
+        ),
+    )
+
+
+@router.get("/scenarios/{name}")
+def get_scenarios(name: str, _on: EnabledDep, session: SessionDep) -> dict[str, Any]:
+    return _run(session, lambda t: status(session, t, name))
+
+
+@router.post("/scenarios/{name}/ingest-missing")
+def post_ingest_missing(
+    name: str, _on: EnabledDep, session: SessionDep, gateway: GatewayDep
+) -> dict[str, Any]:
+    return _run(session, lambda t: ingest_missing(session, t, name, gateway))
+
+
+@router.post("/scenarios/{name}/late-refund")
+def post_late_refund(
+    name: str, _on: EnabledDep, session: SessionDep, gateway: GatewayDep
+) -> dict[str, Any]:
+    return _run(session, lambda t: deliver_late_refund(session, t, name, gateway))

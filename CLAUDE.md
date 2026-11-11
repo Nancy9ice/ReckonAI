@@ -82,8 +82,9 @@ moves to `/service`). Things not to re-derive:
   on the deployed site the grid did not re-run that class, so every row opened
   stayed blue (PR #33), though it never reproduced on a local build. Ticked rows
   keep the grid's own selected shading (`theme.ts`); the open row is a tint with a
-  left bar so the two differ. **Check on the deployed site after PR #33 merges**
-  that opening several rows leaves one highlighted.
+  left bar so the two differ. **Verified on the deployed site, 2026-11-11 (deploy
+  `8d79d08`)**: five real clicks on five rows left one row highlighted, the one
+  the drawer showed, and no row carried the old class.
 - **`evidence.py` is the one `api/` module allowed to name money tables**, and a
   test holds it to read-only. The P6 guard otherwise forbids them.
 - **AG Grid licence** is the build-time `VITE_AG_GRID_LICENSE_KEY` (local
@@ -179,7 +180,9 @@ operator. Do not assume any of these; ask or check.
    webhook registered, and whether the worker and cron carry the PayPal
    credentials. The first real sandbox order placed from the deployed app is
    the first signed delivery, and settles what `validation.md` section 6 lists
-   as unproven.
+   as unproven. **As of 2026-11-11 07:25 UTC no real delivery had arrived**: the
+   only webhook lines in the web logs were two probes made from outside, and the
+   worker had logged no `paypal_event` job.
 7. **Decided by nobody yet:** whether out-of-order webhook events should be
    rescued by using the stored `COMPLETED` event as the capture-time snapshot
    (`validation.md` section 8, finding 3). It relaxes "a webhook is a

@@ -1,4 +1,4 @@
-"""Queue prioritisation: one score over the four `readme.md` 9.3 factors.
+"""Queue prioritisation: one score over the four `product_idea.md` 9.3 factors.
 
 `specs/2026-11-10-queue-approval-dashboard/requirements.md` D6.
 

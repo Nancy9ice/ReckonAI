@@ -23,7 +23,7 @@ The rejected alternative was the first-party merchant-of-record model, where the
 marketplace collects into its own account and disburses to sellers through the
 Payouts API. That is a real marketplace architecture, and it is the one Phase 0's
 fixtures exercised. But this product is built for the PayPal product
-specifically, and multiparty is PayPal's marketplace offering. Where `readme.md`
+specifically, and multiparty is PayPal's marketplace offering. Where `product_idea.md`
 describes the merchant-of-record model, the readme is what is wrong.
 
 **This is Phase 0 succeeding, not failing.** `plan.md` Group 8 step 2 reserves a
@@ -147,15 +147,15 @@ contract-derived amendments are in; the access-dependent ones wait on §8.
 
 | Document | Change | State |
 |---|---|---|
-| `readme.md` | Integration model in §2 and the status block; both modes in §1; mode-specific comparison targets in §3.2; chargeback liability in §3.3; conversion fee removed from §3.5, §5.3 and §13; two-source comparison in §6.1; fee reversal in §6.2; five new exception categories in §6.3; disbursement states in §6.4; §11.1 and §11.2 rewritten | **Applied** |
+| `product_idea.md` | Integration model in §2 and the status block; both modes in §1; mode-specific comparison targets in §3.2; chargeback liability in §3.3; conversion fee removed from §3.5, §5.3 and §13; two-source comparison in §6.1; fee reversal in §6.2; five new exception categories in §6.3; disbursement states in §6.4; §11.1 and §11.2 rewritten | **Applied** |
 | [[mission]] | Integration model in §2; the four-system table and the new §3.1 responsibility boundary; capability 2 in §4; disbursement states under P4; the release call under P6; platform fee scope split in §7 | **Applied** |
 | [[roadmap]] | Phase 0 marked complete with its first-party limit; **Phase 0b added**; Phase 3 gains `platform_fee` and `disbursement`; Phases 4 and 5 require multiparty-shaped fixtures; Phase 7 gains the client rules; Phases 10 and 11 gain the fee and false-positive criteria; budget and risks updated | **Applied** |
 | [[tech-stack]] | FX rules in §2; multiparty access mechanics and client rules in §8; the SDK condition in §8.1; money envelopes in §9.3; seller attribution and derived refund linkage in §9.5 | **Applied** |
 | All four | Phase *findings* removed from the root specs, which now state rules and point at `specs/paypal-fields.md` and the phase directory | **Applied** |
-| `readme.md` §6.1, [[roadmap]] Phase 7 | Whether entitlement validation is implementable at all depends on §8 question 2 | **Waiting on Phase 0b** |
+| `product_idea.md` §6.1, [[roadmap]] Phase 7 | Whether entitlement validation is implementable at all depends on §8 question 2 | **Waiting on Phase 0b** |
 | [[roadmap]] Phase 3 | The exact records representing held funds and release depend on §8 question 3 | **Waiting on Phase 0b** |
 
-**All three demo scenarios survive.** `readme.md` §13 Scenario 1 is validation 4,
+**All three demo scenarios survive.** `product_idea.md` §13 Scenario 1 is validation 4,
 Scenario 2 is validation 3, Scenario 3 is validation 7 — subject to the
 established constraint that Scenario 3 must inject an incorrect conversion
 **value**, never a conversion **fee**, because PayPal declares no FX fee
@@ -233,7 +233,7 @@ through a readable API — is a reporting lag, not a blocker.
 | 3 | What do the held-funds and release records actually contain, and what statuses do they carry? | validation 6, the §4 states | mechanism known (8.1), payload unobserved |
 | 4 | Is the consolidated daily settlement visible through any API, or only the monthly report? | the deferred settlement check ([[mission]] §7) | open |
 | 5 | How does FX behave when the payee is a seller in another currency? | validation 7 | open |
-| 6 | Does a refund reverse the platform fee, and is the reversal automatic or instructed? | validation 4, `readme.md` §6.2 | partly answered: it is **instructed** on the refund call and PayPal must enable it. Whether it can be omitted entirely is unobserved |
+| 6 | Does a refund reverse the platform fee, and is the reversal automatic or instructed? | validation 4, `product_idea.md` §6.2 | partly answered: it is **instructed** on the refund call and PayPal must enable it. Whether it can be omitted entirely is unobserved |
 | 7 | Is the platform fee taken at **capture** or at **release** under `DELAYED`? | Phase 3's fee timing, Phase 11's matching | **open, and not answerable from documentation.** PayPal states neither |
 | 8 | What happens to the platform fee when a dispute or chargeback occurs? | dispute reconciliation | open; undocumented |
 
@@ -381,7 +381,7 @@ change of approach, and the declared column needs nothing at all.
 ## Related
 
 - [[mission]] — P1, P3, P4 and P6 all govern this; §3.1 carries the boundary
-- `readme.md` — the document this partly superseded; amendments applied, see §6
+- `product_idea.md` — the document this partly superseded; amendments applied, see §6
 - [[roadmap]] — Phase 0b verifies this; Phases 3, 7 and 11 consume it
 - [[tech-stack]] — §8 holds the access mechanics and client rules
 - `specs/paypal-fields.md` — the field table, observed first-party only

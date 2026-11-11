@@ -3,6 +3,10 @@
 AI-powered financial reconciliation and investigation agent for marketplace
 operators using PayPal.
 
+**`readme.md` is the judges' overview; the product definition, MVP scope and
+limitations that used to be the readme are now `product_idea.md`.** Dated notes
+under `specs/` written before the rename still say "readme" for that document.
+
 **Start here: `specs/2026-11-08-replan/requirements.md`.** It is the session
 entry point. Phases 4-15 are re-sequenced into seven blocks against a two-day
 deadline, and R1-R15 record every narrowing with its reasoning. The root specs
@@ -121,7 +125,7 @@ unless asked. What this leaves, so nothing is claimed that was not measured:
 - **No scripted demo and no `demo.md` runbook.** The deployed app was exercised by
   hand after the Block F merge (a run, then an investigation, on production;
   `specs/2026-11-10-queue-approval-dashboard/validation.md` §3a).
-- **The limitations audit was not done**; the readme's limitations were written
+- **The limitations audit was not done**; the limitations in `product_idea.md` were written
   block by block and have not been checked line by line against the replan.
 - **The priority score ages from first found, not from the order date**
   (`first_found_at`, the earliest run that reported the fault). A fault found
@@ -444,7 +448,7 @@ them.
 
 Phase 2 delivered the canonical core — `Money`, largest-remainder allocation,
 and the `tenant`, `seller`, `order`, `order_item` and `commission_rule` tables,
-with the `float` and tenant gates enforcing the rules below. `readme.md` §0.1 is
+with the `float` and tenant gates enforcing the rules below. `product_idea.md` §0.1 is
 the short version of the money rules.
 
 Phase 3 delivered the event side — `raw_payload`, `payment`, `capture`,
@@ -506,7 +510,7 @@ trimming of earlier tool results. See `specs/tech-stack.md` §5.2.
 - **Local work needs the compose database and `DATABASE_URL` exported.**
   Without them the database-backed tests skip locally and fail hard in CI, which
   is deliberate — a silent skip would be a green run that tested nothing.
-  `readme.md` §0 has the commands.
+  `product_idea.md` §0 has the commands.
 - In a deployed command, `uv run` takes `--no-sync`. Without it `uv run` syncs
   before executing, undoing the build's `--no-dev` and installing packages at
   container start.

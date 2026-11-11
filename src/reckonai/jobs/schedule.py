@@ -138,6 +138,28 @@ def enqueue_runs(session: Session, *, days: int) -> list[uuid.UUID]:
     return enqueued
 
 
+def _recover(session: Session, *, hours: int) -> None:
+    """Missed-delivery recovery, which must never stop the nightly run."""
+    from reckonai.jobs import recover
+    from reckonai.paypal import live
+
+    try:
+        client = live.LiveClient(live.credentials())
+        now = datetime.now(UTC)
+        recover.recover(
+            session, client, since=now - timedelta(hours=hours), until=now
+        )
+    except Exception as exc:  # noqa: BLE001 - deliberate: the run goes ahead
+        session.rollback()
+        logger.warning(
+            event(
+                "reckonai.jobs.schedule.recover_failed",
+                error=type(exc).__name__,
+                detail=str(exc)[:200],
+            )
+        )
+
+
 def main(argv: list[str] | None = None) -> int:
     """Enqueue the scheduled runs. Returns the process exit code."""
     parser = argparse.ArgumentParser(
@@ -152,6 +174,16 @@ def main(argv: list[str] | None = None) -> int:
             "How many days the window covers, ending at midnight after today. "
             f"Default {DEFAULT_WINDOW_DAYS}, because the reporting APIs run "
             "about a day behind."
+        ),
+    )
+    parser.add_argument(
+        "--recover-hours",
+        type=int,
+        default=0,
+        help=(
+            "Before enqueueing, recover webhook events PayPal recorded in the "
+            "last N hours that were not delivered (live-ingestion F9). 0 skips "
+            "it. A failure here is logged and never blocks the run."
         ),
     )
     args = parser.parse_args(argv)
@@ -173,6 +205,8 @@ def main(argv: list[str] | None = None) -> int:
             # and the second job's handler meets the `processed_event`
             # constraint, which `reconcile_job.AlreadyReconciled` now reports
             # as work already done rather than as a failure to retry.
+            if args.recover_hours > 0:
+                _recover(session, hours=args.recover_hours)
             enqueued = enqueue_runs(session, days=args.window_days)
 
         logger.info(event("reckonai.jobs.schedule.done", enqueued=len(enqueued)))

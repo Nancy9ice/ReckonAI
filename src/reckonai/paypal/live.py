@@ -150,6 +150,53 @@ class LiveClient:
             raise LiveUnavailable(f"order read returned {response.status_code}")
         raise LiveFetchError(f"order read returned {response.status_code}")
 
+    def events(
+        self, since: datetime, until: datetime, *, max_pages: int = 20
+    ) -> list[dict[str, Any]]:
+        """Webhook events PayPal recorded in a window, for missed-delivery recovery.
+
+        Read with the platform credential. A refusal is `LiveDenied` and never
+        an empty list: "we may not list events" and "there were none" are
+        different claims, and recovery treating the first as the second would
+        report a clean sweep it did not make.
+        """
+        fmt = "%Y-%m-%dT%H:%M:%SZ"
+        url: str | None = (
+            f"{self._creds.base}/v1/notifications/webhooks-events?page_size=100"
+            f"&start_time={since.strftime(fmt)}&end_time={until.strftime(fmt)}"
+        )
+        found: list[dict[str, Any]] = []
+        pages = 0
+        while url is not None and pages < max_pages:
+            pages += 1
+            try:
+                response = self._http.get(
+                    url, headers={"Authorization": f"Bearer {self._token()}"}
+                )
+            except httpx.HTTPError as exc:
+                raise LiveUnavailable(
+                    f"events read failed: {type(exc).__name__}"
+                ) from exc
+            if response.status_code in (401, 403):
+                raise LiveDenied("the platform credential may not list webhook events")
+            if response.status_code >= 500:
+                raise LiveUnavailable(f"events read returned {response.status_code}")
+            if response.status_code != 200:
+                raise LiveFetchError(f"events read returned {response.status_code}")
+            body = response.json()
+            found.extend(e for e in body.get("events", []) if isinstance(e, dict))
+            url = next(
+                (
+                    link["href"]
+                    for link in body.get("links", [])
+                    if link.get("rel") == "next"
+                    # Only ever follow a link on the host we were already talking to.
+                    and str(link.get("href", "")).startswith(self._creds.base)
+                ),
+                None,
+            )
+        return found
+
     def fetch_order(
         self, order_id: str, merchant_ids: list[str]
     ) -> tuple[dict[str, Any], str]:

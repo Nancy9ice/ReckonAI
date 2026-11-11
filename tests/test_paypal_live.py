@@ -183,3 +183,48 @@ def test_a_stored_snapshot_protects_the_fee_across_a_later_refund(
     assert fee is not None
     assert fee.amount == Money("11.00", "USD")
     assert session.scalars(select(Refund).where(Refund.tenant_id == tenant_id)).first()
+
+
+# --- the events list, for missed-delivery recovery --------------------------
+
+
+def test_events_follow_the_next_link_only_on_the_same_host() -> None:
+    pages = {
+        "first": {
+            "events": [{"id": "WH-1"}],
+            "links": [
+                {
+                    "rel": "next",
+                    "href": f"{CREDS.base}/v1/notifications/webhooks-events?p=2",
+                }
+            ],
+        },
+        "second": {
+            "events": [{"id": "WH-2"}],
+            "links": [{"rel": "next", "href": "https://evil.example/next"}],
+        },
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        key = "second" if "p=2" in str(request.url) else "first"
+        return httpx.Response(200, json=pages[key])
+
+    client, seen = _client(handler)
+    from datetime import UTC, datetime
+
+    got = client.events(
+        datetime(2026, 11, 8, tzinfo=UTC), datetime(2026, 11, 11, tzinfo=UTC)
+    )
+
+    assert [e["id"] for e in got] == ["WH-1", "WH-2"]
+    assert not any("evil.example" in str(r.url) for r in seen)
+
+
+def test_a_refused_event_list_is_denied_never_an_empty_list() -> None:
+    from datetime import UTC, datetime
+
+    client, _ = _client(lambda r: _order(403))
+    with pytest.raises(live.LiveDenied):
+        client.events(
+            datetime(2026, 11, 8, tzinfo=UTC), datetime(2026, 11, 11, tzinfo=UTC)
+        )

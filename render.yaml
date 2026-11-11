@@ -261,6 +261,7 @@ services:
     # installs at container start.
     startCommand: >
       uv run --no-sync python -m reckonai.jobs.schedule --window-days 2
+      --recover-hours 72
 
     envVars:
       - key: DATABASE_URL
@@ -271,6 +272,17 @@ services:
         value: production
       - key: LOG_LEVEL
         value: INFO
+
+      # Missed-delivery recovery lists PayPal's recorded webhook events before
+      # the nightly run (live-ingestion F9; PayPal retries a failed delivery for
+      # days, so 72 hours). Sandbox only. Absent, recovery logs a warning and the
+      # run goes ahead.
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_BN_CODE
+        sync: false
 
 # No static site yet. The frontend is Phase 14 (requirements.md D1).
 

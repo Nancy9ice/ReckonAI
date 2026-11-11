@@ -266,7 +266,7 @@ export const JUDGE = {
     `${why} Your progress is kept; press the button again to continue.`,
   lateTitle: "Optional: deliver PayPal's refund for the late-refund order",
   lateHint:
-    "After you have run a reconciliation once, press this, then run it again. The waiting finding should clear.",
+    "To see a finding wait and then clear: run a reconciliation first, press this, then run it again.",
   late: "Deliver PayPal's refund",
   lateDone: "PayPal's refund is in. Run reconciliation again; that order should clear.",
   lateAlready: "PayPal's refund was already delivered for this name.",

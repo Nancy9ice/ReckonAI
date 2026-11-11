@@ -241,3 +241,40 @@ export const fieldValue = (value: string): string => {
 
 export const sourceName = (source: string): string =>
   source === "paypal" ? "PayPal" : source === "marketplace" ? "the marketplace" : source;
+
+// The test-transactions panel. Judges see this on the deployed site, so it says
+// what will happen, what to do next, and what each order should show.
+export const JUDGE = {
+  button: "Create test transactions",
+  buttonHint:
+    "Place a set of real PayPal sandbox orders, each built to show one outcome, then check them here.",
+  title: "Create test transactions",
+  intro:
+    "This places six real PayPal sandbox orders under your name, each built to show one outcome. No real money moves. Run it again with the same name and nothing is duplicated; a new name gives you a fresh set.",
+  nameLabel: "Your name (letters and digits, up to 12)",
+  nameInvalid: "Use 1 to 12 letters or digits, with no spaces.",
+  create: "Create my test transactions",
+  working: "Placing your orders with PayPal. Each takes a few seconds...",
+  waiting: (inCount: number) =>
+    `${inCount} of 6 have reached ReckonAI. Waiting for the rest from PayPal...`,
+  fetching: "Some are slow to arrive, so they are being fetched directly...",
+  stuck:
+    "The orders are placed but have not all arrived yet. Press the button again in a minute; nothing will be duplicated.",
+  done: (name: string) =>
+    `Done. All six are in. Now close this panel, click Run reconciliation, then search the queue for JUDGE-${name} and open each one. Investigate any exception.`,
+  failed: (why: string) =>
+    `${why} Your progress is kept; press the button again to continue.`,
+  lateTitle: "Optional: deliver PayPal's refund for the late-refund order",
+  lateHint:
+    "After you have run a reconciliation once, press this, then run it again. The waiting finding should clear.",
+  late: "Deliver PayPal's refund",
+  lateDone: "PayPal's refund is in. Run reconciliation again; that order should clear.",
+  lateAlready: "PayPal's refund was already delivered for this name.",
+  nothingFlagged: "Nothing flagged",
+  viaWebhook: "arrived by webhook",
+  viaFetch: "fetched directly",
+  notYet: "not arrived yet",
+  notPlaced: "not placed yet",
+  expect: "Expect",
+  close: "Close",
+} as const;

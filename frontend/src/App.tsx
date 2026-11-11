@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Coverage, ExceptionRow, Run, Summary } from "./api";
 import { api } from "./api";
-import { HINTS } from "./copy";
+import { HINTS, JUDGE } from "./copy";
 import CoverageView from "./CoverageView";
 import DetailDrawer from "./DetailDrawer";
+import JudgeScenarios from "./JudgeScenarios";
 import { KpiCards, TypePanel } from "./Overview";
 import QueueView from "./QueueView";
 import RunsView from "./RunsView";
@@ -49,6 +50,10 @@ export default function App() {
   const [runNote, setRunNote] = useState<RunNote>(null);
   const [running, setRunning] = useState(false);
   const [investigating, setInvestigating] = useState(false);
+  // The test-transactions panel exists only where the operator has switched the
+  // feature on; a failed probe hides it rather than showing a broken button.
+  const [judgeOn, setJudgeOn] = useState(false);
+  const [judgeOpen, setJudgeOpen] = useState(false);
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -109,6 +114,7 @@ export default function App() {
   useEffect(() => {
     api.runs().then(setRuns).catch((e) => setError(String(e)));
     api.coverage().then(setCoverage).catch((e) => setError(String(e)));
+    api.judgeEnabled().then(setJudgeOn).catch(() => setJudgeOn(false));
   }, []);
 
   // Ask for a run, then follow its job until it settles. The window is
@@ -284,6 +290,16 @@ export default function App() {
             <h1>{current.title}</h1>
             <p className="muted">{current.sub}</p>
           </div>
+          <div className="head-actions">
+          {judgeOn && (
+            <button
+              className="secondary"
+              title={JUDGE.buttonHint}
+              onClick={() => setJudgeOpen((open) => !open)}
+            >
+              {JUDGE.button}
+            </button>
+          )}
           <button
             className="run-now"
             title={HINTS.runNow}
@@ -295,9 +311,13 @@ export default function App() {
             </svg>
             {running ? "Checking..." : "Run reconciliation"}
           </button>
+          </div>
         </header>
 
         <main className={selected && view === "queue" ? "page with-drawer" : "page"}>
+          {judgeOn && judgeOpen && (
+            <JudgeScenarios onClose={() => setJudgeOpen(false)} />
+          )}
           {error && <div className="banner bad">{error}</div>}
           {runNote && (
             <div className={`banner ${runNote.tone}`} role="status">

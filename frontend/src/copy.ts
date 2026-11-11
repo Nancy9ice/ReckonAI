@@ -109,6 +109,19 @@ const FALLBACK: TypeCopy = {
 export const typeCopy = (code: string): TypeCopy => TYPE_COPY[code] ?? FALLBACK;
 export const typeTitle = (code: string): string => typeCopy(code).title;
 
+// ---- Dates ----------------------------------------------------------------
+
+export const ORDER_DATE_HINT = "When the customer placed the order.";
+
+export const FOUND_HINT =
+  "When a check first reported this problem. Later checks that report it again do not change this date.";
+
+export const DAYS_OPEN_HINT =
+  "How long ago a check first reported this problem, in whole days.";
+
+export const DECIDED_HINT =
+  "When the latest approve or reject decision was recorded. Blank if nobody has decided.";
+
 // ---- Certainty ------------------------------------------------------------
 
 export const CERTAINTY_HINT: Record<string, string> = {
@@ -131,12 +144,12 @@ export const basisText = (basis: string): string =>
 // ---- Priority ---------------------------------------------------------------
 
 export const PRIORITY_HINT =
-  "How urgent this is. It combines the size of the difference, how many sellers are affected, how old the order is, and how sure the AI is. Higher means look at it first.";
+  "How urgent this is. It combines the size of the difference, how many sellers are affected, how long it has been open, and how sure the AI is. Higher means look at it first.";
 
 export const FACTOR_NAMES: Record<string, string> = {
   impact: "size of the difference",
   sellers: "sellers affected",
-  age: "order age",
+  age: "time open",
   confidence: "AI confidence",
 };
 

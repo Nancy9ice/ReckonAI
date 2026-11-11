@@ -10,7 +10,9 @@ Built, in this order of dependence:
 
 1. **Read API** — there is none today. Exceptions, runs, investigations, decisions.
 2. **Prioritisation** — one score over the four `readme.md` §9.3 factors:
-   financial impact, affected sellers, age, confidence.
+   financial impact, affected sellers, age, confidence. *(Amended 2026-11-11:
+   age is days since a check first reported the exception, not the order date;
+   the queue also shows Order date, First found, Days open and Decided on.)*
 3. **Decision record** — append-only approve/reject with approver and outcome.
 4. **Queued investigation** — `investigate` as a job type (Block E debt 1).
 5. **Dashboard** — React + TypeScript + Vite + AG Grid: exception queue,

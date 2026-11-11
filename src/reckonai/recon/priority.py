@@ -39,7 +39,8 @@ WEIGHTS: dict[str, Decimal] = {
 #: Affected sellers beyond this add nothing: the factor saturates at one.
 SELLER_CAP = 3
 
-#: An exception this old or older has the full age factor.
+#: An exception open this long or longer has the full age factor. "Open" is
+#: measured from the run that first reported it, not from the order date.
 AGE_CAP_DAYS = Decimal(30)
 
 _SCORE_PLACES = Decimal("0.0001")

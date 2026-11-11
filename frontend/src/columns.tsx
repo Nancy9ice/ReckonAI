@@ -1,7 +1,16 @@
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import type { ExceptionRow } from "./api";
 import { formatDate, label } from "./labels";
-import { CERTAINTY_HINT, FACTOR_NAMES, PRIORITY_HINT, VERDICT_TEXT } from "./copy";
+import {
+  CERTAINTY_HINT,
+  DAYS_OPEN_HINT,
+  DECIDED_HINT,
+  FACTOR_NAMES,
+  FOUND_HINT,
+  ORDER_DATE_HINT,
+  PRIORITY_HINT,
+  VERDICT_TEXT,
+} from "./copy";
 import { formatFraction, formatMoney } from "./money";
 
 export function decisionText(row: ExceptionRow): string {
@@ -28,6 +37,24 @@ function factorsText(row: ExceptionRow): string {
     .map(([k, v]) => `${FACTOR_NAMES[k] ?? k}: ${formatFraction(v)}`)
     .join("\n");
 }
+
+// AG Grid's date filter hands this the date the user chose, at local midnight,
+// and the cell's value. Our values are ISO strings with a time of day, not Date
+// objects, so without this the comparison is between unlike things and "equals",
+// "before" and "after" return the wrong rows. Compared by calendar day, in the
+// reader's own time zone, which is how they pick a date. A missing value sorts
+// below everything and matches no date.
+const byCalendarDay = (filterDate: Date, cellValue: string | null): number => {
+  if (!cellValue) return -1;
+  const cell = new Date(cellValue);
+  const day = new Date(cell.getFullYear(), cell.getMonth(), cell.getDate());
+  return day < filterDate ? -1 : day > filterDate ? 1 : 0;
+};
+
+const dateFilter: Pick<ColDef<ExceptionRow>, "filter" | "filterParams"> = {
+  filter: "agDateColumnFilter",
+  filterParams: { comparator: byCalendarDay },
+};
 
 export const columns: ColDef<ExceptionRow>[] = [
   {
@@ -125,11 +152,49 @@ export const columns: ColDef<ExceptionRow>[] = [
   {
     colId: "placed",
     headerName: "Order date",
-    hide: true,
+    headerTooltip: ORDER_DATE_HINT,
     valueGetter: (p) => p.data?.order_placed_at ?? null,
     valueFormatter: (p) =>
       p.node?.group ? "" : p.value ? formatDate(p.value) : "unknown",
-    width: 125,
+    ...dateFilter,
+    width: 150,
+  },
+  {
+    colId: "found",
+    headerName: "First found",
+    headerTooltip: FOUND_HINT,
+    valueGetter: (p) => p.data?.first_found_at ?? null,
+    valueFormatter: (p) =>
+      p.node?.group ? "" : p.value ? formatDate(p.value) : "unknown",
+    ...dateFilter,
+    width: 155,
+  },
+  {
+    colId: "daysOpen",
+    headerName: "Days open",
+    headerTooltip: DAYS_OPEN_HINT,
+    // Whole days since first reported. Numeric so it sorts and filters as a
+    // number; the formatter only changes how it reads.
+    valueGetter: (p) =>
+      p.data
+        ? Math.max(
+            0,
+            Math.floor(
+              (Date.now() - Date.parse(p.data.first_found_at)) / 86_400_000,
+            ),
+          )
+        : null,
+    valueFormatter: (p) =>
+      p.node?.group || p.value == null
+        ? ""
+        : p.value === 0
+          ? "Today"
+          : p.value === 1
+            ? "1 day"
+            : `${p.value} days`,
+    filter: "agNumberColumnFilter",
+    type: "rightAligned",
+    width: 145,
   },
   {
     colId: "investigation",
@@ -152,6 +217,16 @@ export const columns: ColDef<ExceptionRow>[] = [
         <Pill text={p.value} tone={p.data.decision?.outcome ?? "undecided"} />
       ) : null,
   },
+  {
+    colId: "decidedOn",
+    headerName: "Decided on",
+    headerTooltip: DECIDED_HINT,
+    valueGetter: (p) => p.data?.decision?.decided_at ?? null,
+    valueFormatter: (p) =>
+      p.node?.group ? "" : p.value ? formatDate(p.value) : "Not decided",
+    ...dateFilter,
+    width: 150,
+  },
 ];
 
 // What the AI assistant is told about each column. Categorical columns send
@@ -172,6 +247,9 @@ export const columnContext = {
   impact: { description: "Size of the difference, in its own currency" },
   currency: { description: "Currency of the impact", includeSetValues: true },
   placed: { description: "When the order was placed" },
+  found: { description: "When a check first reported this problem" },
+  daysOpen: { description: "Whole days since a check first reported this problem" },
+  decidedOn: { description: "When the latest decision was recorded, if any" },
   investigation: {
     description: "Whether the AI investigation found a cause",
     includeSetValues: true,

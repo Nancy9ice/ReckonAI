@@ -44,6 +44,7 @@ export interface ExceptionRow {
   seller_name: string | null;
   seller_count: number;
   order_placed_at: string | null;
+  first_found_at: string;
   evidence_refs: string[];
   evidence_basis: string;
   priority: { score: string; factors: Record<string, string | null> };

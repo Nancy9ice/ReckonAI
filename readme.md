@@ -724,7 +724,7 @@ The investigation queue should prioritise exceptions using factors such as:
 
 - Financial impact.
 - Number of affected sellers or transactions.
-- Age of the exception.
+- Age of the exception: days since a check first reported it, not the order date.
 - Relevant settlement or payout deadlines.
 - Confidence that the issue represents a genuine discrepancy.
 

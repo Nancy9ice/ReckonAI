@@ -85,6 +85,40 @@ def _newest_exception_rows(
     return list(session.scalars(stmt))
 
 
+def first_found(
+    session: Session, tenant_id: uuid.UUID, refs: set[str]
+) -> dict[tuple[str, str], datetime]:
+    """The start of the earliest run that reported each `(order, code)`.
+
+    Every run writes a fresh row for the same fault, so a row's own run says
+    when it was last reported, not when it was first. This reads across runs.
+    """
+    return {
+        (order_ref, code): started
+        for order_ref, code, started in session.execute(
+            select(
+                ReconciliationException.order_external_ref,
+                ReconciliationException.code,
+                func.min(ReconciliationRun.started_at),
+            )
+            .join(
+                ReconciliationRun,
+                (ReconciliationRun.tenant_id == ReconciliationException.tenant_id)
+                & (ReconciliationRun.id == ReconciliationException.run_id),
+            )
+            .where(
+                ReconciliationException.tenant_id == tenant_id,
+                ReconciliationException.is_exception.is_(True),
+                ReconciliationException.order_external_ref.in_(refs),
+            )
+            .group_by(
+                ReconciliationException.order_external_ref,
+                ReconciliationException.code,
+            )
+        )
+    }
+
+
 def latest_investigations(
     session: Session, tenant_id: uuid.UUID
 ) -> dict[tuple[str, str], Investigation]:
@@ -225,6 +259,7 @@ def exceptions(
             )
         )
     }
+    found = first_found(session, tenant_id, refs)
     investigations = latest_investigations(session, tenant_id)
     decisions = latest_decisions(session, tenant_id)
     confidences = _top_confidence(
@@ -243,13 +278,23 @@ def exceptions(
                 # An exception naming one seller affects that seller; one about
                 # the order as a whole affects every seller on it.
                 seller_count=_seller_count(r, order, seller_counts),
-                # No order row means no placed date to age from; zero rather
-                # than a guess, and the field is null in the response.
-                age_days=Decimal(0)
-                if order is None
-                else max(
+                # **How long it has been open, not how old the order is.** The
+                # age of a problem is the days since a check first reported it
+                # (`first_found`), which is what a reviewer waits on; an old
+                # order with a problem found today is new work. A fault found
+                # in this run therefore scores zero for age by construction.
+                age_days=max(
                     Decimal(0),
-                    Decimal(str((now - order.placed_at).total_seconds()))
+                    Decimal(
+                        str(
+                            (
+                                now
+                                - found.get(
+                                    (r.order_external_ref, r.code), r.created_at
+                                )
+                            ).total_seconds()
+                        )
+                    )
                     / SECONDS_PER_DAY,
                 ),
                 confidence=confidences.get(inv.id) if inv is not None else None,
@@ -277,6 +322,12 @@ def exceptions(
                 seller_name=sellers.get(r.seller_id) if r.seller_id else None,
                 seller_count=_seller_count(r, order, seller_counts),
                 order_placed_at=None if order is None else order.placed_at,
+                # Every row has a key (the query reads the same rows), so the
+                # fallback is for a future caller that does not; it is the row's
+                # own write time, never an exception on the queue page.
+                first_found_at=found.get(
+                    (r.order_external_ref, r.code), r.created_at
+                ),
                 evidence_refs=list(r.evidence_refs),
                 evidence_basis=r.evidence_basis,
                 priority=_priority_out(priorities[str(r.id)]),

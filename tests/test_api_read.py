@@ -293,3 +293,153 @@ def test_the_evidence_module_only_reads() -> None:
     ).read_text()
     for verb in (".add(", ".delete(", "insert(", "update(", ".flush(", ".commit("):
         assert verb not in text, f"evidence.py contains {verb}"
+
+
+# ---------------------------------------------------------------------------
+# First found: the earliest run that reported a fault, not the run that holds
+# the row the queue shows.
+# ---------------------------------------------------------------------------
+
+
+def _earlier_run_reporting(
+    session: Session,
+    exc: ReconciliationException,
+    *,
+    days_ago: int,
+    code: str | None = None,
+) -> datetime:
+    from reckonai.models import ReconciliationRun
+
+    started = datetime.now(UTC) - timedelta(days=days_ago)
+    run = ReconciliationRun(
+        tenant_id=exc.tenant_id,
+        window_start=started,
+        window_end=started + timedelta(days=1),
+        started_at=started,
+        status="completed",
+    )
+    session.add(run)
+    session.flush()
+    session.add(
+        ReconciliationException(
+            tenant_id=exc.tenant_id,
+            run_id=run.id,
+            code=code or exc.code,
+            order_external_ref=exc.order_external_ref,
+            detail="earlier",
+            is_exception=True,
+            impact=exc.impact,
+            evidence_refs=[],
+            evidence_basis="provider_reported",
+        )
+    )
+    session.flush()
+    return started
+
+
+def test_first_found_is_the_earliest_run_not_the_newest(
+    client: TestClient, session: Session, seeded_exception: ReconciliationException
+) -> None:
+    earliest = _earlier_run_reporting(session, seeded_exception, days_ago=9)
+    _earlier_run_reporting(session, seeded_exception, days_ago=4)
+
+    row = client.get("/api/exceptions").json()[0]
+
+    assert row["run_id"] == str(seeded_exception.run_id), "the newest row is shown"
+    assert datetime.fromisoformat(row["first_found_at"]) == earliest
+
+
+def test_first_found_of_a_new_fault_is_its_own_run(
+    client: TestClient, session: Session, seeded_exception: ReconciliationException
+) -> None:
+    from reckonai.models import ReconciliationRun
+
+    row = client.get("/api/exceptions").json()[0]
+    run = session.get(ReconciliationRun, seeded_exception.run_id)
+    assert run is not None
+    assert datetime.fromisoformat(row["first_found_at"]) == run.started_at
+
+
+def test_first_found_is_kept_per_exception_type(
+    client: TestClient, session: Session, seeded_exception: ReconciliationException
+) -> None:
+    """An older finding of a different type on the same order is not this one's."""
+    older = _earlier_run_reporting(
+        session, seeded_exception, days_ago=30, code="duplicate_ledger_entry"
+    )
+
+    rows = {r["code"]: r for r in client.get("/api/exceptions").json()}
+
+    mine = datetime.fromisoformat(rows["commission_mismatch"]["first_found_at"])
+    assert mine > datetime.now(UTC) - timedelta(days=1)
+    other = datetime.fromisoformat(rows["duplicate_ledger_entry"]["first_found_at"])
+    assert other == older
+
+
+def test_first_found_ignores_non_exceptions(
+    client: TestClient, session: Session, seeded_exception: ReconciliationException
+) -> None:
+    """An `awaiting_evidence` finding is not an exception, so it does not make a
+    fault look older than the day it became one."""
+    from sqlalchemy import update
+
+    _earlier_run_reporting(session, seeded_exception, days_ago=12)
+    session.execute(
+        update(ReconciliationException)
+        .where(ReconciliationException.detail == "earlier")
+        .values(is_exception=False)
+    )
+    session.flush()
+
+    row = client.get("/api/exceptions").json()[0]
+
+    found = datetime.fromisoformat(row["first_found_at"])
+    assert found > datetime.now(UTC) - timedelta(days=1)
+
+
+def test_a_decision_date_is_on_the_row(
+    client: TestClient, seeded_exception: ReconciliationException
+) -> None:
+    posted = client.post(
+        f"/api/exceptions/{seeded_exception.id}/decision",
+        json={"outcome": "approved", "approver": "Nancy"},
+    )
+    assert posted.status_code in (200, 201), posted.text
+    decision = client.get("/api/exceptions").json()[0]["decision"]
+    assert decision["outcome"] == "approved"
+    assert datetime.fromisoformat(decision["decided_at"])
+
+
+# ---------------------------------------------------------------------------
+# The age factor follows first found, not the order date.
+# ---------------------------------------------------------------------------
+
+
+def _age_factor(row: dict) -> Decimal:
+    return Decimal(row["priority"]["factors"]["age"])
+
+
+def test_a_fault_found_today_has_no_age_whatever_the_order_date(
+    client: TestClient, seeded_exception: ReconciliationException
+) -> None:
+    """The seeded order was placed six days ago. Before this, that alone gave
+    the exception an age factor of 0.2; now it has been open for no time."""
+    row = client.get("/api/exceptions").json()[0]
+    assert _age_factor(row) < Decimal("0.001")
+
+
+def test_age_grows_with_the_days_since_first_found(
+    client: TestClient, session: Session, seeded_exception: ReconciliationException
+) -> None:
+    _earlier_run_reporting(session, seeded_exception, days_ago=15)
+    row = client.get("/api/exceptions").json()[0]
+    # 15 days of a 30-day cap.
+    assert abs(_age_factor(row) - Decimal("0.5")) < Decimal("0.001")
+
+
+def test_age_saturates_at_the_cap(
+    client: TestClient, session: Session, seeded_exception: ReconciliationException
+) -> None:
+    _earlier_run_reporting(session, seeded_exception, days_ago=90)
+    row = client.get("/api/exceptions").json()[0]
+    assert _age_factor(row) == Decimal(1)

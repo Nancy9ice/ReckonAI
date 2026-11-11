@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 from reckonai import reconcile
 from reckonai.app import app
 from reckonai.config import get_settings
-from reckonai.models import Order, RawPayload, SellerLedgerEntry
+from reckonai.models import Order, RawPayload, Refund, SellerLedgerEntry
 from reckonai.paypal import capture
 from reckonai.paypal import live as paypal_live
 from reckonai.sim import data, live, seed
@@ -298,6 +298,51 @@ def test_marketplace_only_refuses_what_it_cannot_honour(
             gateway,
         )
     assert gateway.refunds == []
+
+
+def test_a_late_paypal_refund_settles_what_the_marketplace_recorded(
+    session: Session, tenant_id: uuid.UUID
+) -> None:
+    """The late-evidence story: book first, deliver PayPal's side afterwards."""
+    gateway = FakeGateway()
+    placed = _place(session, tenant_id, gateway)
+    session.flush()
+    capture_id = placed["paypal_capture_ids"][0]
+    live.refund_order(
+        session,
+        tenant_id,
+        live.RefundIn(
+            order_ref=REF, paypal_capture_id=capture_id, amount="30.00",
+            marketplace_only=True,
+        ),
+        gateway,
+    )
+    session.flush()
+
+    def booked() -> int | None:
+        return session.scalar(
+            select(func.count()).select_from(Refund).where(
+                Refund.tenant_id == tenant_id, Refund.external_id.like("RF-%")
+            )
+        )
+
+    assert booked() == 1
+
+    out = live.refund_order(
+        session,
+        tenant_id,
+        live.RefundIn(
+            order_ref=REF, paypal_capture_id=capture_id, amount="30.00",
+            paypal_only=True, ingest_now=True,
+        ),
+        gateway,
+    )
+    session.flush()
+
+    assert gateway.refunds[0]["amount"] == "30.00"
+    assert out["marketplace_refund"] is None
+    assert booked() == 1, "no second marketplace refund is booked"
+    assert _codes(session, tenant_id) == set()
 
 
 def test_a_delayed_order_is_requested_and_recorded_as_delayed(

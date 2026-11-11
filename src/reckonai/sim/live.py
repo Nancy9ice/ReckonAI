@@ -158,6 +158,10 @@ class RefundIn(BaseModel):
     #: refund yet: PayPal's record is late, not absent. The later PayPal refund
     #: is a second, separate call without this flag.
     marketplace_only: bool = False
+    #: The reverse: make the PayPal refund and book nothing, because the
+    #: marketplace recorded it earlier (`marketplace_only`). This is the late
+    #: evidence arriving.
+    paypal_only: bool = False
     ingest_now: bool = False
 
 
@@ -297,11 +301,15 @@ def refund_order(
     if order is None:
         raise WriteError(f"no order {req.order_ref!r}")
     amount = _dec(req.amount, "amount")
-    if req.marketplace_only and (req.ingest_now or not req.reflect_in_ledger):
+    if req.marketplace_only and (
+        req.paypal_only or req.ingest_now or not req.reflect_in_ledger
+    ):
         raise WriteError(
             "marketplace_only books the refund and its ledger entries and makes "
             "no PayPal refund, so there is nothing to ingest and no fault to plant"
         )
+    if req.paypal_only and not req.reflect_in_ledger:
+        raise WriteError("paypal_only books nothing, so reflect_in_ledger is moot")
     gross = order.total.amount
     if amount > gross:
         raise WriteError("a refund cannot exceed the order total")
@@ -377,10 +385,11 @@ def refund_order(
         expected_commission_reversal=str(reversal),
         reflected_in_ledger=req.reflect_in_ledger,
     )
-    with _labelled():
-        seed._build_refund(
-            session, _result(session, tenant_id), spec, refund_spec, order.id
-        )
+    if not req.paypal_only:
+        with _labelled():
+            seed._build_refund(
+                session, _result(session, tenant_id), spec, refund_spec, order.id
+            )
 
     # The refund now exists at PayPal and in the marketplace's books. Reading it
     # back is a convenience, so its failure is reported and must not roll the
@@ -401,7 +410,7 @@ def refund_order(
         "order_ref": req.order_ref,
         "paypal_refund_id": refund.get("id"),
         "marketplace_only": req.marketplace_only,
-        "marketplace_refund": refund_spec.ref,
+        "marketplace_refund": None if req.paypal_only else refund_spec.ref,
         "reflected_in_ledger": req.reflect_in_ledger,
         "ingested": req.ingest_now and ingest_error is None,
         "ingest_error": ingest_error,

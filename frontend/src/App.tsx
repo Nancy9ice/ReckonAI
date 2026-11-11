@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Coverage, ExceptionRow, Run } from "./api";
+import type { Coverage, ExceptionRow, Run, Summary } from "./api";
 import { api } from "./api";
-import { decisionText } from "./columns";
 import { HINTS } from "./copy";
 import CoverageView from "./CoverageView";
 import DetailDrawer from "./DetailDrawer";
+import { KpiCards, TypePanel } from "./Overview";
 import QueueView from "./QueueView";
 import RunsView from "./RunsView";
 
@@ -12,21 +12,37 @@ type View = "queue" | "coverage" | "runs";
 
 type RunNote = { tone: "ok" | "bad" | "busy" | "info"; text: string } | null;
 
-// `null` renders as a dash: a figure that has not loaded is not a measured zero.
-function Kpi(props: { label: string; value: number | null; tone?: string }) {
-  return (
-    <div className={`kpi ${props.tone ?? ""}`}>
-      <span className="kpi-value">{props.value ?? "-"}</span>
-      <span className="kpi-label">{props.label}</span>
-    </div>
-  );
-}
+const NAV: { id: View; text: string; title: string; sub: string; icon: string }[] = [
+  {
+    id: "queue",
+    text: "Exceptions",
+    title: "Financial Reconciliation",
+    sub: "Marketplace records checked against PayPal, by volume and by value.",
+    icon: "M4 6h16M4 12h16M4 18h10",
+  },
+  {
+    id: "coverage",
+    text: "Coverage",
+    title: "Coverage",
+    sub: "What the checks have and have not looked at.",
+    icon: "M12 3a9 9 0 1 0 9 9M12 3v9l6 4",
+  },
+  {
+    id: "runs",
+    text: "Past checks",
+    title: "Past checks",
+    sub: "Every reconciliation run, newest first.",
+    icon: "M12 7v5l3 2M21 12a9 9 0 1 1-3-6.7M21 4v5h-5",
+  },
+];
 
 export default function App() {
   const [view, setView] = useState<View>("queue");
   const [rows, setRows] = useState<ExceptionRow[] | null>(null);
   const [runs, setRuns] = useState<Run[]>([]);
   const [coverage, setCoverage] = useState<Coverage | null>(null);
+  const [summary, setSummary] = useState<Summary | null>(null);
+  const [typeFilter, setTypeFilter] = useState<string | null>(null);
   const [runId, setRunId] = useState<string | undefined>(undefined);
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -47,9 +63,13 @@ export default function App() {
   const refresh = useCallback(async () => {
     const ticket = ++latest.current;
     try {
-      const fetched = await api.exceptions(runId);
+      const [fetched, sums] = await Promise.all([
+        api.exceptions(runId),
+        api.summary(runId),
+      ]);
       if (ticket === latest.current) {
         setRows(fetched);
+        setSummary(sums);
         setError(null);
       }
     } catch (e) {
@@ -203,109 +223,117 @@ export default function App() {
     }
   };
 
-  const stats = useMemo(() => {
-    const all = rows ?? [];
-    return {
-      open: all.length,
-      confirmed: all.filter((r) => r.certainty === "confirmed").length,
-      suspected: all.filter((r) => r.certainty === "suspected").length,
-      undecided: all.filter((r) => decisionText(r) === "Undecided").length,
-      investigated: all.filter((r) => r.investigation !== null).length,
-    };
-  }, [rows]);
+  const investigated = useMemo(
+    () => (rows === null ? null : rows.filter((r) => r.investigation !== null).length),
+    [rows],
+  );
 
   const close = useCallback(() => setSelected(null), []);
 
+  const current = NAV.find((n) => n.id === view) ?? NAV[0];
+
   return (
     <div className="shell">
-      <header className="topbar">
+      <aside className="sidebar">
         <div className="brand">
-          <span className="mark" aria-hidden="true" />
-          <div>
-            <strong>ReckonAI</strong>
-            <span className="tagline">Reconciliation for marketplaces on PayPal</span>
-          </div>
+          <span className="mark" aria-hidden="true">R</span>
+          <strong>ReckonAI</strong>
         </div>
-        <nav>
-          {(
-            [
-              ["queue", "Exceptions"],
-              ["coverage", "Coverage"],
-              ["runs", "Past checks"],
-            ] as [View, string][]
-          ).map(([id, text]) => (
+        <nav aria-label="Sections">
+          {NAV.map((n) => (
             <button
-              key={id}
-              className={view === id ? "tab on" : "tab"}
-              onClick={() => setView(id)}
+              key={n.id}
+              className={view === n.id ? "navitem on" : "navitem"}
+              aria-current={view === n.id ? "page" : undefined}
+              onClick={() => setView(n.id)}
             >
-              {text}
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none"
+                stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"
+                strokeLinejoin="round" aria-hidden="true">
+                <path d={n.icon} />
+              </svg>
+              {n.text}
             </button>
           ))}
+        </nav>
+        <p className="sidefoot">Reconciliation for marketplaces on PayPal</p>
+      </aside>
+
+      <div className="content">
+        <header className="pagehead">
+          <div>
+            <h1>{current.title}</h1>
+            <p className="muted">{current.sub}</p>
+          </div>
           <button
             className="run-now"
             title={HINTS.runNow}
             disabled={running}
             onClick={() => void runNow()}
           >
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
+              <path d="M7 4.5v15l12-7.5z" />
+            </svg>
             {running ? "Checking..." : "Run reconciliation"}
           </button>
-        </nav>
-      </header>
+        </header>
 
-      <main className={selected && view === "queue" ? "page with-drawer" : "page"}>
-        {error && <div className="banner bad">{error}</div>}
-        {runNote && (
-          <div className={`banner ${runNote.tone}`} role="status">
-            {runNote.text}
-            {!running && (
-              <button className="dismiss" onClick={() => setRunNote(null)}>
-                Dismiss
-              </button>
-            )}
-          </div>
-        )}
+        <main className={selected && view === "queue" ? "page with-drawer" : "page"}>
+          {error && <div className="banner bad">{error}</div>}
+          {runNote && (
+            <div className={`banner ${runNote.tone}`} role="status">
+              {runNote.text}
+              {!running && (
+                <button className="dismiss" onClick={() => setRunNote(null)}>
+                  Dismiss
+                </button>
+              )}
+            </div>
+          )}
 
-        {view === "queue" && (
-          <section className="kpis" aria-label="Queue summary">
-            <Kpi label="Open exceptions" value={stats.open} />
-            <Kpi label="Confirmed" value={stats.confirmed} tone="bad" />
-            <Kpi label="Suspected" value={stats.suspected} tone="warn" />
-            <Kpi label="Awaiting a decision" value={stats.undecided} tone="accent" />
-            <Kpi label="Looked into by AI" value={stats.investigated} />
-            <Kpi label="Checked, no issues" value={coverage ? coverage.clean : null} tone="good" />
-          </section>
-        )}
+          {view === "queue" && (
+            <>
+              <KpiCards
+                summary={summary}
+                investigated={investigated}
+                clean={coverage ? coverage.clean : null}
+              />
+              <TypePanel summary={summary} active={typeFilter} onPick={setTypeFilter} />
+            </>
+          )}
 
-        {view === "runs" ? (
-          <RunsView
-            runs={runs}
-            onOpen={(id) => {
-              setRunId(id);
-              setSelected(null);
-              setView("queue");
-            }}
-          />
-        ) : view === "coverage" ? (
-          <CoverageView coverage={coverage} />
-        ) : rows === null ? (
-          <p className="muted">Loading...</p>
-        ) : (
-          <QueueView
-            rows={rows}
-            selectedId={selected}
-            onSelect={setSelected}
-            runFilterActive={runId !== undefined}
-            runId={runId}
-            investigating={investigating}
-            onInvestigate={(ids, skip) => void investigate(ids, skip)}
-            onClearRun={() => {
-              setRunId(undefined);
-              setSelected(null);
-            }}
-          />
-        )}
-      </main>
+          {view === "runs" ? (
+            <RunsView
+              runs={runs}
+              onOpen={(id) => {
+                setRunId(id);
+                setSelected(null);
+                setView("queue");
+              }}
+            />
+          ) : view === "coverage" ? (
+            <CoverageView coverage={coverage} />
+          ) : rows === null ? (
+            <p className="muted">Loading...</p>
+          ) : (
+            <QueueView
+              rows={rows}
+              selectedId={selected}
+              onSelect={setSelected}
+              runFilterActive={runId !== undefined}
+              runId={runId}
+              typeFilter={typeFilter}
+              onClearType={() => setTypeFilter(null)}
+              investigating={investigating}
+              onInvestigate={(ids, skip) => void investigate(ids, skip)}
+              onClearRun={() => {
+                setRunId(undefined);
+                setSelected(null);
+              }}
+            />
+          )}
+        </main>
+      </div>
 
       {selected && view === "queue" && (
         <DetailDrawer

@@ -9,6 +9,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import type { ExceptionRow } from "./api";
 import AssistantBar from "./AssistantBar";
 import { columns, decisionText } from "./columns";
+import { typeTitle } from "./copy";
 
 const SETTLED = new Set(["reported", "insufficient_evidence"]);
 import SavedViews from "./SavedViews";
@@ -34,6 +35,8 @@ interface Props {
   runFilterActive: boolean;
   onClearRun: () => void;
   runId?: string;
+  typeFilter: string | null;
+  onClearType: () => void;
   investigating: boolean;
   onInvestigate: (ids: string[], skipSettled: boolean) => void;
 }
@@ -67,6 +70,8 @@ export default function QueueView({
   runFilterActive,
   onClearRun,
   runId,
+  typeFilter,
+  onClearType,
   investigating,
   onInvestigate,
 }: Props) {
@@ -74,7 +79,7 @@ export default function QueueView({
   const initial = useRef<GridState | null>(null);
   const [quick, setQuick] = useState("");
   const [certainty, setCertainty] = useState<Certainty>("all");
-  const [decided, setDecided] = useState<Decided>("all");
+  const [decided, setDecided] = useState<Decided>("Undecided");
   const [group, setGroup] = useState("");
   const [checked, setChecked] = useState<string[]>([]);
   // Two-step, inline: every investigation is a paid model call, and a browser
@@ -84,17 +89,38 @@ export default function QueueView({
     ids: string[];
   } | null>(null);
 
+  // The tab counts follow the issue filter and the certainty choice, so a tab
+  // always says how many rows it would show.
+  const scoped = useMemo(
+    () =>
+      rows.filter(
+        (r) =>
+          (typeFilter === null || r.code === typeFilter) &&
+          (certainty === "all" || r.certainty === certainty),
+      ),
+    [rows, typeFilter, certainty],
+  );
+  const tabCount = useMemo(
+    () => ({
+      all: scoped.length,
+      Undecided: scoped.filter((r) => decisionText(r) === "Undecided").length,
+      decided: scoped.filter((r) => decisionText(r) !== "Undecided").length,
+    }),
+    [scoped],
+  );
+
   const visible = useMemo(
     () =>
       rows.filter(
         (r) =>
+          (typeFilter === null || r.code === typeFilter) &&
           (certainty === "all" || r.certainty === certainty) &&
           (decided === "all" ||
             (decided === "decided"
               ? decisionText(r) !== "Undecided"
               : decisionText(r) === "Undecided")),
       ),
-    [rows, certainty, decided],
+    [rows, typeFilter, certainty, decided],
   );
 
   // The grid is the source of truth for grouping: the assistant, a saved view
@@ -194,6 +220,27 @@ export default function QueueView({
         </div>
       )}
 
+      <div className="tabs" role="tablist" aria-label="Decision status">
+        {(
+          [
+            ["Undecided", "Needs a decision"],
+            ["decided", "Decided"],
+            ["all", "All"],
+          ] as [Decided, string][]
+        ).map(([id, text]) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={decided === id}
+            className={decided === id ? "qtab on" : "qtab"}
+            onClick={() => setDecided(id)}
+          >
+            {text} <span className="qcount">{tabCount[id]}</span>
+          </button>
+        ))}
+      </div>
+
       <AssistantBar gridApi={get as () => GridApi | null} />
 
       <div className="toolbar">
@@ -212,16 +259,6 @@ export default function QueueView({
             { id: "all", text: "All" },
             { id: "confirmed", text: "Confirmed" },
             { id: "suspected", text: "Suspected" },
-          ]}
-        />
-        <Segmented<Decided>
-          label="Decision"
-          value={decided}
-          onChange={setDecided}
-          options={[
-            { id: "all", text: "Any decision" },
-            { id: "Undecided", text: "Undecided" },
-            { id: "decided", text: "Decided" },
           ]}
         />
         <label className="inline">
@@ -251,6 +288,11 @@ export default function QueueView({
             Decision log CSV
           </a>
         </div>
+        {typeFilter !== null && (
+          <button className="chip" type="button" onClick={onClearType}>
+            Issue: {typeTitle(typeFilter)} - clear
+          </button>
+        )}
         {runFilterActive && (
           <button className="chip" type="button" onClick={onClearRun}>
             Showing one run - show all

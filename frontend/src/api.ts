@@ -153,6 +153,25 @@ export interface Coverage {
   basis: string;
 }
 
+export interface SummaryBucket {
+  count: number;
+  at_risk: Money[];
+}
+
+export interface SummaryType extends SummaryBucket {
+  code: string;
+  shares: Record<string, string>;
+}
+
+export interface Summary {
+  open: SummaryBucket;
+  confirmed: SummaryBucket;
+  suspected: SummaryBucket;
+  undecided: SummaryBucket;
+  decided: SummaryBucket;
+  by_type: SummaryType[];
+}
+
 export interface RunRequest {
   status:
     | "queued"
@@ -209,6 +228,8 @@ export const api = {
       body: JSON.stringify(body),
     }),
   runs: () => request<Run[]>("/api/runs"),
+  summary: (runId?: string) =>
+    request<Summary>(runId ? `/api/summary?run_id=${runId}` : "/api/summary"),
   exceptions: (runId?: string) =>
     request<ExceptionRow[]>(
       runId ? `/api/exceptions?run_id=${runId}` : "/api/exceptions",

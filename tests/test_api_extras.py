@@ -433,3 +433,37 @@ def test_the_batch_is_bounded(client: TestClient) -> None:
         client.post("/api/investigations", json={"exception_ids": []}).status_code
         == 422
     )
+
+
+def test_summary_matches_the_queue_per_currency_and_never_mixes(
+    demo: TestClient,
+) -> None:
+    from decimal import Decimal
+
+    rows = demo.get("/api/exceptions").json()
+    body = demo.get("/api/summary").json()
+
+    def per_currency(items: list[dict]) -> dict[str, Decimal]:  # type: ignore[type-arg]
+        out: dict[str, Decimal] = {}
+        for r in items:
+            out[r["impact"]["currency"]] = out.get(
+                r["impact"]["currency"], Decimal(0)
+            ) + Decimal(r["impact"]["amount"])
+        return out
+
+    got = {m["currency"]: Decimal(m["amount"]) for m in body["open"]["at_risk"]}
+    assert body["open"]["count"] == len(rows)
+    assert got == per_currency(rows)
+    assert len(got) == len({r["impact"]["currency"] for r in rows})
+    assert sum(t["count"] for t in body["by_type"]) == len(rows)
+    for t in body["by_type"]:
+        mine = [r for r in rows if r["code"] == t["code"]]
+        assert {
+            m["currency"]: Decimal(m["amount"]) for m in t["at_risk"]
+        } == per_currency(mine)
+    assert body["undecided"]["count"] + body["decided"]["count"] == len(rows)
+    firsts = [
+        max(map(Decimal, t["shares"].values()), default=Decimal(0))
+        for t in body["by_type"]
+    ]
+    assert firsts == sorted(firsts, reverse=True)

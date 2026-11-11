@@ -1044,3 +1044,10 @@ These are future opportunities, not commitments for the initial implementation.
 **Primary outcome:** More accurate seller financial records, faster discrepancy investigation and reduced manual reconciliation effort.
 
 **MVP principle:** Solve one difficult marketplace financial reconciliation problem exceptionally well before expanding into a broader financial operations platform.
+
+## License
+
+MIT, see `LICENSE`. The dashboard depends on AG Grid Enterprise, which is
+commercially licensed and is not covered by this license: building the frontend
+needs your own AG Grid key (`VITE_AG_GRID_LICENSE_KEY`). No key is in the
+repository.

@@ -57,9 +57,38 @@ Python 3.12, FastAPI, PostgreSQL 16, Alembic, a Postgres-backed job queue and
 worker, React + Vite + AG Grid Enterprise, deployed on Render. The investigation
 agent runs on OpenAI (`gpt-4.1`) or Anthropic, selectable by setting.
 
+## Try it yourself
+
+Create your own live transactions and watch ReckonAI handle each. Needs only
+Python 3 and `scripts/judge_scenarios.py` from this repository:
+
+```
+python3 scripts/judge_scenarios.py --name yourname
+```
+
+It places six real PayPal sandbox orders under your name and waits for them to
+arrive (by webhook, or fetched directly if one is slow; it says which). Then, on
+the live demo, filter the queue by `JUDGE-YOURNAME`, click **Run
+reconciliation**, and **Investigate** any exception. A different name gets a
+new set; the same name again creates nothing.
+
+| Order | What it is | Expected |
+|---|---|---|
+| `S1-CLEAN` | Correct 10% commission | no finding |
+| `S2-COMMISSION` | Marketplace books 15.00 where PayPal's fee is 10.00 | commission mismatch |
+| `S3-HELD` | Delayed disbursement, funds held | no finding |
+| `S4-LATE-REFUND` | Marketplace refund recorded, PayPal's not yet available | awaiting evidence, not an exception |
+| `S5-NO-LEDGER` | Refund made at PayPal, ledger never adjusted | missing ledger adjustment |
+| `S6-DUPLICATE` | Sale credited twice | duplicate ledger entry |
+
+Run `--late-refund` after a reconciliation, then reconcile again: S4's finding
+clears. If Run reconciliation says nothing is new or a run is cooling down
+(five minutes), an earlier run already covers your orders. Foreign currency and
+disbursement shortfalls are on the seeded orders (ORD-0015, ORD-0008, ORD-0018).
+
 ## What was measured
 
-- The test suite (2056 tests), `ruff`, strict `mypy` and the frontend build pass.
+- The test suite (2088 tests), `ruff`, strict `mypy` and the frontend build pass.
 - `uv run python -m reckonai.eval` (free): the six seeded faults are all found
   with exact impacts, and none of the 12 clean orders is flagged.
 - The AI's root-cause accuracy was scored **once, on one model, and is not a
@@ -70,7 +99,8 @@ agent runs on OpenAI (`gpt-4.1`) or Anthropic, selectable by setting.
 ## Limitations
 
 No sign-in (the approver is a typed name), a simulated marketplace, no dispute
-matching, and no real signed webhook delivery observed yet. The full list, with
+matching, and one real signed webhook delivery observed (a probe order); refund events
+over the webhook are untested. The full list, with
 reasons, is in section 0 of [`product_idea.md`](product_idea.md).
 
 ## Run it locally

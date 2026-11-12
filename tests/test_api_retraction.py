@@ -240,3 +240,103 @@ def test_a_specific_run_still_shows_what_it_found(
     old = {r["order_ref"] for r in listing}
     assert "ORD-0016" in old
     assert "ORD-0016" not in _queue_refs(http)
+
+
+# --- a run only retracts what it could have seen ----------------------------
+
+
+def _first_run(session: Session, tenant_id: uuid.UUID) -> ReconciliationRun:
+    run = session.scalars(
+        select(ReconciliationRun)
+        .where(ReconciliationRun.tenant_id == tenant_id)
+        .order_by(ReconciliationRun.started_at)
+    ).first()
+    assert run is not None
+    run.finished_at = run.started_at + timedelta(minutes=2)
+    session.flush()
+    return run
+
+
+def _completed_run_after(
+    session: Session, tenant_id: uuid.UUID, started: datetime
+) -> None:
+    session.add(
+        ReconciliationRun(
+            tenant_id=tenant_id,
+            window_start=WIDE.start,
+            window_end=WIDE.end,
+            status="completed",
+            started_at=started,
+            finished_at=started + timedelta(minutes=1),
+        )
+    )
+    session.flush()
+
+
+def test_a_run_that_started_before_the_first_finished_retracts_nothing(
+    http: TestClient, session: Session, tenant_id: uuid.UUID
+) -> None:
+    """It never saw the first run's data, so its silence proves nothing."""
+    first = _first_run(session, tenant_id)
+    _completed_run_after(session, tenant_id, first.started_at + timedelta(minutes=1))
+    assert "ORD-0016" in _queue_refs(http)
+    assert "ORD-0017" in _parked(http)
+
+
+def test_a_run_that_started_after_the_first_finished_does_retract(
+    http: TestClient, session: Session, tenant_id: uuid.UUID
+) -> None:
+    """The control for the test above: same silent run, started later."""
+    first = _first_run(session, tenant_id)
+    _completed_run_after(session, tenant_id, first.started_at + timedelta(minutes=5))
+    assert "ORD-0016" not in _queue_refs(http)
+    assert "ORD-0017" not in _parked(http)
+
+
+# --- the nightly sweep and the queue agree ----------------------------------
+
+
+def test_the_investigation_sweep_does_not_see_a_retracted_finding(
+    http: TestClient, session: Session, tenant_id: uuid.UUID
+) -> None:
+    from reckonai.jobs import investigation_job
+
+    def swept() -> set[str]:
+        rows = investigation_job.open_exceptions(session, tenant_id)
+        return {r.order_external_ref for r in rows}
+
+    assert "ORD-0016" in swept() and "ORD-0016" in _queue_refs(http)
+    _fix_0016(session, tenant_id)
+    _run_again(session, tenant_id, WIDE)
+
+    assert "ORD-0016" not in swept(), "no paid investigation of a finding nobody sees"
+    assert swept() == _queue_refs(http), "one definition of open"
+
+
+# --- the assumption the rule rests on ---------------------------------------
+
+
+def test_a_run_examines_every_order_placed_in_its_window(
+    http: TestClient, session: Session, tenant_id: uuid.UUID
+) -> None:
+    """Retraction assumes this. If the selection is ever narrowed (a cap, a status
+    filter), a completed run would clear findings for orders it never looked at,
+    so this must fail first."""
+    mid = window.Window(
+        start=datetime(2026, 11, 12, tzinfo=UTC), end=datetime(2026, 11, 16, tzinfo=UTC)
+    )
+    _run_again(session, tenant_id, mid)
+    run = session.scalars(
+        select(ReconciliationRun)
+        .where(ReconciliationRun.tenant_id == tenant_id)
+        .order_by(ReconciliationRun.started_at.desc())
+    ).first()
+    assert run is not None
+
+    inside = window.orders_in_window(session, tenant_id, mid)
+    assert {"ORD-0013", "ORD-0014"} <= inside, "the seeded faults inside the window"
+    reported = {
+        r["order_ref"] for r in http.get(f"/api/exceptions?run_id={run.id}").json()
+    }
+    assert {"ORD-0013", "ORD-0014"} <= reported, "found by this run, not an older one"
+    assert "ORD-0016" not in reported, "outside the window, so this run never looked"

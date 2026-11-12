@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from reckonai.api import schemas
 from reckonai.config import get_settings
+from reckonai.findings import newest_rows as _newest_exception_rows
 from reckonai.jobs import investigation_job, queue
 from reckonai.models import (
     ExceptionDecision,
@@ -47,97 +48,6 @@ def list_runs(session: Session, tenant_id: uuid.UUID) -> list[ReconciliationRun]
             .order_by(ReconciliationRun.started_at.desc())
         )
     )
-
-
-def _newest_exception_rows(
-    session: Session,
-    tenant_id: uuid.UUID,
-    run_id: uuid.UUID | None,
-    *,
-    is_exception: bool = True,
-    code: str | None = None,
-) -> list[ReconciliationException]:
-    stmt = select(ReconciliationException).where(
-        ReconciliationException.tenant_id == tenant_id,
-        ReconciliationException.is_exception.is_(is_exception),
-    )
-    if code is not None:
-        stmt = stmt.where(ReconciliationException.code == code)
-    if run_id is not None:
-        return list(
-            session.scalars(stmt.where(ReconciliationException.run_id == run_id))
-        )
-    stmt = (
-        stmt.join(
-            ReconciliationRun,
-            (ReconciliationRun.tenant_id == ReconciliationException.tenant_id)
-            & (ReconciliationRun.id == ReconciliationException.run_id),
-        )
-        .distinct(
-            ReconciliationException.order_external_ref, ReconciliationException.code
-        )
-        .order_by(
-            ReconciliationException.order_external_ref,
-            ReconciliationException.code,
-            ReconciliationRun.started_at.desc(),
-        )
-    )
-    return _drop_retracted(session, tenant_id, list(session.scalars(stmt)))
-
-
-def _drop_retracted(
-    session: Session, tenant_id: uuid.UUID, rows: list[ReconciliationException]
-) -> list[ReconciliationException]:
-    """Drop findings that a later run re-examined and stopped reporting.
-
-    A run writes a row for each finding and nothing for an order that comes out
-    clean, so the newest row for an `(order, code)` stays the newest forever:
-    a fault that was fixed, or evidence that arrived late, would show as open
-    for good. Absence of a row cannot mean "checked and clean" by itself,
-    because a run records how many orders it covered, not which (P3).
-
-    What can be said is narrower and sound: **a completed run examines every
-    order whose `placed_at` falls inside its window** (that is what selects the
-    orders), so if a completed run that started after the finding's own run has
-    such a window and did not write the finding again, the finding is
-    retracted. Orders a run re-examined only because new evidence arrived are
-    not counted, because their placement date is outside its window; those
-    findings stay until a run whose window contains them, which errs toward
-    leaving a finding up rather than taking it down.
-
-    A row whose order is not a marketplace order (an unmatched PayPal payment,
-    keyed by PayPal's id) cannot be placed in a window and is kept.
-    """
-    if not rows:
-        return rows
-    runs = list(
-        session.scalars(
-            select(ReconciliationRun).where(ReconciliationRun.tenant_id == tenant_id)
-        )
-    )
-    started = {r.id: r.started_at for r in runs}
-    completed = [r for r in runs if r.status == "completed"]
-    placed = {
-        o.external_ref: o.placed_at
-        for o in session.scalars(
-            select(Order).where(
-                Order.tenant_id == tenant_id,
-                Order.external_ref.in_({r.order_external_ref for r in rows}),
-            )
-        )
-    }
-
-    def retracted(row: ReconciliationException) -> bool:
-        when = placed.get(row.order_external_ref)
-        own = started.get(row.run_id)
-        if when is None or own is None:
-            return False
-        return any(
-            run.started_at > own and run.window_start <= when < run.window_end
-            for run in completed
-        )
-
-    return [r for r in rows if not retracted(r)]
 
 
 def first_found(

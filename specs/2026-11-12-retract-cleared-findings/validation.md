@@ -7,7 +7,9 @@
 2. The retraction tests fail without the rule and pass with it. **Done:** with
    `queries.py` stashed, the 4 retraction tests fail and the 3 "must not
    retract" tests pass.
-3. Coverage still accounts for every order exactly once (asserted).
+3. The sweep test fails against the old `open_exceptions` and passes with the
+   shared definition. **Done.**
+4. Coverage still accounts for every order exactly once (asserted).
 
 ## After merge (not proven until seen on the deployed site)
 

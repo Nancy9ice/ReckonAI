@@ -30,8 +30,27 @@ reproduced locally on the seeded ORD-0017 with the real engine.
   decision stays in the decision log.
 - **D5. The `basis` text** returned by `/api/coverage` says what is now true.
 
+- **D6. Later means "started after the first run finished".** Comparing start
+  times let a run that overlapped the first retract on data it never saw
+  (found in code review). A running run has no `finished_at` and retracts
+  nothing.
+- **D7. One definition of open.** The rule and the query live in
+  `reckonai/findings.py`; the queue, summary, Coverage, CSV and the nightly
+  `auto_investigate` sweep all call it, so the sweep cannot pay for an
+  investigation of a finding the queue no longer shows (found in code review).
+
 ## 3. Not in scope
 
 - Recording which orders a run covered (would remove the window inference).
 - Retracting unmatched PayPal payments (the 40-odd "on hold" items keyed by
   PayPal's id on the demo). They need a marketplace order to be placed.
+
+## 4. Known follow-ups (from code review, not done)
+
+- **Age after a fault reappears.** `first_found` takes the earliest run ever, so
+  a fault found day 1, retracted day 5 and reintroduced day 30 still ages from
+  day 1 and ranks too high.
+- **Cost per request.** The rule adds two small queries to each queue-related
+  call; fine while run history is small, worth caching if it grows.
+- **The decisions of a retracted finding** remain in the log but are no longer
+  reachable from the queue; a "Resolved" view would show them.

@@ -16,14 +16,11 @@ I built ReckonAI to combine deterministic financial reconciliation with AI-assis
 - [The Problem](#the-problem)
 - [How ReckonAI Works](#how-reckonai-works)
 - [Core Capabilities](#core-capabilities)
-- [PayPal Integration](#paypal-integration)
 - [Technology and Sponsor Integrations](#technology-and-sponsor-integrations)
 - [Try ReckonAI: Judge Testing Guide](#try-reckonai-judge-testing-guide)
 - [AI Investigation](#ai-investigation)
 - [System Architecture](#system-architecture)
-- [Financial Correctness and Safety](#financial-correctness-and-safety)
 - [Evaluation and Testing](#evaluation-and-testing)
-- [Technology Stack](#technology-stack)
 - [Developer Setup](#developer-setup)
 - [Current Limitations](#current-limitations)
 - [Roadmap](#roadmap)
@@ -452,7 +449,18 @@ uv sync --frozen
 export DATABASE_URL="postgres://reckonai:devpassword@localhost:5432/reckonai"
 ```
 
-Configure the required PayPal and AI provider settings using the environment variables documented in `.env.example`.
+Create your own environment file from the template and fill in your values:
+
+```bash
+cp .env.example .env
+```
+
+The file is git-ignored, so keep real credentials in it and never commit it. The template explains every variable. What you need depends on what you want to run:
+
+- **The seeded demo (queue, reconciliation, investigation):** `AGENT_PROVIDER` and `AGENT_MODEL`, plus the matching key (`ANTHROPIC_API_KEY` or `OPENAI_API_KEY`), for AI investigation. The seeded data replays recorded PayPal Sandbox responses, so you can browse and reconcile it without PayPal credentials.
+- **Placing new live Sandbox orders:** your own PayPal Sandbox platform app (`PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_BN_CODE`), `PAYPAL_WEBHOOK_ID` for webhook delivery, and the switches `SIM_WRITE_ENABLED`, `SIM_WRITE_SECRET` and `JUDGE_SCENARIOS_ENABLED`. The seeded sellers belong to the author's sandbox, so you also need sellers onboarded under your own platform (`scripts/onboard_seller.py`) with database rows that point at them. Onboarding is done with `scripts/onboard_seller.py`; the `PAYPAL_SELLER_*` variables in the template are read by that script and the capture scripts. Pointing the database's seller rows at your own sellers is not documented here yet. If you only want to see live transactions without that setup, the hosted demo has them running.
+
+The application does not read this file by itself. Step 7 starts it through a small helper that loads these values for that one command.
 
 ### 5. Run Database Migrations and Seed Demo Data
 
@@ -469,21 +477,36 @@ npm ci
 npm run build
 ```
 
-Configure `VITE_AG_GRID_LICENSE_KEY` before building if you want to use the licensed AG Grid Enterprise features.
+Before building, put your AG Grid Enterprise licence key in `frontend/.env.local` if you want to use the licensed features:
+
+```
+VITE_AG_GRID_LICENSE_KEY=your-licence-key
+```
 
 ### 7. Start the Application
 
-From the project root, start the API:
+From the project root, start the API through the helper, which loads your `.env` values for that command only and prints nothing:
 
 ```bash
-uv run uvicorn reckonai.app:app
+uv run python scripts/with_local_env.py uv run uvicorn reckonai.app:app
 ```
 
-In another terminal, start the background worker:
+In another terminal, start the background worker the same way:
 
 ```bash
-uv run python -m reckonai.worker
+uv run python scripts/with_local_env.py uv run python -m reckonai.worker
 ```
+
+Starting either process without the helper works, but it will not see your PayPal or AI provider credentials.
+
+### Notes for developers
+
+- **The seeded demo is self-contained.** It replays recorded PayPal Sandbox responses, so queue, reconciliation and investigation work without PayPal credentials.
+- **Live orders need a PayPal platform app.** ReckonAI follows PayPal's marketplace model, where each order pays a seller and carries a platform fee. PayPal accepts that only for sellers onboarded under your own platform app, and `scripts/onboard_seller.py` mints the onboarding links. A plain sandbox business account is rejected.
+- **Webhooks need a public URL.** Run locally, that means a tunnel. The "Create test transactions" panel does not depend on it, because it fetches any order that has not arrived by webhook.
+- **Run the worker.** Run reconciliation and Investigate are queued jobs, so they do nothing until the worker is running.
+- **Reset before running the tests.** The suite expects an unseeded database, so run `uv run python -m reckonai.demo_data --reset` first.
+- **Use a new name for each set of test transactions.** After a database reset, reusing a name returns PayPal's earlier, already-refunded orders, because the same order reference maps to the same PayPal request.
 
 ## Current Limitations
 

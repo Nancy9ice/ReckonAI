@@ -74,8 +74,15 @@ moves to `/service`). Things not to re-derive:
   a fresh row for the same fault.
 - **The approver is free text, unauthenticated** (D5). Do not describe it as an
   identity.
-- **"Clean" means "no newest finding"**; a run records how many orders it covered,
-  not which. A run is date-grained, but a second run over the same dates the same
+- **"Clean" means "no newest finding"**; a run records how many orders it
+  covered, not which. **A finding is retracted when a completed run that started
+  after the finding's run finished has a window containing the order and did not
+  report it again** (`findings.drop_retracted`, shared by the queue, summary,
+  Coverage, CSV and the nightly sweep;
+  `specs/2026-11-12-retract-cleared-findings/`). Before that a fixed fault or
+  late evidence stayed on the queue for ever. Orders a run re-examined only for
+  new evidence are not counted, and a PayPal-keyed finding is never retracted.
+- **A run is date-grained**, but a second run over the same dates the same
   day is permitted only if evidence arrived since the last one (`nothing_new`
   otherwise, `cooling_down` inside the cooldown).
 - **The grid assistant is display-only**: no record or amount is sent, and

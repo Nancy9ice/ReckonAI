@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from reckonai.api import schemas
 from reckonai.config import get_settings
+from reckonai.findings import newest_rows as _newest_exception_rows
 from reckonai.jobs import investigation_job, queue
 from reckonai.models import (
     ExceptionDecision,
@@ -47,42 +48,6 @@ def list_runs(session: Session, tenant_id: uuid.UUID) -> list[ReconciliationRun]
             .order_by(ReconciliationRun.started_at.desc())
         )
     )
-
-
-def _newest_exception_rows(
-    session: Session,
-    tenant_id: uuid.UUID,
-    run_id: uuid.UUID | None,
-    *,
-    is_exception: bool = True,
-    code: str | None = None,
-) -> list[ReconciliationException]:
-    stmt = select(ReconciliationException).where(
-        ReconciliationException.tenant_id == tenant_id,
-        ReconciliationException.is_exception.is_(is_exception),
-    )
-    if code is not None:
-        stmt = stmt.where(ReconciliationException.code == code)
-    if run_id is not None:
-        return list(
-            session.scalars(stmt.where(ReconciliationException.run_id == run_id))
-        )
-    stmt = (
-        stmt.join(
-            ReconciliationRun,
-            (ReconciliationRun.tenant_id == ReconciliationException.tenant_id)
-            & (ReconciliationRun.id == ReconciliationException.run_id),
-        )
-        .distinct(
-            ReconciliationException.order_external_ref, ReconciliationException.code
-        )
-        .order_by(
-            ReconciliationException.order_external_ref,
-            ReconciliationException.code,
-            ReconciliationRun.started_at.desc(),
-        )
-    )
-    return list(session.scalars(stmt))
 
 
 def first_found(
@@ -565,8 +530,11 @@ def coverage(session: Session, tenant_id: uuid.UUID) -> schemas.CoverageOut:
     examined here unless its window also covers it, so this errs toward saying
     "not yet examined".)
 
-    Still not knowable: a run records how many orders it covered, not which, so
-    an exception a later run stopped emitting is not retracted.
+    A finding a later completed run re-examined and stopped reporting is
+    retracted (`_drop_retracted`), so a fixed fault or late evidence leaves the
+    queue and the on-hold list, and the order reads clean. A run records how
+    many orders it covered, not which, so only a run whose window contains the
+    order counts; others leave the finding up.
     """
     orders = list(
         session.scalars(
@@ -655,8 +623,10 @@ def coverage(session: Session, tenant_id: uuid.UUID) -> schemas.CoverageOut:
         basis=(
             "Clean means a completed run's window covered the order after it "
             "arrived and found nothing. A run records how many orders it "
-            "covered, not which, so an exception a later run stopped reporting "
-            "is not retracted."
+            "covered, not which, so a finding is taken down only when a later "
+            "completed run's window contains the order and does not report it "
+            "again; an order re-examined only because new evidence arrived is "
+            "not counted."
         ),
     )
 

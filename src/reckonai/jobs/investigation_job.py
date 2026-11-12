@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
+from reckonai import findings
 from reckonai.agent.investigate import investigate
 from reckonai.agent.providers import provider_for
 from reckonai.config import ConfigurationError, Settings, get_settings
@@ -34,7 +35,6 @@ from reckonai.models import (
     Investigation,
     Job,
     ReconciliationException,
-    ReconciliationRun,
 )
 
 logger = logging.getLogger("reckonai.jobs")
@@ -153,35 +153,14 @@ class AutoResult:
 def open_exceptions(
     session: Session, tenant_id: uuid.UUID
 ) -> list[ReconciliationException]:
-    """Every open exception: the newest row per `(order, code)` across all runs.
+    """Every open exception, by the one definition the queue uses.
 
-    The same definition the queue uses, so "open" means one thing. Like the
-    queue it cannot retract an exception a later run stopped reporting, because
-    a run records how many orders it covered and not which.
+    `findings.newest_rows`: the newest row per `(order, code)` across all runs,
+    less any a later run re-examined and stopped reporting. Sharing it is what
+    stops the sweep paying for an investigation of a finding the queue no
+    longer shows.
     """
-    return list(
-        session.scalars(
-            select(ReconciliationException)
-            .join(
-                ReconciliationRun,
-                (ReconciliationRun.tenant_id == ReconciliationException.tenant_id)
-                & (ReconciliationRun.id == ReconciliationException.run_id),
-            )
-            .where(
-                ReconciliationException.tenant_id == tenant_id,
-                ReconciliationException.is_exception.is_(True),
-            )
-            .distinct(
-                ReconciliationException.order_external_ref,
-                ReconciliationException.code,
-            )
-            .order_by(
-                ReconciliationException.order_external_ref,
-                ReconciliationException.code,
-                ReconciliationRun.started_at.desc(),
-            )
-        )
-    )
+    return findings.newest_rows(session, tenant_id, None)
 
 
 def auto_investigate(

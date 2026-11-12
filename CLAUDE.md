@@ -75,7 +75,11 @@ moves to `/service`). Things not to re-derive:
 - **The approver is free text, unauthenticated** (D5). Do not describe it as an
   identity.
 - **"Clean" means "no newest finding"**; a run records how many orders it covered,
-  not which. A run is date-grained, but a second run over the same dates the same
+  not which. **A finding is retracted when a later completed run whose window
+  contains the order did not report it again** (`queries._drop_retracted`;
+  `specs/2026-11-12-retract-cleared-findings/`): before that, a fixed fault or
+  late evidence stayed on the queue and the on-hold list for ever. Orders a run
+  re-examined only for new evidence are not counted. A run is date-grained, but a second run over the same dates the same
   day is permitted only if evidence arrived since the last one (`nothing_new`
   otherwise, `cooling_down` inside the cooldown).
 - **The grid assistant is display-only**: no record or amount is sent, and

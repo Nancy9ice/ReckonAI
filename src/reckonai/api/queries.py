@@ -82,7 +82,62 @@ def _newest_exception_rows(
             ReconciliationRun.started_at.desc(),
         )
     )
-    return list(session.scalars(stmt))
+    return _drop_retracted(session, tenant_id, list(session.scalars(stmt)))
+
+
+def _drop_retracted(
+    session: Session, tenant_id: uuid.UUID, rows: list[ReconciliationException]
+) -> list[ReconciliationException]:
+    """Drop findings that a later run re-examined and stopped reporting.
+
+    A run writes a row for each finding and nothing for an order that comes out
+    clean, so the newest row for an `(order, code)` stays the newest forever:
+    a fault that was fixed, or evidence that arrived late, would show as open
+    for good. Absence of a row cannot mean "checked and clean" by itself,
+    because a run records how many orders it covered, not which (P3).
+
+    What can be said is narrower and sound: **a completed run examines every
+    order whose `placed_at` falls inside its window** (that is what selects the
+    orders), so if a completed run that started after the finding's own run has
+    such a window and did not write the finding again, the finding is
+    retracted. Orders a run re-examined only because new evidence arrived are
+    not counted, because their placement date is outside its window; those
+    findings stay until a run whose window contains them, which errs toward
+    leaving a finding up rather than taking it down.
+
+    A row whose order is not a marketplace order (an unmatched PayPal payment,
+    keyed by PayPal's id) cannot be placed in a window and is kept.
+    """
+    if not rows:
+        return rows
+    runs = list(
+        session.scalars(
+            select(ReconciliationRun).where(ReconciliationRun.tenant_id == tenant_id)
+        )
+    )
+    started = {r.id: r.started_at for r in runs}
+    completed = [r for r in runs if r.status == "completed"]
+    placed = {
+        o.external_ref: o.placed_at
+        for o in session.scalars(
+            select(Order).where(
+                Order.tenant_id == tenant_id,
+                Order.external_ref.in_({r.order_external_ref for r in rows}),
+            )
+        )
+    }
+
+    def retracted(row: ReconciliationException) -> bool:
+        when = placed.get(row.order_external_ref)
+        own = started.get(row.run_id)
+        if when is None or own is None:
+            return False
+        return any(
+            run.started_at > own and run.window_start <= when < run.window_end
+            for run in completed
+        )
+
+    return [r for r in rows if not retracted(r)]
 
 
 def first_found(
@@ -565,8 +620,11 @@ def coverage(session: Session, tenant_id: uuid.UUID) -> schemas.CoverageOut:
     examined here unless its window also covers it, so this errs toward saying
     "not yet examined".)
 
-    Still not knowable: a run records how many orders it covered, not which, so
-    an exception a later run stopped emitting is not retracted.
+    A finding a later completed run re-examined and stopped reporting is
+    retracted (`_drop_retracted`), so a fixed fault or late evidence leaves the
+    queue and the on-hold list, and the order reads clean. A run records how
+    many orders it covered, not which, so only a run whose window contains the
+    order counts; others leave the finding up.
     """
     orders = list(
         session.scalars(
@@ -655,8 +713,10 @@ def coverage(session: Session, tenant_id: uuid.UUID) -> schemas.CoverageOut:
         basis=(
             "Clean means a completed run's window covered the order after it "
             "arrived and found nothing. A run records how many orders it "
-            "covered, not which, so an exception a later run stopped reporting "
-            "is not retracted."
+            "covered, not which, so a finding is taken down only when a later "
+            "completed run's window contains the order and does not report it "
+            "again; an order re-examined only because new evidence arrived is "
+            "not counted."
         ),
     )
 
